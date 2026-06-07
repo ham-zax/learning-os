@@ -1,0 +1,12 @@
+{
+  "topic": "git-basics",
+  "version": "1.0",
+  "description": "Fundamentals of Git version control",
+  "concepts": [
+    { "id": "git-init", "title": "Initializing a Repository", "file": "concepts/git-init.md", "prerequisites": [], "difficulty": 1, "tags": ["core"] },
+    { "id": "git-commit", "title": "Staging and Committing", "file": "concepts/git-commit.md", "prerequisites": ["git-init"], "difficulty": 1, "tags": ["core"] },
+    { "id": "git-branch", "title": "Branching", "file": "concepts/git-branch.md", "prerequisites": ["git-commit"], "difficulty": 2, "tags": ["core", "collaboration"] },
+    { "id": "git-merge", "title": "Merging Branches", "file": "concepts/git-merge.md", "prerequisites": ["git-branch"], "difficulty": 3, "tags": ["collaboration"] },
+    { "id": "git-remote", "title": "Working with Remotes", "file": "concepts/git-remote.md", "prerequisites": ["git-commit"], "difficulty": 2, "tags": ["collaboration"] }
+  ]
+}
