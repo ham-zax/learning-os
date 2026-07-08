@@ -1,12 +1,35 @@
 {
-  "topic": "git-basics",
-  "version": "1.0",
-  "description": "Fundamentals of Git version control",
-  "concepts": [
-    { "id": "git-init", "title": "Initializing a Repository", "file": "concepts/git-init.md", "prerequisites": [], "difficulty": 1, "tags": ["core"] },
-    { "id": "git-commit", "title": "Staging and Committing", "file": "concepts/git-commit.md", "prerequisites": ["git-init"], "difficulty": 1, "tags": ["core"] },
-    { "id": "git-branch", "title": "Branching", "file": "concepts/git-branch.md", "prerequisites": ["git-commit"], "difficulty": 2, "tags": ["core", "collaboration"] },
-    { "id": "git-merge", "title": "Merging Branches", "file": "concepts/git-merge.md", "prerequisites": ["git-branch"], "difficulty": 3, "tags": ["collaboration"] },
-    { "id": "git-remote", "title": "Working with Remotes", "file": "concepts/git-remote.md", "prerequisites": ["git-commit"], "difficulty": 2, "tags": ["collaboration"] }
+  "description": "Topic index for the generic tutor knowledge base. Each topic has its own manifest.json in its subdirectory.",
+  "topics": [
+    {
+      "id": "coding-interview",
+      "name": "Coding Interview",
+      "manifest": "knowledge/coding-interview/manifest.json",
+      "conceptCount": 11
+    },
+    {
+      "id": "git-basics",
+      "name": "Git Basics",
+      "manifest": "knowledge/git-basics/manifest.json",
+      "conceptCount": 5
+    },
+    {
+      "id": "kubernetes",
+      "name": "Kubernetes",
+      "manifest": "knowledge/kubernetes/manifest.json",
+      "conceptCount": 10
+    },
+    {
+      "id": "spring-framework",
+      "name": "Spring Framework",
+      "manifest": "knowledge/spring-framework/manifest.json",
+      "conceptCount": 11
+    },
+    {
+      "id": "system-design",
+      "name": "System Design",
+      "manifest": "knowledge/system-design/manifest.json",
+      "conceptCount": 25
+    }
   ]
 }

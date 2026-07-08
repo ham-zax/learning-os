@@ -1,0 +1,18 @@
+{
+  "topicId": "coding-interview",
+  "topicName": "Coding Interview",
+  "description": "Coding interview patterns: 11 patterns across 3 phases, covering arrays, hashing, pointers, trees, graphs, DP, heaps, and intervals",
+  "concepts": [
+    { "id": "arrays-hashing", "title": "Arrays & Hashing", "prerequisites": [], "difficulty": 1, "tags": ["foundation", "phase-1"] },
+    { "id": "two-pointers", "title": "Two Pointers", "prerequisites": ["arrays-hashing"], "difficulty": 1, "tags": ["foundation", "phase-1"] },
+    { "id": "stack", "title": "Stack", "prerequisites": [], "difficulty": 1, "tags": ["foundation", "phase-1"] },
+    { "id": "binary-search", "title": "Binary Search", "prerequisites": ["arrays-hashing"], "difficulty": 2, "tags": ["foundation", "phase-1"] },
+    { "id": "linked-list", "title": "Linked Lists", "prerequisites": [], "difficulty": 2, "tags": ["foundation", "phase-1"] },
+    { "id": "sliding-window", "title": "Sliding Window", "prerequisites": ["two-pointers"], "difficulty": 2, "tags": ["foundation", "phase-1"] },
+    { "id": "trees", "title": "Trees", "prerequisites": ["stack"], "difficulty": 2, "tags": ["trees-graphs", "phase-2"] },
+    { "id": "graphs", "title": "Graphs", "prerequisites": ["trees"], "difficulty": 3, "tags": ["trees-graphs", "phase-2"] },
+    { "id": "dp", "title": "Dynamic Programming", "prerequisites": ["trees"], "difficulty": 4, "tags": ["dp-heaps", "phase-3"] },
+    { "id": "heap", "title": "Heaps & Priority Queues", "prerequisites": ["arrays-hashing"], "difficulty": 3, "tags": ["dp-heaps", "phase-3"] },
+    { "id": "intervals", "title": "Intervals", "prerequisites": ["arrays-hashing"], "difficulty": 2, "tags": ["dp-heaps", "phase-3"] }
+  ]
+}

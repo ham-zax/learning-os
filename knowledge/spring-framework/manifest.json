@@ -1,0 +1,18 @@
+{
+  "topicId": "spring-framework",
+  "topicName": "Spring Framework",
+  "description": "Core Spring Framework concepts: IoC, DI, beans, configuration, AOP, and web",
+  "concepts": [
+    { "id": "ioc-container", "title": "IoC Container", "file": "spring-framework/concepts/ioc-container.md", "prerequisites": [], "difficulty": 2, "tags": ["core", "foundation"] },
+    { "id": "dependency-injection", "title": "Dependency Injection", "file": "spring-framework/concepts/dependency-injection.md", "prerequisites": ["ioc-container"], "difficulty": 2, "tags": ["core", "foundation"] },
+    { "id": "beans", "title": "Spring Beans", "file": "spring-framework/concepts/beans.md", "prerequisites": ["ioc-container"], "difficulty": 1, "tags": ["core"] },
+    { "id": "bean-scopes", "title": "Bean Scopes", "file": "spring-framework/concepts/bean-scopes.md", "prerequisites": ["beans"], "difficulty": 2, "tags": ["core"] },
+    { "id": "bean-lifecycle", "title": "Bean Lifecycle", "file": "spring-framework/concepts/bean-lifecycle.md", "prerequisites": ["beans"], "difficulty": 3, "tags": ["core", "advanced"] },
+    { "id": "configuration", "title": "Configuration Approaches", "file": "spring-framework/concepts/configuration.md", "prerequisites": ["beans"], "difficulty": 2, "tags": ["core"] },
+    { "id": "component-scanning", "title": "Component Scanning", "file": "spring-framework/concepts/component-scanning.md", "prerequisites": ["configuration", "beans"], "difficulty": 2, "tags": ["core"] },
+    { "id": "autowiring", "title": "Autowiring", "file": "spring-framework/concepts/autowiring.md", "prerequisites": ["dependency-injection", "component-scanning"], "difficulty": 2, "tags": ["core"] },
+    { "id": "aop", "title": "Aspect-Oriented Programming", "file": "spring-framework/concepts/aop.md", "prerequisites": ["beans", "bean-lifecycle"], "difficulty": 3, "tags": ["core", "advanced"] },
+    { "id": "spring-mvc", "title": "Spring MVC", "file": "spring-framework/concepts/spring-mvc.md", "prerequisites": ["autowiring", "configuration"], "difficulty": 3, "tags": ["web"] },
+    { "id": "spring-boot", "title": "Spring Boot", "file": "spring-framework/concepts/spring-boot.md", "prerequisites": ["configuration", "autowiring"], "difficulty": 2, "tags": ["boot"] }
+  ]
+}

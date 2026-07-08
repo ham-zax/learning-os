@@ -1,5 +1,5 @@
 {
-  "learner": "mingl",
+  "learner": "your-name",
   "state_dir": "./state",
   "daily_minutes": 30,
   "knowledge_dir": "./knowledge"
