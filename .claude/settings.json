@@ -67,10 +67,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/verify-tests.sh"
-          },
-          {
-            "type": "command",
             "command": "afplay /System/Library/Sounds/Glass.aiff >/dev/null 2>&1 || true"
           }
         ]

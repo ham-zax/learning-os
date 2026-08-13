@@ -333,8 +333,30 @@ All workflow calls use the `workflow()` function with `args` as the second param
 
 The workflows call `gate.sh` internally via their spawned agents. Gate proofs are written by the workflow agents, not by the skill.
 
+## Session Exit — you are the gate
+
+No Stop hook checks tests. One used to, and it was removed: this pipeline ends
+its test phase RED on purpose, and a green-or-block hook cannot tell an expected
+RED from a regression. You can, so the check is yours.
+
+Before handing control back — finished, failed, or interrupted mid-phase — run
+the project's verify command (`npm run verify` if package.json defines it,
+otherwise `npm test`) and state the result in one line:
+
+| Tree state | Report |
+|------------|--------|
+| All passing | `verify: green` |
+| Failing, and `gate.sh status` is at the test stage | `verify: RED as expected — N tests awaiting implementation (phase 2 of 5)` |
+| Failing at any other stage | `verify: BROKEN — N failures, not expected here` + the failing test names |
+| Cannot run (missing service, no script) | `verify: not run — <reason>` |
+
+Never end silently on a red tree. Never label an expected RED a failure, or a
+real regression "expected" — the first trains the user to ignore you, the second
+ships the bug.
+
 ## Rules
 - You are the orchestrator. You never write implementation code yourself.
+- Never hand back without reporting the gate — see Session Exit. Nothing else enforces it.
 - You never modify the spec. If the spec is wrong, tell the user.
 - The whole point is automation. Don't ask the user for input during implementation.
 - If something fails beyond retry limits, report clearly and stop. Don't loop forever.
