@@ -1,0 +1,41 @@
+{
+  "topicId": "llm",
+  "topicName": "LLM Engineering",
+  "description": "Large language models end to end: the theory (tokens to attention to alignment), the breakthroughs that got us here (word2vec to reasoning models), and hands-on Hugging Face work culminating in a fine-tuned model you deploy on Modal to solve a real problem.",
+  "concepts": [
+    { "id": "tokenization", "title": "Tokenization and BPE", "prerequisites": [], "difficulty": 1, "tags": ["theory", "foundation"] },
+    { "id": "embeddings", "title": "Embeddings and Vector Space", "prerequisites": ["tokenization"], "difficulty": 1, "tags": ["theory", "foundation"] },
+    { "id": "language-modeling-objective", "title": "The Language Modeling Objective", "prerequisites": ["embeddings"], "difficulty": 2, "tags": ["theory", "foundation"] },
+    { "id": "attention", "title": "Attention", "prerequisites": ["embeddings"], "difficulty": 2, "tags": ["theory", "core"] },
+    { "id": "transformer-block", "title": "The Transformer Block", "prerequisites": ["attention", "language-modeling-objective"], "difficulty": 2, "tags": ["theory", "core"] },
+    { "id": "positional-encoding", "title": "Positional Encoding and RoPE", "prerequisites": ["transformer-block"], "difficulty": 3, "tags": ["theory", "core"] },
+    { "id": "pretraining-pipeline", "title": "Pretraining: Data, Optimizer, Stability", "prerequisites": ["transformer-block"], "difficulty": 3, "tags": ["theory", "training"] },
+    { "id": "scaling-laws", "title": "Scaling Laws and Compute-Optimal Training", "prerequisites": ["pretraining-pipeline"], "difficulty": 3, "tags": ["theory", "training"] },
+    { "id": "decoding-strategies", "title": "Decoding and Sampling", "prerequisites": ["language-modeling-objective"], "difficulty": 2, "tags": ["theory", "inference"] },
+    { "id": "inference-mechanics", "title": "Inference Mechanics: KV Cache, Prefill, Decode", "prerequisites": ["transformer-block", "decoding-strategies"], "difficulty": 3, "tags": ["theory", "inference", "systems"] },
+    { "id": "mixture-of-experts", "title": "Mixture of Experts", "prerequisites": ["transformer-block", "scaling-laws"], "difficulty": 4, "tags": ["theory", "architecture"] },
+    { "id": "alignment", "title": "Alignment: SFT, RLHF, DPO", "prerequisites": ["language-modeling-objective", "pretraining-pipeline"], "difficulty": 3, "tags": ["theory", "post-training"] },
+    { "id": "reasoning-and-test-time-compute", "title": "Reasoning and Test-Time Compute", "prerequisites": ["alignment", "decoding-strategies"], "difficulty": 4, "tags": ["theory", "post-training"] },
+
+    { "id": "bt-pre-transformer", "title": "Breakthrough: word2vec to seq2seq + Attention (2013-2015)", "prerequisites": ["embeddings"], "difficulty": 2, "tags": ["breakthrough", "history"] },
+    { "id": "bt-transformer", "title": "Breakthrough: Attention Is All You Need (2017)", "prerequisites": ["bt-pre-transformer", "transformer-block"], "difficulty": 2, "tags": ["breakthrough", "history"] },
+    { "id": "bt-bert-gpt", "title": "Breakthrough: BERT vs GPT — the Pretraining Era (2018-2019)", "prerequisites": ["bt-transformer"], "difficulty": 2, "tags": ["breakthrough", "history"] },
+    { "id": "bt-gpt3-icl", "title": "Breakthrough: GPT-3 and In-Context Learning (2020)", "prerequisites": ["bt-bert-gpt", "scaling-laws"], "difficulty": 3, "tags": ["breakthrough", "history"] },
+    { "id": "bt-chinchilla", "title": "Breakthrough: Chinchilla and Compute-Optimal Scaling (2022)", "prerequisites": ["bt-gpt3-icl", "scaling-laws"], "difficulty": 3, "tags": ["breakthrough", "history"] },
+    { "id": "bt-instructgpt", "title": "Breakthrough: InstructGPT and RLHF (2022)", "prerequisites": ["bt-gpt3-icl", "alignment"], "difficulty": 3, "tags": ["breakthrough", "history"] },
+    { "id": "bt-open-weights", "title": "Breakthrough: The Open-Weights Era (2023-2025)", "prerequisites": ["bt-chinchilla", "bt-instructgpt"], "difficulty": 2, "tags": ["breakthrough", "history", "ecosystem"] },
+    { "id": "bt-efficiency-stack", "title": "Breakthrough: LoRA, FlashAttention, Quantization, vLLM", "prerequisites": ["bt-open-weights", "inference-mechanics"], "difficulty": 4, "tags": ["breakthrough", "systems"] },
+    { "id": "bt-reasoning-models", "title": "Breakthrough: Reasoning Models and RLVR (2024-2026)", "prerequisites": ["bt-instructgpt", "reasoning-and-test-time-compute"], "difficulty": 4, "tags": ["breakthrough", "history"] },
+
+    { "id": "hf-ecosystem", "title": "The Hugging Face Ecosystem", "prerequisites": ["transformer-block"], "difficulty": 1, "tags": ["hands-on", "tooling"] },
+    { "id": "hf-inference-basics", "title": "Hands-on: First Inference with transformers", "prerequisites": ["hf-ecosystem", "decoding-strategies"], "difficulty": 2, "tags": ["hands-on", "tooling"] },
+    { "id": "hf-datasets", "title": "Hands-on: Datasets and Chat Templates", "prerequisites": ["hf-inference-basics", "tokenization"], "difficulty": 2, "tags": ["hands-on", "data"] },
+    { "id": "hf-finetune-classifier", "title": "Hands-on: Fine-tune an Encoder Classifier", "prerequisites": ["hf-datasets"], "difficulty": 2, "tags": ["hands-on", "training"] },
+    { "id": "hf-sft-lora", "title": "Hands-on: SFT with TRL and LoRA", "prerequisites": ["hf-finetune-classifier", "alignment", "bt-efficiency-stack"], "difficulty": 4, "tags": ["hands-on", "training"] },
+    { "id": "hf-memory-and-quantization", "title": "Hands-on: GPU Memory Math and Quantization", "prerequisites": ["hf-sft-lora", "inference-mechanics"], "difficulty": 4, "tags": ["hands-on", "systems"] },
+    { "id": "hf-evaluation", "title": "Hands-on: Building an Evaluation You Trust", "prerequisites": ["hf-finetune-classifier"], "difficulty": 3, "tags": ["hands-on", "evaluation"] },
+    { "id": "hf-serving", "title": "Hands-on: Serving, Adapters, and Batching", "prerequisites": ["hf-sft-lora", "inference-mechanics"], "difficulty": 4, "tags": ["hands-on", "deployment"] },
+    { "id": "modal-workflow", "title": "Hands-on: Running Training Jobs on Modal", "prerequisites": ["hf-sft-lora", "hf-memory-and-quantization"], "difficulty": 3, "tags": ["hands-on", "deployment", "cost"] },
+    { "id": "capstone", "title": "Capstone: Ship a Fine-tuned Model That Solves a Real Problem", "prerequisites": ["modal-workflow", "hf-evaluation", "hf-serving"], "difficulty": 5, "tags": ["hands-on", "capstone"] }
+  ]
+}

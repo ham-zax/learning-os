@@ -63,7 +63,7 @@ The tutor proposes a concept map → you approve → it generates concept files 
 ### 2. Learn with Spaced Repetition
 
 ```bash
-tutor git-basics
+tutor system-design
 ```
 
 Sessions adapt to your performance. Grade each concept 0-5:
@@ -78,10 +78,10 @@ Sessions adapt to your performance. Grade each concept 0-5:
 
 ```bash
 # Coding drill (timed, LLM-graded)
-tutor interview git-basics --type coding
+tutor interview coding-interview --type coding
 
 # System design (4-phase structured interview)
-tutor interview git-basics --type system-design
+tutor interview system-design --type system-design
 ```
 
 ### 4. Track Progress

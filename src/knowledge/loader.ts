@@ -14,20 +14,28 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Known section headings we extract from concept markdown files. */
-const SECTION_HEADINGS = [
-  'Summary',
-  'Key Points',
-  'Deep Dive',
-  'Practice Questions',
-  'Common Misconceptions',
-] as const;
+/**
+ * Heading aliases per typed field.  Topic packs use different section
+ * vocabularies — `knowledge/llm` and `knowledge/kubernetes` use
+ * "Summary"/"Key Points"/"Gotchas", `knowledge/system-design` uses
+ * "Definition"/"Key Terms"/"Interview Questions" — so each field accepts
+ * several headings and takes the first one present.
+ */
+const SECTION_ALIASES = {
+  summary: ['Summary', 'Definition', 'Overview'],
+  keyPoints: ['Key Points', 'Key Terms'],
+  deepDive: ['Deep Dive', 'Why It Matters'],
+  practiceQuestions: ['Practice Questions', 'Interview Questions'],
+  misconceptions: ['Common Misconceptions', 'Gotchas'],
+} as const;
 
-type SectionName = (typeof SECTION_HEADINGS)[number];
+type SectionName = string;
 
 /**
  * Split a markdown body (everything after the frontmatter) into a map keyed by
- * section heading name.  The heading line itself is stripped.  Only the five
- * canonical sections are extracted; everything else is discarded.
+ * section heading name, in document order.  The heading line itself is
+ * stripped.  Every `##` section is captured so callers can display sections
+ * this loader has no typed field for.
  */
 function splitSections(body: string): Map<SectionName, string> {
   const sections = new Map<SectionName, string>();
@@ -36,10 +44,7 @@ function splitSections(body: string): Map<SectionName, string> {
   const headings: { name: SectionName; index: number }[] = [];
   let match: RegExpExecArray | null;
   while ((match = headingRegex.exec(body)) !== null) {
-    const name = match[1].trim() as SectionName;
-    if ((SECTION_HEADINGS as readonly string[]).includes(name)) {
-      headings.push({ name, index: match.index });
-    }
+    headings.push({ name: match[1].trim(), index: match.index });
   }
 
   for (let i = 0; i < headings.length; i++) {
@@ -53,14 +58,23 @@ function splitSections(body: string): Map<SectionName, string> {
   return sections;
 }
 
-/** Parse a markdown list (lines starting with `- `) into an array of strings. */
+/** Return the text of the first `# ` heading in a body, if there is one. */
+function extractTitle(body: string): string | undefined {
+  const match = /^# (.+)$/m.exec(body);
+  return match ? match[1].trim() : undefined;
+}
+
+/**
+ * Parse a markdown list into an array of strings.  Accepts bulleted (`- `,
+ * `* `) and numbered (`1. `) items, since topic packs use both — numbered
+ * lists are the norm for question sections.
+ */
 function parseListItems(text: string): string[] {
   if (!text) return [];
   return text
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line.startsWith('- '))
-    .map((line) => line.slice(2).trim())
+    .map((line) => /^(?:[-*]|\d+\.)\s+(.*)$/.exec(line)?.[1]?.trim() ?? '')
     .filter(Boolean);
 }
 
@@ -102,21 +116,65 @@ export function loadConcept(filePath: string): ConceptFile {
   const raw = fs.readFileSync(filePath, 'utf-8');
   const [yamlStr, body] = splitFrontmatter(raw);
 
-  // Parse and validate frontmatter via zod.
-  const parsedFm = yaml.parse(yamlStr) ?? {};
-  const frontmatter: ConceptFrontmatter = ConceptFrontmatterSchema.parse(parsedFm);
+  // Frontmatter is optional — topic packs keep concept metadata in the topic's
+  // `manifest.json` instead (see CLAUDE.md).  Anything absent is derived from
+  // the file itself so a plain markdown concept file loads without error.
+  const parsedFm = (yaml.parse(yamlStr) ?? {}) as Record<string, unknown>;
+  const frontmatter: ConceptFrontmatter = ConceptFrontmatterSchema.parse({
+    id: parsedFm.id ?? path.basename(filePath, '.md'),
+    title: parsedFm.title ?? extractTitle(body) ?? path.basename(filePath, '.md'),
+    difficulty: parsedFm.difficulty ?? 3,
+    prerequisites: parsedFm.prerequisites ?? [],
+    tags: parsedFm.tags ?? [],
+  });
 
   // Extract sections.
   const sections = splitSections(body);
 
+  /** First heading present for a field, or '' when the file has none of them. */
+  const pick = (field: keyof typeof SECTION_ALIASES): string => {
+    for (const heading of SECTION_ALIASES[field]) {
+      const text = sections.get(heading);
+      if (text) return text;
+    }
+    return '';
+  };
+
   return {
     frontmatter,
-    summary: sections.get('Summary') ?? '',
-    keyPoints: parseListItems(sections.get('Key Points') ?? ''),
-    deepDive: sections.get('Deep Dive') ?? '',
-    practiceQuestions: parseListItems(sections.get('Practice Questions') ?? ''),
-    misconceptions: parseListItems(sections.get('Common Misconceptions') ?? ''),
+    summary: pick('summary'),
+    keyPoints: parseListItems(pick('keyPoints')),
+    deepDive: pick('deepDive'),
+    practiceQuestions: parseListItems(pick('practiceQuestions')),
+    misconceptions: parseListItems(pick('misconceptions')),
+    sections: Object.fromEntries(sections),
   };
+}
+
+/**
+ * Raw markdown for one of the typed fields, resolving heading aliases.
+ *
+ * Use this instead of the parsed `keyPoints` / `misconceptions` arrays when
+ * displaying content to a learner: concept files nest `###` headings, tables,
+ * and code blocks that do not survive being flattened into a list.
+ */
+export function sectionText(concept: ConceptFile, field: string): string {
+  // Callers pass section names produced by the mode modules, which are not
+  // typed against SECTION_ALIASES; an unrecognised name yields '' rather than
+  // throwing mid-session.
+  const aliases: readonly string[] =
+    SECTION_ALIASES[field as keyof typeof SECTION_ALIASES] ?? [];
+  for (const heading of aliases) {
+    const text = concept.sections[heading];
+    if (text) return text;
+  }
+  return '';
+}
+
+/** Headings of every section not claimed by one of the typed fields. */
+export function extraSectionHeadings(concept: ConceptFile): string[] {
+  const claimed = new Set<string>(Object.values(SECTION_ALIASES).flat());
+  return Object.keys(concept.sections).filter((h) => !claimed.has(h));
 }
 
 /**

@@ -8,10 +8,16 @@
       "conceptCount": 11
     },
     {
-      "id": "git-basics",
-      "name": "Git Basics",
-      "manifest": "knowledge/git-basics/manifest.json",
-      "conceptCount": 5
+      "id": "foundry",
+      "name": "Foundry",
+      "manifest": "knowledge/foundry/manifest.json",
+      "conceptCount": 30
+    },
+    {
+      "id": "llm",
+      "name": "LLM Engineering",
+      "manifest": "knowledge/llm/manifest.json",
+      "conceptCount": 32
     },
     {
       "id": "kubernetes",
@@ -30,6 +36,12 @@
       "name": "System Design",
       "manifest": "knowledge/system-design/manifest.json",
       "conceptCount": 25
+    },
+    {
+      "id": "trader",
+      "name": "trader (codebase onboarding)",
+      "manifest": "knowledge/trader/manifest.json",
+      "conceptCount": 18
     }
   ]
 }

@@ -95,7 +95,7 @@ export function generateExploreSequence(concept: ConceptFile): ExploreSequence {
   steps.push({
     type: "question",
     content:
-      "Now, can you restate **${title}** in your own words? Explain it as if teaching someone who has never heard of it.",
+      `Now, can you restate **${title}** in your own words? Explain it as if teaching someone who has never heard of it.`,
   });
 
   // Step 9: Grading prompt

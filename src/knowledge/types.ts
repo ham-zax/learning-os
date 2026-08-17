@@ -25,6 +25,13 @@ export const ConceptFileSchema = z.object({
   deepDive: z.string(),
   practiceQuestions: z.array(z.string()),
   misconceptions: z.array(z.string()),
+  /**
+   * Raw markdown of each recognised `##` section, keyed by heading.  Concept
+   * files use nested `###` headings, tables, and code blocks that flatten
+   * badly into `keyPoints`; callers that display content to the learner should
+   * render from here so the original formatting survives.
+   */
+  sections: z.record(z.string()).default({}),
 });
 
 export type ConceptFile = z.infer<typeof ConceptFileSchema>;

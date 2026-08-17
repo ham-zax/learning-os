@@ -15,7 +15,7 @@
  *   tutor sync                 Sync gaps and signals
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { Command } from "commander";
@@ -59,7 +59,16 @@ import {
   listTopics,
 } from "./db/database.js";
 
-import type { ConceptMap, ConceptProposal } from "./knowledge/types.js";
+import {
+  loadConcept,
+  sectionText,
+  extraSectionHeadings,
+} from "./knowledge/loader.js";
+import { generateExploreSequence } from "./session/modes/explore.js";
+import { generateTeachBackSession } from "./session/modes/teach-back.js";
+import { generateQuizBatch } from "./session/modes/quiz.js";
+
+import type { ConceptMap, ConceptProposal, ConceptFile } from "./knowledge/types.js";
 import type { SessionState } from "./session/engine.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -179,6 +188,134 @@ function displayConceptMap(concepts: ConceptProposal[]): void {
   console.log();
 }
 
+// ─── Concept file resolution ─────────────────────────────────────────────────
+
+/**
+ * Locate the markdown file backing a concept.  Topic packs use two layouts —
+ * `<topic>/concepts/<id>.md` (kubernetes, llm, foundry) and `<topic>/<id>.md`
+ * (system-design) — so both are tried.  Returns null when neither exists,
+ * which is not an error: the session falls back to metadata only.
+ */
+function resolveConceptFile(
+  knowledgeDir: string,
+  topicId: string,
+  conceptId: string,
+): string | null {
+  const candidates = [
+    resolve(knowledgeDir, topicId, "concepts", `${conceptId}.md`),
+    resolve(knowledgeDir, topicId, `${conceptId}.md`),
+  ];
+  return candidates.find((p) => existsSync(p)) ?? null;
+}
+
+/** Load a concept's markdown, or null if it is missing or unparseable. */
+function tryLoadConceptFile(
+  knowledgeDir: string,
+  topicId: string,
+  conceptId: string,
+): ConceptFile | null {
+  const filePath = resolveConceptFile(knowledgeDir, topicId, conceptId);
+  if (!filePath) return null;
+  try {
+    return loadConcept(filePath);
+  } catch {
+    return null;
+  }
+}
+
+/** Print a titled block of markdown, indented, skipping empty content. */
+function reveal(label: string, content: string): void {
+  if (!content.trim()) return;
+  console.log(chalk.bold.cyan(`\n  ── ${label} ──\n`));
+  for (const line of content.split("\n")) {
+    console.log(line ? `  ${line}` : "");
+  }
+}
+
+/** Reveal any sections the typed fields don't claim (Common Patterns, References…). */
+function revealExtraSections(file: ConceptFile): void {
+  for (const heading of extraSectionHeadings(file)) {
+    reveal(heading, file.sections[heading] ?? "");
+  }
+}
+
+// ─── Mode presenters ─────────────────────────────────────────────────────────
+
+/**
+ * Explore: walk the Socratic sequence, revealing each section's raw markdown
+ * rather than the flattened list so nested headings and tables survive.
+ */
+async function presentExplore(
+  rl: ReturnType<typeof createInterface>,
+  file: ConceptFile | null,
+): Promise<void> {
+  if (!file) {
+    await ask(rl, chalk.dim("\n  Press Enter when ready to self-test..."));
+    return;
+  }
+
+  const sequence = generateExploreSequence(file);
+
+  for (const step of sequence.steps) {
+    // The grading prompt is built for an LLM grader; this session self-grades.
+    if (step.type === "prompt") continue;
+
+    if (step.type === "question") {
+      await ask(rl, chalk.yellow(`\n  ${step.content.replace(/\*\*/g, "")}\n  > `));
+      continue;
+    }
+
+    const label =
+      step.section === "keyPoints"
+        ? "Key Points"
+        : step.section === "deepDive"
+          ? "Deep Dive"
+          : "Summary";
+    reveal(label, sectionText(file, step.section ?? ""));
+  }
+
+  reveal("Gotchas", sectionText(file, "misconceptions"));
+  revealExtraSections(file);
+}
+
+/** Teach-back: ask for an explanation first, then reveal the material to check against. */
+async function presentTeachBack(
+  rl: ReturnType<typeof createInterface>,
+  title: string,
+  file: ConceptFile | null,
+): Promise<void> {
+  if (!file) {
+    await ask(rl, chalk.dim(`\n  Explain ${title} out loud, then press Enter...`));
+    return;
+  }
+
+  const session = generateTeachBackSession(file);
+  await ask(rl, chalk.yellow(`\n  ${session.openingPrompt.replace(/\*\*/g, "")}\n  > `));
+
+  reveal("Summary", sectionText(file, "summary"));
+  reveal("Key Points", sectionText(file, "keyPoints"));
+  reveal("Deep Dive", sectionText(file, "deepDive"));
+  reveal("Gotchas", sectionText(file, "misconceptions"));
+}
+
+/** Quiz: pose one question, take the answer, then reveal the material. */
+async function presentQuiz(
+  rl: ReturnType<typeof createInterface>,
+  file: ConceptFile | null,
+): Promise<void> {
+  if (!file) return;
+
+  const batch = generateQuizBatch([file], 1);
+  const question = batch.questions[0];
+  if (question) {
+    await ask(rl, chalk.yellow(`\n  ${question.question}\n  > `));
+  }
+
+  reveal("Summary", sectionText(file, "summary"));
+  reveal("Key Points", sectionText(file, "keyPoints"));
+  reveal("Gotchas", sectionText(file, "misconceptions"));
+}
+
 // ─── Session mode ────────────────────────────────────────────────────────────
 
 async function runSession(
@@ -199,15 +336,26 @@ async function runSession(
     chalk.bold(`\nSession started — ${mode} mode, ${sessionState.concepts.length} concepts\n`),
   );
 
+  const config = loadConfig();
+  const knowledgeDir = resolve(config.knowledge_dir);
+  let missingFiles = 0;
+
   for (const concept of sessionState.concepts) {
     console.log(chalk.bold.underline(`\nConcept: ${concept.title}`));
     console.log(chalk.dim(`  Difficulty: ${concept.difficulty}/5 | Status: ${concept.status}`));
+
+    const file = tryLoadConceptFile(knowledgeDir, topicId, concept.id);
+    if (!file) missingFiles++;
 
     if (mode === "explore") {
       console.log(
         chalk.dim(`  Prerequisites: ${concept.prerequisites.join(", ") || "none"}`),
       );
-      await ask(rl, chalk.dim("\n  Press Enter when ready to self-test..."));
+      await presentExplore(rl, file);
+    } else if (mode === "teach-back") {
+      await presentTeachBack(rl, concept.title, file);
+    } else {
+      await presentQuiz(rl, file);
     }
 
     const grade = await askGrade(rl, concept.title);
@@ -229,6 +377,12 @@ async function runSession(
   const summary = endSession(db, sessionState.sessionId);
 
   header("Session Complete");
+  if (missingFiles > 0) {
+    warn(
+      `  ${missingFiles} of ${sessionState.concepts.length} concept(s) had no markdown file — ` +
+        `those were presented as title only.`,
+    );
+  }
   console.log(`  Concepts reviewed: ${summary.conceptsReviewed}`);
   console.log(`  Average grade: ${summary.averageGrade}/5`);
   console.log(`  Duration: ${Math.floor(summary.duration / 60)}m ${summary.duration % 60}s`);

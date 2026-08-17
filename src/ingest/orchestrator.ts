@@ -404,6 +404,7 @@ export async function generateConceptFiles(
       deepDive,
       practiceQuestions,
       misconceptions,
+      sections: {},
     };
 
     const validation: ValidationResult = validateConcept(conceptFile);

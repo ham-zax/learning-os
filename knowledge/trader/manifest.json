@@ -1,0 +1,153 @@
+{
+  "topicId": "trader",
+  "topicName": "trader (codebase onboarding)",
+  "topic": "trader",
+  "version": "1.0.0",
+  "description": "Onboarding curriculum for the `trader` repository — a fail-closed, spec-driven, human-gated paper-trading system. Walks a new engineer from what the system is, through the scan pipeline, risk stack and position lifecycle, into the doctrine (guardrails, SDD workflow, ADRs) that explains why the code looks the way it does.",
+  "concepts": [
+    {
+      "id": "what-trader-is",
+      "title": "What trader Is (and Is Not)",
+      "file": "what-trader-is.md",
+      "prerequisites": [],
+      "difficulty": 1,
+      "tags": ["foundation", "orientation"]
+    },
+    {
+      "id": "fail-closed",
+      "title": "Fail-Closed: The Load-Bearing Property",
+      "file": "fail-closed.md",
+      "prerequisites": ["what-trader-is"],
+      "difficulty": 1,
+      "tags": ["foundation", "safety"]
+    },
+    {
+      "id": "where-truth-lives",
+      "title": "Where the Truth Lives",
+      "file": "where-truth-lives.md",
+      "prerequisites": ["what-trader-is"],
+      "difficulty": 1,
+      "tags": ["foundation", "doctrine", "navigation"]
+    },
+    {
+      "id": "the-scan-pipeline",
+      "title": "The Scan Pipeline",
+      "file": "the-scan-pipeline.md",
+      "prerequisites": ["what-trader-is", "fail-closed"],
+      "difficulty": 1,
+      "tags": ["foundation", "architecture"]
+    },
+    {
+      "id": "run-modes-and-gates",
+      "title": "Run Modes and the Gate Order",
+      "file": "run-modes-and-gates.md",
+      "prerequisites": ["the-scan-pipeline"],
+      "difficulty": 2,
+      "tags": ["mechanics", "architecture"]
+    },
+    {
+      "id": "human-approval-gate",
+      "title": "The Human Approval Gate",
+      "file": "human-approval-gate.md",
+      "prerequisites": ["the-scan-pipeline", "fail-closed"],
+      "difficulty": 2,
+      "tags": ["mechanics", "safety", "desk"]
+    },
+    {
+      "id": "point-in-time-and-data",
+      "title": "Point-in-Time and the Data Foundation",
+      "file": "point-in-time-and-data.md",
+      "prerequisites": ["the-scan-pipeline"],
+      "difficulty": 2,
+      "tags": ["mechanics", "data"]
+    },
+    {
+      "id": "the-risk-stack",
+      "title": "The Risk Stack",
+      "file": "the-risk-stack.md",
+      "prerequisites": ["run-modes-and-gates"],
+      "difficulty": 2,
+      "tags": ["mechanics", "risk"]
+    },
+    {
+      "id": "position-lifecycle",
+      "title": "Position Lifecycle and Exits",
+      "file": "position-lifecycle.md",
+      "prerequisites": ["run-modes-and-gates", "point-in-time-and-data"],
+      "difficulty": 2,
+      "tags": ["mechanics", "positions"]
+    },
+    {
+      "id": "store-and-journal",
+      "title": "The Store and the Approval Journal",
+      "file": "store-and-journal.md",
+      "prerequisites": ["human-approval-gate"],
+      "difficulty": 2,
+      "tags": ["mechanics", "state", "audit"]
+    },
+    {
+      "id": "guardrails-and-authority",
+      "title": "Guardrails and the Two Authority Levels",
+      "file": "guardrails-and-authority.md",
+      "prerequisites": ["where-truth-lives", "the-risk-stack"],
+      "difficulty": 3,
+      "tags": ["judgment", "doctrine"]
+    },
+    {
+      "id": "sdd-workflow",
+      "title": "The SDD Workflow and the RED Gate",
+      "file": "sdd-workflow.md",
+      "prerequisites": ["where-truth-lives"],
+      "difficulty": 3,
+      "tags": ["judgment", "process"]
+    },
+    {
+      "id": "cost-and-flattering-direction",
+      "title": "Costs and the Flattering Direction",
+      "file": "cost-and-flattering-direction.md",
+      "prerequisites": ["the-risk-stack", "point-in-time-and-data"],
+      "difficulty": 3,
+      "tags": ["judgment", "cost"]
+    },
+    {
+      "id": "measurement-and-benchmarks",
+      "title": "Measurement, R, and the Shadow Benchmarks",
+      "file": "measurement-and-benchmarks.md",
+      "prerequisites": ["position-lifecycle"],
+      "difficulty": 3,
+      "tags": ["judgment", "measurement"]
+    },
+    {
+      "id": "model-in-the-loop",
+      "title": "The Model in the Loop",
+      "file": "model-in-the-loop.md",
+      "prerequisites": ["human-approval-gate", "guardrails-and-authority"],
+      "difficulty": 3,
+      "tags": ["judgment", "llm"]
+    },
+    {
+      "id": "operating-the-system",
+      "title": "Operating the System",
+      "file": "operating-the-system.md",
+      "prerequisites": ["store-and-journal", "human-approval-gate"],
+      "difficulty": 3,
+      "tags": ["judgment", "operations"]
+    },
+    {
+      "id": "fund-structure",
+      "title": "Fund Structure and Kill Criteria",
+      "file": "fund-structure.md",
+      "prerequisites": ["guardrails-and-authority", "measurement-and-benchmarks"],
+      "difficulty": 4,
+      "tags": ["mastery", "strategy"]
+    },
+    {
+      "id": "failure-patterns",
+      "title": "The Recurring Failure Patterns",
+      "file": "failure-patterns.md",
+      "prerequisites": ["sdd-workflow", "guardrails-and-authority", "measurement-and-benchmarks"],
+      "difficulty": 4,
+      "tags": ["mastery", "doctrine"]
+    }
+  ]
+}
