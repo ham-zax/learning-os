@@ -8,14 +8,17 @@ The kernel owns durable learner state. Agents may teach, generate challenges, ru
 
 ## Invariants
 
-1. Append-only evidence and misconception observations are authoritative learner-history records.
-2. Current proficiency, weakness summaries, and FSRS card state are rebuildable projections or caches.
-3. A challenge is frozen before learner response when it can affect proficiency or scheduling.
-4. One assessed objective produces one objective-specific evidence event.
-5. Self-confidence never determines correctness or scheduler rating.
-6. FSRS receives only scheduler ratings; it never interprets pedagogical evidence.
-7. Agent/local execution is the V1 verifier for executable programming tasks.
-8. Assessment commit is atomic: evidence, projections, misconception observations, scheduler input, and session progress either commit together or do not commit.
+1. Append-only evidence, misconception observations, hint observations, and exposure events preserve learner-history provenance.
+2. Evidence validity is authoritative for every derived consequence: proficiency, misconception state, weakness summaries, scheduler replay, and FSRS card state.
+3. Current proficiency, weakness summaries, and FSRS card state are rebuildable projections or caches.
+4. A challenge version is frozen and durably persisted before learner response when it can affect proficiency or scheduling.
+5. One assessed objective produces one objective-specific evidence event.
+6. Hint provenance is scoped to an objective, owned criteria, or all challenge targets; per-objective evidence derives its own effective hint level.
+7. Durability delay is computed from durable attempt and exposure history, not from agent memory.
+8. Self-confidence never determines correctness or scheduler rating.
+9. FSRS receives only scheduler ratings; it never interprets pedagogical evidence.
+10. Agent/local execution is the V1 verifier for executable programming tasks.
+11. Assessment and evidence-correction commits are atomic: authoritative events and every affected projection/cache either commit together or do not commit.
 
 ## V1 logical schema
 
@@ -66,7 +69,7 @@ Do not persist authoritative learner state or goal-specific priority on this tab
 
 ### `goal_objectives`
 
-Goal-specific requirements and priority for an objective. `goal_id` points to the existing goal/topic planning owner chosen during fork integration.
+Goal-specific requirements and priority for an objective. The physical `goal_id` owner must be selected before `goal_objectives` is implemented; it is not a prerequisite to Phase 0 upstream integration. Existing topic goal/deadline fields may remain legacy planning inputs until that ownership decision is made.
 
 | Column | Type | Rule |
 | --- | --- | --- |
@@ -97,8 +100,8 @@ Rebuildable current summary for fast reads.
 | `objective_id` | PK/FK | One row per instantiated objective. |
 | `readiness` | enum/text | `unknown`, `exposed`, `guided`, `independent`. |
 | `historical_highest_readiness` | enum/text | Highest readiness ever demonstrated. |
-| `transfer_state` | enum/text | `untested`, `demonstrated`, `contradicted`. |
-| `durability_state` | enum/text | `untested`, `demonstrated`, `contradicted`. |
+| `transfer_state` | enum/text | `untested`, `not_demonstrated`, `demonstrated`, `contradicted`. |
+| `durability_state` | enum/text | `untested`, `not_demonstrated`, `demonstrated`, `contradicted`. |
 | `blocking_misconception_count` | integer | Derived from active blocking misconceptions. |
 | `recent_failure` | bool | Derived from the latest qualifying evidence. |
 | `last_qualifying_evidence_at` | timestamp/null | Latest gradable evidence that affected the projection. |
@@ -118,7 +121,8 @@ Expected additions or equivalent fields:
 
 | Column | Type | Rule |
 | --- | --- | --- |
-| `challenge_id` | FK/text | Frozen challenge version used for the attempt. |
+| `challenge_id` | FK/text | Frozen challenge identity used for the attempt. |
+| `challenge_version` | text/integer | Exact persisted challenge version delivered. |
 | `response_text` | text/null | Learner answer when text-based. |
 | `artifact_ref_json` | JSON/text/null | File/commit/diff/runtime artifact reference. |
 | `started_at` | timestamp | Attempt start. |
@@ -126,45 +130,91 @@ Expected additions or equivalent fields:
 
 Do not duplicate a large learner response into each per-objective evidence event.
 
+### `hint_observations`
+
+Append-only hint provenance for an attempt. Scope is explicit because one hint may help only one objective or criterion in a multi-objective challenge.
+
+| Column | Type | Rule |
+| --- | --- | --- |
+| `seq` | integer PK/autoincrement | Observation order. |
+| `attempt_id` | FK | Attempt receiving the hint. |
+| `level` | integer | L1-L5. Absence of a relevant observation means L0. |
+| `scope_kind` | enum/text | `objective`, `criteria`, or `all_targets`. |
+| `objective_id` | FK/null | Required when `scope_kind=objective`. |
+| `criterion_ids_json` | JSON/text/null | Required when `scope_kind=criteria`; criteria must belong to frozen targets. |
+| `recorded_at` | timestamp | Kernel-assigned commit time immediately before/when the hint is exposed; callers do not supply it. |
+
+For each objective-specific `EvidenceEvent.hint_level`, use the highest relevant hint level from:
+
+- `all_targets` observations;
+- observations scoped directly to that objective;
+- criterion-scoped observations whose frozen criteria belong to that objective.
+
+If no relevant hint observation exists, the objective-specific hint level is L0.
+
+### `exposure_events`
+
+Append-only durable record of material re-exposure. This stream exists so delayed-retrieval claims do not depend on chat memory.
+
+| Column | Type | Rule |
+| --- | --- | --- |
+| `seq` | integer PK/autoincrement | Exposure order. |
+| `objective_id` | FK | Objective materially re-exposed. |
+| `session_id` | FK/null | Session provenance. |
+| `challenge_id` | FK/text/null | Challenge associated with the exposure when applicable. |
+| `challenge_version` | text/integer/null | Exact challenge version when applicable. |
+| `attempt_id` | FK/null | Related attempt when feedback/solution follows an attempt. |
+| `exposure_type` | enum/text | `explanation_shown`, `answer_revealed`, `worked_example_shown`, `corrective_feedback_shown`, or `solution_walkthrough`. |
+| `source_ref` | text/null | Optional durable reference to the shown material. |
+| `occurred_at` | timestamp | Kernel-assigned commit time immediately before the learner receives the material; callers do not supply it. |
+
+Record an exposure only when the shown material meaningfully refreshes the target mechanism, answer, or solution. Generic praise, navigation, or a prompt that does not reveal the target does not count.
+
 ### `evidence_events`
 
 Append-only objective-specific assessment history.
 
 | Column | Type | Rule |
 | --- | --- | --- |
-| `seq` | integer PK/autoincrement | Canonical replay order. |
+| `seq` | integer PK/autoincrement | Append order and deterministic tie-breaker; not learner-time order by itself. |
 | `id` | text unique | Stable external ID. |
 | `objective_id` | FK | Exactly one objective. |
+| `supersedes_event_id` | FK/null | Prior invalidated evidence replaced by this corrected event. |
 | `session_id` | FK/null | Session provenance. |
 | `problem_id` | FK/null | Existing problem if applicable. |
 | `attempt_id` | FK/null | Learner attempt. |
-| `task_id` | text | Stable task/challenge identity. |
-| `task_version` | text/integer | Frozen version delivered. |
-| `rubric_id` | text/null | Frozen rubric identity. |
-| `rubric_version` | text/integer/null | Frozen rubric version. |
-| `target_capability` | text | Capability measured by this event. |
+| `task_id` | text | Immutable snapshot of the frozen challenge identity. |
+| `task_version` | text/integer | Immutable snapshot of the frozen version delivered. |
+| `rubric_id` | text/null | Immutable snapshot of frozen rubric identity. |
+| `rubric_version` | text/integer/null | Immutable snapshot of frozen rubric version. |
 | `task_form` | enum/text | See challenge contract. |
 | `delivery_context` | enum/text | `learn`, `practice`, `review`, `interview`, `mock`. |
 | `result` | enum/text | `correct`, `partially_correct`, `incorrect`, `ungradable`. |
-| `hint_level` | integer | L0-L5. |
+| `hint_level` | integer | L0-L5, derived from objective-relevant `hint_observations`. |
 | `novelty` | enum/text | `same`, `variant`, `transfer`. |
 | `retrieval_valid` | bool | Whether the event may reach `ReviewRatingMapper`. |
-| `delay_seconds` | integer/null | Delay from the relevant previous exposure/retrieval. |
+| `delay_anchor_at` | timestamp/null | Kernel-computed latest prior memory-contact time for this objective. |
+| `delay_seconds` | integer/null | `attempt.submitted_at - delay_anchor_at`, computed by the kernel. |
 | `assessment_basis` | enum/text | `deterministic_execution`, `frozen_rubric`, `human`, `mixed`. |
 | `evaluator_type` | enum/text | `kernel`, `agent`, `llm`, `human`. |
 | `criteria_json` | JSON/text | Objective-specific criteria results. |
 | `observed_errors_json` | JSON/text | Stable error categories where known. |
 | `rationale` | text | Why this objective result was assigned. |
-| `created_at` | timestamp | Observation time. |
+| `performed_at` | timestamp | Learner-performance time; for normal attempts this is `attempt.submitted_at`. |
+| `created_at` | timestamp | Evidence commit/observation time. |
 
 Indexes:
 
 ```text
-(objective_id, seq)
+(objective_id, performed_at, seq)
 (objective_id, created_at)
-(attempt_id)
+(attempt_id, objective_id)
 (retrieval_valid, objective_id)
 ```
+
+Challenge-derived fields (`task_id`, `task_version`, rubric identity/version, `task_form`, `delivery_context`, and `novelty`) are denormalized audit snapshots copied by the kernel from the persisted frozen challenge/target. Callers do not supply independent values for them. The kernel must reject any attempted evidence commit that disagrees with the frozen challenge.
+
+For normal attempts, at most one evidence event per `(attempt_id, objective_id)` may be currently effective. Correcting a wrong assessment invalidates the old event and appends a replacement with `supersedes_event_id`; it does not mutate the old event or leave two effective grades for the same target attempt.
 
 No update or delete is allowed for ordinary grading changes. If an event must be invalidated, append an evidence revision rather than rewriting history.
 
@@ -180,7 +230,11 @@ Append-only correction channel for assessment mistakes.
 | `reason` | text | Required audit rationale. |
 | `created_at` | timestamp | Revision time. |
 
-Projection rebuild uses the latest revision state for an event.
+The latest revision determines whether an evidence event is currently effective. That validity propagates to every derived consequence. Invalidating or restoring evidence must rebuild the affected objective projection, misconception/weakness state, and FSRS card in the same correction transaction.
+
+If the assessment value itself was wrong, append `invalidate` for the original event and append a corrected replacement `EvidenceEvent` with `supersedes_event_id` in the same transaction. A `restore` is for reversing an erroneous invalidation; reject restore when it would create two effective events for the same normal `(attempt_id, objective_id)` assessment.
+
+`review_events` and `misconception_observations` do not need their own revision streams: they inherit validity from their source `evidence_event_id`. An invalid source event is ignored during replay; restoring it makes its existing derived events effective again.
 
 ### `misconceptions`
 
@@ -203,14 +257,14 @@ Append-only misconception history.
 
 | Column | Type | Rule |
 | --- | --- | --- |
-| `seq` | integer PK/autoincrement | Replay order. |
+| `seq` | integer PK/autoincrement | Append order and deterministic tie-breaker. |
 | `misconception_id` | FK | Stable misconception. |
-| `objective_id` | FK | Objective on which it appeared/cleared. |
+| `objective_id` | FK | Objective on which it appeared/cleared; must equal the source evidence objective. |
 | `evidence_event_id` | FK | Supporting evidence. |
 | `disposition` | enum/text | `observed` or `cleared`. |
 | `created_at` | timestamp | Observation time. |
 
-The latest valid observation determines current active/cleared status. Recurrence is represented by another `observed` row, not by resetting the record.
+Current active/cleared status is determined from effective observations ordered by their source evidence learner time (`EvidenceEvent.performed_at`), then evidence/observation sequence as deterministic tie-breakers. An observation backed by invalidated evidence is ignored until that evidence is restored. Recurrence is represented by another `observed` row, not by resetting the record.
 
 ### `weakness_projections`
 
@@ -234,12 +288,12 @@ Append-only bridge between evidence and FSRS.
 
 | Column | Type | Rule |
 | --- | --- | --- |
-| `seq` | integer PK/autoincrement | Replay order. |
-| `objective_id` | FK | Scheduled objective. |
+| `seq` | integer PK/autoincrement | Append order and deterministic tie-breaker. |
+| `objective_id` | FK | Scheduled objective; kernel-derived and must equal the source evidence objective. |
 | `evidence_event_id` | FK unique | One scheduler input per evidence event. |
 | `rating` | enum/text | `Again`, `Hard`, or `Good` in V1. |
 | `mapper_version` | text | Mapping policy version. |
-| `reviewed_at` | timestamp | Time supplied to FSRS. |
+| `reviewed_at` | timestamp | Learner retrieval time supplied to FSRS; must equal source `EvidenceEvent.performed_at`. |
 | `scheduler_version` | text | `ts-fsrs`/policy version used. |
 | `parameters_json` | JSON/text | FSRS parameters needed for deterministic replay. |
 
@@ -259,11 +313,11 @@ Current FSRS cache/projection.
 | `scheduler_version` | text | Version used to build the current card. |
 | `updated_at` | timestamp | Cache update time. |
 
-The authoritative scheduler replay inputs are `review_events`; `review_cards` is the fast current projection.
+The scheduler's effective replay history is the subset of `review_events` whose source evidence is currently effective, ordered by `(reviewed_at ASC, seq ASC)`. Append order alone is not learner-time order because assessment may be committed later. `review_events` remain append-only provenance; `review_cards` is the fast current projection. If evidence validity changes or a backdated review is appended, rebuild the affected card from that filtered chronological history. If no effective review event remains, remove the card projection for that objective.
 
 ## Proficiency projection rules
 
-Projection consumes valid, non-invalidated evidence in `seq` order.
+Projection consumes currently effective evidence in learner-time order `(performed_at ASC, seq ASC)`. Append order alone must not decide current proficiency because assessment may be committed later than the learner performance it describes.
 
 ### Readiness
 
@@ -280,20 +334,21 @@ Rules:
 
 - `unknown`: no gradable evidence exists.
 - `exposed`: only answer-revealed/L5 evidence or unsuccessful attempts exist; no qualifying guided success exists.
-- `guided`: there is useful successful/partial performance with assistance, or current independent readiness has been contradicted by a newer unaided failure.
+- `guided`: there is useful successful/partial performance with assistance, or current independent readiness has been contradicted by a newer qualifying unaided result other than `correct`.
 - `independent`: the two most recent qualifying unaided (`L0`) gradable attempts are both `correct`, use distinct task versions or materially distinct surfaces, and no active blocking misconception applies.
 
-A newer qualifying unaided `incorrect` event immediately removes current `independent` readiness. Historical-highest readiness remains unchanged.
+A newer qualifying unaided result other than `correct` prevents current `independent` readiness until two subsequent qualifying successes satisfy the gate. Historical-highest readiness remains unchanged.
 
-`partially_correct` never establishes independent readiness.
+`partially_correct` therefore both fails to establish independent readiness and breaks the current two-success independent gate.
 
 ### Transfer
 
 Transfer is independent of the readiness ladder:
 
 - `untested`: no qualifying `novelty=transfer` evidence.
+- `not_demonstrated`: at least one qualifying transfer attempt exists, but no transfer success has yet been demonstrated and the latest qualifying result is not `correct`.
 - `demonstrated`: the latest qualifying unaided transfer event is `correct`.
-- `contradicted`: the latest qualifying unaided transfer event is `incorrect` or `partially_correct` after a prior demonstration.
+- `contradicted`: the latest qualifying unaided transfer event is `incorrect` or `partially_correct` after at least one prior transfer demonstration.
 
 A correct transfer event can also count as one of the two independent-readiness successes.
 
@@ -301,21 +356,33 @@ A correct transfer event can also count as one of the two independent-readiness 
 
 Durability is also orthogonal:
 
+The kernel computes the delay anchor for an objective as the latest prior memory contact before the current attempt submission:
+
+```text
+max(
+  COALESCE(submitted_at, started_at) of any earlier attempt whose frozen challenge targeted the objective,
+  occurred_at of any earlier exposure_event for the objective
+)
+```
+
+Opening a prior attempt counts as memory contact even if it is abandoned; a submitted attempt uses the later submission time. An earlier attempt remains a memory contact even if its later assessment is invalidated; assessment correction does not erase the fact that the learner encountered and attempted the target. Material explanations, answer reveals, worked examples, corrective feedback, and solution walkthroughs are memory contacts through `exposure_events`.
+
 A delayed retrieval qualifies for durability only when all are true:
 
 ```text
 retrieval_valid = true
 hint_level = L0
 result is gradable
-attempt occurred before re-exposure
-elapsed delay >= 7 days
+delay_anchor_at is known
+delay_seconds >= 7 days
 ```
 
 States:
 
 - `untested`: no qualifying delayed retrieval.
+- `not_demonstrated`: at least one qualifying delayed retrieval exists, but no durability success has yet been demonstrated and the latest qualifying result is not `correct`.
 - `demonstrated`: latest qualifying delayed retrieval is `correct`.
-- `contradicted`: latest qualifying delayed retrieval is `incorrect` or `partially_correct` after a prior demonstration.
+- `contradicted`: latest qualifying delayed retrieval is `incorrect` or `partially_correct` after at least one prior durability demonstration.
 
 The seven-day floor is a V1 policy constant for the `durability_state` summary. FSRS continues to schedule later retrievals; repeated delayed evidence strengthens confidence without creating another mastery ladder.
 
@@ -330,9 +397,8 @@ A misconception clears only through an explicit `cleared` observation tied to ne
 Projection functions must be deterministic over:
 
 ```text
-evidence_events
-+ evidence_revisions
-+ misconception_observations
+effective evidence_events after evidence_revisions
++ effective misconception_observations whose source evidence remains valid
 + projector_version
 ```
 
@@ -344,13 +410,13 @@ A full rebuild and an incremental update from the same event sequence must produ
 
 Set `retrieval_valid=true` only when all applicable conditions hold:
 
-1. The target was frozen before the attempt.
+1. The exact challenge version was durably frozen before the attempt opened.
 2. The expected answer/rubric was not shown before the learner response.
-3. `hint_level=L0` for the objective-specific evidence event.
+3. The objective-specific `hint_level`, derived from scoped hint observations, is L0.
 4. The task genuinely required retrieval/application rather than copying a visible example.
 5. The result is gradable.
 6. If executable correctness is required, deterministic execution/verifier evidence exists.
-7. The learner response precedes corrective explanation or answer reveal.
+7. The learner response precedes any objective-relevant corrective explanation or answer reveal recorded in `exposure_events`.
 
 Otherwise set it to false.
 
@@ -375,10 +441,12 @@ The mapper version is persisted on every `review_event` so a future policy can b
 ## FSRS card lifecycle
 
 - Do not create a card merely because an objective exists.
-- Create the first card when the objective produces its first `ReviewRatingMapper` output.
-- Apply each later `review_event` exactly once in sequence.
+- Create the first card when the objective produces its first effective `ReviewRatingMapper` output.
+- Apply effective `review_events` in `(reviewed_at, seq)` order, where source evidence is currently valid.
+- If a newly appended effective review predates the card's latest applied learner time, rebuild rather than applying it out of order.
 - Query `review_cards.due_at` for due retrieval.
-- If card state becomes suspect, rebuild it by replaying `review_events` with the recorded scheduler version/parameters.
+- If source evidence is invalidated/restored or card state becomes suspect, rebuild by replaying only effective `review_events` with their recorded scheduler version/parameters.
+- If no effective review event remains after correction, remove the `review_cards` projection for that objective.
 
 ### Legacy SM-2 migration
 
@@ -461,6 +529,24 @@ verification requirements
 
 Private solutions/rubrics may be hidden from learner-facing output, but the standard itself cannot be invented after the learner responds.
 
+### Frozen challenge persistence invariant
+
+`registerChallenge()` must durably persist the exact challenge version before it returns success. `openAttempt()` may only reference a persisted frozen version.
+
+The physical owner may be an extension of upstream `problems` or a dedicated challenge-version table. Select that owner before challenge-version persistence is implemented; Phase 0 repository integration does not need to decide it. Regardless of the physical table, a fresh process must be able to reconstruct the registered version's:
+
+```text
+learner-visible payload
+target objectives
+objective-owned criteria
+rubric/version
+hint ladder
+verification requirements
+private assessment references
+```
+
+Interruption or agent replacement must not require regenerating the challenge or rubric.
+
 ## Multi-objective challenges
 
 One challenge may target several objectives, but evidence is emitted separately.
@@ -483,13 +569,12 @@ This prevents one successful interview from silently improving several unrelated
 
 ```yaml
 attempt_id: attempt_...
-challenge_id: tx-race-debug-001
-challenge_version: 1
 response_ref: attempt.response_text
 artifact_ref: null
-hints_used: []
 verification_output: null
 ```
+
+The kernel resolves the frozen challenge ID/version from the attempt. Assessment callers do not re-supply challenge identity or other mutable challenge semantics.
 
 ### Output
 
@@ -499,7 +584,6 @@ assessment_basis: frozen_rubric
 objective_results:
   - objective_id: transactions:debug
     result: partially_correct
-    hint_level: L0
     criteria_met:
       - locate-race
     criteria_unmet:
@@ -520,6 +604,12 @@ When assessment is accepted, perform the following in one SQLite transaction:
 ```text
 persist assessment/attempt outcome
         ↓
+derive objective-specific hint levels from hint_observations
+        ↓
+compute performed_at from attempt submission
+        ↓
+compute delay anchor/seconds from prior targeted attempts + exposure_events
+        ↓
 append one EvidenceEvent per objective
         ↓
 append misconception observations
@@ -536,6 +626,32 @@ update session pending_action / phase
 ```
 
 If any required step fails, roll back the transaction. Do not leave evidence committed while projection/card/session state remains stale.
+
+## Atomic evidence-correction commit
+
+Invalidation and restore use the same causal discipline. In one SQLite transaction:
+
+```text
+append evidence_revision
+        ↓
+if correcting the assessment value:
+  append replacement EvidenceEvent (same frozen attempt/challenge, supersedes old event)
+  append replacement misconception observations
+  run ReviewRatingMapper on replacement
+  append replacement review_event when a rating exists
+        ↓
+resolve current effective evidence validity
+        ↓
+rebuild affected objective projection in learner-time order
+        ↓
+recompute misconception/weakness state from effective source evidence
+        ↓
+rebuild review_card from effective review_events in (reviewed_at, seq) order
+        ↓
+remove review_card if no effective review history remains
+```
+
+Do not delete or rewrite the original `review_event` or `misconception_observation`. Their effective validity is inherited from the source `EvidenceEvent`. A corrected replacement gets its own derived observations/review event. Restoring evidence re-includes the original derived events during replay and is rejected if doing so would conflict with an already-effective replacement for the same normal attempt/objective.
 
 ## `tutor today` contract
 
@@ -620,9 +736,13 @@ items:
 
 Every selected item must have an explainable reason traceable to durable state.
 
-## Agent ↔ kernel protocol
+## Teacher agent ↔ kernel protocol
 
-The protocol is transport-neutral. It may initially be exposed through local TypeScript functions/CLI; do not introduce a network service solely for architectural purity.
+The protocol is transport- and provider-neutral. ChatGPT is the preferred V1 interactive teacher, but the kernel must not depend on ChatGPT-specific conversation state, memory, tool transcripts, or identifiers. Codex, OpenCode, AGY, or another compatible agent may replace the teacher by using the same operations and durable state.
+
+Use one active teacher/orchestrator at a time in V1. Do not introduce a network service, plugin framework, or multi-agent router solely for portability; the stable kernel contract is the portability boundary.
+
+Optional agent/model provenance may be recorded for audit, but it cannot alter evidence interpretation, projection rules, scheduler semantics, or resume correctness.
 
 ### 1. Request daily mission
 
@@ -635,10 +755,10 @@ getTodayMission(goalId, availableMinutes)
 
 ```text
 registerChallenge(ChallengeSpec)
-→ frozen challenge ID/version
+→ durably persisted frozen challenge ID/version
 ```
 
-The kernel validates target objectives, criterion ownership, and required private assessment metadata before the challenge can affect proficiency.
+The kernel validates target objectives, criterion ownership, and required private assessment metadata, persists the exact frozen version, and only then returns success. A fresh compatible agent must be able to reconstruct that version without regeneration.
 
 ### 3. Open attempt before delivery
 
@@ -652,12 +772,36 @@ The learner-visible payload excludes private solution material.
 ### 4. Record hint use
 
 ```text
-recordHintUse(attemptId, level, timestamp)
+recordHintUse(
+  attemptId,
+  {
+    level,
+    scope: { objective_id } | { criterion_ids: [...] } | { all_targets: true }
+  }
+)
 ```
 
-Hint observations are durable. The final objective-specific evidence uses the highest decisive hint level relevant to that objective.
+Hint observations are durable and objective-aware. The kernel validates objective/criterion scope against the frozen challenge, assigns `recorded_at` from its own clock, and derives each objective's evidence `hint_level` as the highest relevant observation. If none applies, the level is L0. Record the observation before exposing the hint to the learner.
 
-### 5. Submit learner work
+Once `submitAttempt()` succeeds, no further hint observation may be attached to that attempt.
+
+### 5. Record material exposure
+
+```text
+recordExposure(
+  sessionId,
+  {
+    attemptId?,
+    objectiveIds: [...],
+    exposureType,
+    sourceRef?
+  }
+)
+```
+
+Call this before showing an explanation, answer, worked example, corrective feedback, or solution walkthrough that materially refreshes the listed objectives. The kernel assigns `occurred_at` from its own clock and persists one `exposure_event` per objective. If `attemptId` is present, the kernel validates that the scoped objectives belong to the frozen challenge targets. Post-attempt feedback therefore resets the future durability delay without changing the retrieval validity of the already-submitted attempt.
+
+### 6. Submit learner work
 
 ```text
 submitAttempt(attemptId, responseText?, artifactRef?)
@@ -665,7 +809,7 @@ submitAttempt(attemptId, responseText?, artifactRef?)
 
 For executable work, the agent runs the frozen verifier through the local environment and preserves command/output or equivalent deterministic artifact evidence.
 
-### 6. Submit assessment
+### 7. Submit assessment
 
 ```text
 recordAssessment(attemptId, AssessmentResult)
@@ -677,7 +821,23 @@ recordAssessment(attemptId, AssessmentResult)
 
 The kernel validates the assessment against the frozen challenge contract and performs the atomic assessment commit.
 
-### 7. Resume after interruption
+### 8. Correct evidence when assessment was wrong
+
+```text
+reviseEvidence(
+  evidenceEventId,
+  {
+    action: invalidate | restore,
+    reason,
+    correctedObjectiveResult?
+  }
+)
+→ updated evidence/projections/scheduler state
+```
+
+`correctedObjectiveResult` is allowed only with invalidation and causes the atomic corrected-replacement path. Restore reactivates the original event and its existing derived events only when that would not conflict with another effective replacement.
+
+### 9. Resume after interruption
 
 ```text
 resumeSession(sessionId)
@@ -699,7 +859,7 @@ feedback
 complete
 ```
 
-A fresh agent must be able to resume solely from persisted state.
+A fresh compatible agent must be able to resume solely from persisted kernel state. Replacing ChatGPT with another teacher must not require learner-state migration or recovery of the previous provider's private conversation history.
 
 ## V1 stop line
 

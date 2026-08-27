@@ -17,7 +17,7 @@
 - Preserve explicit misconceptions and contradictory/regression evidence rather than overwriting them.
 - Broad weakness projection is derived/materialized from evidence and misconception history.
 - `ReviewRatingMapper` translates valid retrieval evidence into FSRS ratings; FSRS decides when; challenge selection decides how.
-- Keep the first implementation single-agent and CLI-first.
+- Keep the first implementation single-teacher and CLI-first. Prefer ChatGPT as the V1 interactive teacher, but keep the kernel protocol provider-neutral so Codex, OpenCode, AGY, or another compatible agent can replace it without learner-state migration.
 - Do not add dashboard, voice, Monaco/Judge0 UI, BKT, or multi-agent orchestration before the core loop is proven.
 
 ## Phase 0 — Fork readiness
@@ -28,57 +28,115 @@
 - Upstream metadata and dependency files before local fork work begins.
 
 **Interfaces:**
-- Consumes: `alienz-dev/generic-tutor` repository state.
-- Produces: a legally and technically usable fork baseline.
+- Consumes: pinned `alienz-dev/generic-tutor` repository state.
+- Produces: a technically usable local fork baseline with provenance facts and unresolved redistribution risk stated explicitly.
+
+**Pinned upstream base:**
+
+```text
+repository: https://github.com/alienz-dev/generic-tutor.git
+branch:     master
+commit:     2fffb72201aba055a4c270e2fddb29352edf2efb
+```
+
+Do not silently advance the fork base to a later `master` commit.
 
 **Steps:**
-- Record upstream provenance and license metadata. `package.json` declares MIT, but the inspected repository lacks a root `LICENSE` file; preserve required notices and clarify the missing license text before redistribution if needed.
-- Record the exact upstream commit used as the fork base.
-- Make `/home/hamza/repo/learning-os` the eventual product working tree while preserving `generic-tutor` upstream history rather than copying source into an unrelated Git history.
-- Identify any generated or ecosystem-specific files that should not become part of the product architecture.
+- Record upstream provenance and license facts. `package.json` and the upstream README declare MIT, but the pinned repository has no root license text/copyright notice and GitHub does not detect a license. Preserve history and facts; do not manufacture missing notice text, ownership, or transfer history.
+- Preserve the exact pinned upstream commit as reachable Git ancestry rather than copying or squashing source into unrelated history.
+- Make `/home/hamza/repo/learning-os` the product working tree while preserving the existing Learning OS design lineage.
+- Treat public redistribution/package publication as separately gated on license/provenance clarification; local implementation may proceed without claiming that redistribution rights are fully resolved.
+- Identify generated, agent-tooling, and ecosystem-specific files that should not dictate Learning OS architecture.
 
 **Acceptance criteria:**
-- The fork base and reuse rights are explicit.
+- The exact fork base, provenance facts, and unresolved license-text/redistribution risk are explicit.
+- Local integration preserves both Learning OS and upstream Git ancestry without claiming unresolved legal facts are settled.
 
-### Task 2: Remove the sibling `nexus` runtime dependency
+### Task 2: Remove clean-clone standalone blockers
 
 **Files:**
 - Modify: `package.json`
+- Modify: `package-lock.json`
 - Modify: `src/llm/client.ts`
+- Modify: `src/db/database.ts`
 
 **Interfaces:**
-- Consumes: existing `LLMClient` callers.
-- Produces: a standalone provider adapter with the same narrow application-facing interface.
+- Consumes: existing `LLMClient` callers and file-backed SQLite callers.
+- Produces: a standalone baseline that needs neither a sibling Nexus repository nor a pre-created database directory.
 
 **Steps:**
 - Preserve `LLMClient.complete()` and `isConfigured()` as the application seam.
-- Remove `nexus: file:../nexus` from dependencies.
-- Replace the `nexus/llm` import with a standalone provider implementation or a normal package dependency.
-- Keep provider-specific configuration outside learning-state logic.
+- Remove `nexus: file:../nexus` from `package.json` and remove the Nexus package/link from the npm lock graph using normal npm lockfile tooling.
+- Replace the `nexus/llm` implementation with a provider-neutral unconfigured local client: `isConfigured()` returns false and `complete()` fails explicitly when no provider is configured.
+- Do not add an OpenAI, Anthropic, or other paid/provider API SDK merely to replace Nexus in Phase 0.
+- Keep provider-specific configuration outside learning-state logic. `src/plan/nexus-planner.ts` may remain because it consumes the local `LLMClient` seam rather than the Nexus package directly.
+- Make `createDatabase(dbPath)` create the parent directory for a file-backed database before opening SQLite, so `./data/tutor.db` works in a clean checkout without per-command directory setup.
+- Leave optional `../job-hunter` and `../ai-feeds` integrations unchanged in this phase.
 
 **Acceptance criteria:**
-- A clean clone does not require a sibling Nexus repository.
+- A clean checkout does not require a sibling Nexus repository or a pre-existing `data/` directory for ordinary startup.
+- Phase 0 introduces no new paid/provider API dependency solely as a Nexus substitute.
 
-### Task 3: Normalize session-mode contracts
+### Task 3: Normalize ordinary-session delivery context
 
 **Files:**
 - Modify: `src/db/types.ts`
+- Modify: `src/db/database.ts`
 - Modify: `src/knowledge/types.ts`
 - Modify: `src/session/engine.ts`
+- Modify: `src/plan/planner.ts`
 - Modify: `src/cli.ts` and existing session-mode modules where needed.
 
 **Interfaces:**
-- Consumes: upstream mode vocabularies such as `learn/review/quiz/interview/practice` and `explore/quiz/teach-back`.
-- Produces: one canonical distinction between target capability, task form, and delivery context before the new learning model depends on those names.
+- Consumes: persisted/runtime legacy values `explore|quiz|teach-back` plus the existing DB/type vocabulary.
+- Produces: one canonical delivery-context vocabulary without conflating delivery context, capability, task form, or `problems.type`.
+
+**Canonical delivery contexts:**
+
+```text
+learn
+practice
+review
+interview
+mock
+```
+
+**Legacy mapping:**
+
+```text
+explore    -> learn
+quiz       -> review
+teach-back -> practice
+```
 
 **Steps:**
-- Inventory every persisted and runtime mode value and its callers.
-- Define canonical delivery contexts such as `learn`, `practice`, `review`, `interview`, and `mock`.
-- Keep target capability, task form, and delivery context as separate fields.
-- Migrate or translate legacy `explore` and `teach-back` semantics explicitly rather than allowing duplicate vocabularies to survive.
+- Keep `sessions.mode` and `reviews.mode` as physical legacy column names for now, but make their semantic contract delivery context.
+- Add a real DB migration for known stored legacy values in both columns. Leave already-canonical values unchanged. If an unknown stored value exists, fail/report it rather than guessing its semantics.
+- Make session/review writers accept canonical delivery-context values and validate/parse rows on read rather than relying only on raw TypeScript casts.
+- Normalize upstream CLI aliases at the CLI boundary; do not allow `explore|quiz|teach-back` to re-enter internal planning, session state, or new DB writes.
+- Change planning/schema output to canonical delivery context. Existing implementation modules `explore.ts`, `quiz.ts`, and `teach-back.ts` may remain as transitional strategies and do not need cosmetic renames.
+- Keep target capability, task form, novelty, difficulty, and `problems.type` separate from delivery context.
+- Do not route existing interview flows through ordinary session persistence in Phase 0 merely because `interview` is a canonical delivery context.
 
 **Acceptance criteria:**
-- Session persistence, planning, and runtime selection no longer disagree about what a mode value means.
+- New ordinary-session persistence, planning, and runtime state use only canonical delivery contexts.
+- Existing known legacy persisted values migrate deterministically, and unknown values are not silently coerced.
+
+### Phase 0 legacy-mastery safety cut
+
+**Files:**
+- Modify: `src/state.ts`
+
+**Steps:**
+- Remove the dormant duplicate SM-2 writer `updateConceptAfterReview()` after confirming the reconnaissance result that no live source caller exists.
+- Make `getTopicSummary()` a true read by removing automatic `topics.phase` mutation derived from legacy `concepts.status`/EF data.
+- Do not migrate the active `askGrade() -> gradeResponse() -> sm2()` compatibility path in Phase 0. Do not add new Learning OS behavior that treats it as authoritative learner truth.
+- Defer the active writer plus its status/due/planner/pacer/CLI/sync/export readers until the evidence/FSRS replacement can migrate that surface coherently.
+- Preserve legacy concept/review rows as provenance; do not mathematically convert them into FSRS cards.
+
+**Acceptance criteria:**
+- Phase 0 leaves only the known active legacy SM-2 mutation path and removes hidden legacy-state mutation from topic-summary reads.
+- No new subsystem is coupled to scalar concept mastery as Learning OS truth.
 
 ## Phase 1 — Evidence kernel
 
@@ -113,15 +171,19 @@
 - Create: `src/evidence/evaluator.ts`
 
 **Interfaces:**
-- Consumes: assessment result, task/rubric identity and version, learner response or artifact, evaluator/basis, hint use, task novelty, delay, and misconceptions.
+- Consumes: assessment result, frozen task/rubric identity and version, learner response or artifact, evaluator/basis, objective-scoped hint provenance, task novelty, durable exposure/attempt history, and misconceptions.
 - Produces: persisted `EvidenceEvent` plus deterministic rebuildable proficiency/blocker projections.
 
 **Steps:**
 - Add an `evidence_events` table linked to objective, session, problem, and attempt when those objects exist.
-- Persist task/rubric identity and version, evaluator type, assessment basis, result, hint level, novelty, retrieval validity, delay, objective-specific criteria results, observed errors, and rationale. Keep the learner response/artifact on the shared attempt and reference it from each per-objective event.
-- Add append-only `evidence_revisions` so an assessment mistake can be invalidated/restored without rewriting the original event.
-- Add `objective_projections` with orthogonal readiness (`unknown|exposed|guided|independent`), transfer (`untested|demonstrated|contradicted`), durability (`untested|demonstrated|contradicted`), historical-highest readiness, blockers, event sequence, and projector version.
-- Implement the exact projection rules in `docs/kernel-contracts.md`, including two distinct recent correct L0 attempts for independent readiness and the seven-day V1 floor for durability evidence.
+- Add append-only `hint_observations` scoped to one objective, frozen criterion IDs, or all challenge targets; derive each evidence event's effective hint level from the highest relevant observation.
+- Add append-only objective-specific `exposure_events` for material explanation/answer/worked-example/corrective-feedback/solution exposure.
+- Persist task/rubric identity and version, evaluator type, assessment basis, result, derived hint level, novelty, retrieval validity, kernel-computed delay anchor/seconds, learner-performance time (`performed_at`), objective-specific criteria results, observed errors, and rationale. Keep the learner response/artifact on the shared attempt and reference it from each per-objective event.
+- Treat event sequence as append order/tie-breaker; project learner state in `(performed_at, seq)` order so delayed assessment commits cannot reorder learner history.
+- Add append-only `evidence_revisions` so an assessment mistake can be invalidated/restored without rewriting the original event. A corrected grade invalidates the old event and appends a replacement linked by `supersedes_event_id`, with at most one effective event per normal `(attempt_id, objective_id)`.
+- Make evidence validity causal: invalidation/restore or corrected replacement rebuilds the affected objective projection, misconception/weakness state, and FSRS card from effective source events in one transaction.
+- Add `objective_projections` with orthogonal readiness (`unknown|exposed|guided|independent`), transfer (`untested|not_demonstrated|demonstrated|contradicted`), durability (`untested|not_demonstrated|demonstrated|contradicted`), historical-highest readiness, blockers, event sequence, and projector version.
+- Implement the exact projection rules in `docs/kernel-contracts.md`, including two distinct recent correct L0 attempts for independent readiness, any newer qualifying non-correct attempt breaking the current gate, and the seven-day V1 durability floor computed from prior targeted attempts plus material exposure events.
 - Allow contradictory evidence to lower readiness or contradict transfer/durability without rewriting history.
 - Never delete prior evidence when projections change.
 
@@ -140,7 +202,7 @@
 - Produces: explicit misconception records plus rebuildable/materialized weakness summaries for challenge selection.
 
 **Steps:**
-- Add stable misconception definitions linked to the concept, plus append-only `misconception_observations` (`observed|cleared`) tied to objective evidence. Derive current active/cleared state from the latest valid observation.
+- Add stable misconception definitions linked to the concept, plus append-only `misconception_observations` (`observed|cleared`) tied to objective evidence. Derive current active/cleared state from the latest observation whose source evidence is currently effective; invalidated source evidence must not remain active in misconception replay.
 - Derive broad weakness signals from evidence and misconception history; materialize lifecycle state only for efficient selection/audit.
 - If materialized, support `new`, `recurring`, `improving`, `resolved`, and `retest` as explainable projection states.
 - Require fresh evidence to project a weakness as resolved.
@@ -189,6 +251,7 @@
 
 **Steps:**
 - Extend problem/assessment storage with target objective(s), criteria, acceptable variants, common failures, and hint ladder where applicable.
+- Ensure `registerChallenge()` durably persists the exact frozen challenge version before `openAttempt()` can reference it. The physical owner may extend upstream `problems` or use a dedicated version table, but a fresh agent must reconstruct the public payload, targets, criteria, rubric, hint ladder, verification requirements, and private assessment references without regeneration.
 - Mark ambiguous or invalid tasks as `ungradable` rather than forcing a score.
 - Prevent the learner response from being used to invent a new success criterion after submission.
 - Keep LLM evaluation subordinate to the frozen rubric for open-ended tasks.
@@ -239,7 +302,9 @@
 - Require scheduler-valid retrieval evidence to be answer-hidden, gradable, L0, and deterministically verified when the frozen task requires execution.
 - Do not emit `Easy` in V1.
 - Transfer success alone must not alter the FSRS rating.
-- Persist mapper output in append-only `review_events` with mapper/scheduler version and replay parameters.
+- Persist mapper output in append-only `review_events` with mapper/scheduler version, replay parameters, and `reviewed_at` equal to the source evidence learner-performance time.
+- Treat a `review_event` as effective only while its source evidence remains valid. Replay effective events in `(reviewed_at, seq)` order; if a newly committed assessment is backdated relative to the current card, rebuild rather than applying it out of learner-time order.
+- Evidence invalidation/restore rebuilds the card from the filtered effective review history without rewriting review events.
 - Do not expose learner self-rating as the authoritative scheduler input.
 
 **Acceptance criteria:**
@@ -263,7 +328,7 @@
 - Add `review_cards` keyed by learning objective as the current rebuildable FSRS projection/cache.
 - Persist a queryable indexed `due_at` plus serialized scheduler card state and source review sequence.
 - Update due selection to query objectives/cards rather than concept SM-2 fields.
-- Update a review card only when `retrieval_valid` is true.
+- Build/rebuild cards only from effective `review_events` whose source evidence is currently valid, ordered by `(reviewed_at, seq)`; remove the card projection if correction leaves no effective review history.
 - Remove SM-2 state mutation from the session engine.
 - Do not mathematically convert concept-level SM-2 fields into objective-level FSRS state. Preserve legacy data as provenance/non-authoritative import and establish new cards from new valid retrieval evidence.
 - Remove legacy concept-level SM-2 fields only after all required reads have migrated.
@@ -401,31 +466,38 @@
 
 **Steps:**
 - Persist explicit session phase and pending action.
-- Store the active objective/challenge and unresolved evidence/grading step.
+- Store the exact frozen challenge ID/version, active attempt, unresolved verification/assessment step, and enough references to persisted hint/exposure history to resume deterministically.
+- Require the frozen challenge version itself to be durably reconstructable before an attempt opens.
 - Make resume behavior deterministic from persisted state.
 - Treat model/chat memory as helpful context only.
 
 **Acceptance criteria:**
 - A fresh agent can identify exactly what to resume from durable state alone.
 
-### Task 18: Provide one agent-facing orchestration contract
+### Task 18: Provide one replaceable teacher-agent contract
 
 **Files:**
 - Create documentation/Skill adapter only after the kernel interfaces above exist.
 
 **Interfaces:**
-- Consumes: `today`, challenge, assessment, evidence, and resume APIs.
-- Produces: one coherent teaching/practice/interview workflow.
+- Consumes: `today`, challenge, assessment, evidence, correction, exposure, and resume APIs.
+- Produces: one coherent teaching/practice/interview workflow that is not tied to a specific agent provider.
 
 **Steps:**
-- Define how an agent requests the next mission.
-- Define how it presents a challenge without leaking frozen answers/rubrics.
-- Define how it submits the learner response and observed hint use.
+- Treat ChatGPT as the preferred V1 teacher client, not a kernel dependency.
+- Define how any compatible teacher requests the next mission.
+- Define how it registers and presents a durably frozen challenge without leaking private answers/rubrics.
+- Define objective-aware hint recording: scope each hint to an objective, owned criterion IDs, or all targets; let the kernel assign interaction timestamps; close hint recording when the attempt is submitted.
+- Define `recordExposure` before showing material explanations, answers, worked examples, corrective feedback, or solution walkthroughs; let the kernel timestamp and persist the exposure so future durability delay is provable.
+- Define how it submits learner work and assessment without re-supplying mutable challenge semantics.
+- Define `reviseEvidence` for invalidate/restore and corrected-replacement assessment paths, with all affected projections and scheduler state rebuilt atomically.
 - Define how it handles feedback, retries, breaks, and resume.
-- Keep a single orchestrator until real use demonstrates a need for role isolation.
+- Keep one active teacher/orchestrator until real use demonstrates a need for role isolation.
+- Keep provider-specific conversation memory and tool transcripts optional; durable continuity must come from kernel state.
+- Do not build a generic plugin/multi-agent framework merely to support replacement teachers.
 
 **Acceptance criteria:**
-- One agent can run the full retrieve → learn → apply → debug → transfer/interview loop without inventing authoritative state in chat.
+- Any compatible teacher client can run the full retrieve → learn → apply → debug → transfer/interview loop from kernel state without inventing authoritative state in provider-specific chat memory.
 
 ## First usable milestone
 
@@ -460,10 +532,15 @@ Do not add UI/product layers until repeated real sessions expose a concrete need
 
 `docs/kernel-contracts.md` fixes the remaining V1 architecture decisions:
 
-1. FSRS replay inputs live in append-only `review_events`; `review_cards` is an indexed rebuildable cache. Legacy concept-level SM-2 state is not mathematically converted.
-2. `ReviewRatingMapper` accepts only valid L0 retrieval evidence and maps `incorrect → Again`, `partially_correct → Hard`, `correct → Good`; V1 emits no `Easy` rating.
-3. Multi-objective challenges freeze objective-specific criteria before delivery and emit one evidence event per objective; ambiguous targets are `ungradable` rather than assigned synthetic scores.
-4. Goal urgency uses explicit objective importance plus deadline-derived urgency; automatic job-description ingestion is outside V1.
-5. The logical schema, projection rules, challenge/assessment contracts, atomic assessment commit, `tutor today` budget guards, and agent↔kernel protocol are specified in `docs/kernel-contracts.md`.
+1. FSRS provenance lives in append-only `review_events`; scheduler replay uses only review events whose source evidence is currently valid, while `review_cards` is an indexed rebuildable cache. Evidence invalidation/restore atomically rebuilds the affected card. Legacy concept-level SM-2 state is not mathematically converted.
+2. `ReviewRatingMapper` accepts only valid objective-specific L0 retrieval evidence and maps `incorrect → Again`, `partially_correct → Hard`, `correct → Good`; V1 emits no `Easy` rating.
+3. Durability delay is computed from durable memory-contact history: prior targeted attempts (submitted time, or start time if abandoned) plus objective-specific material `exposure_events`. Interaction timestamps are kernel-owned; delay is not inferred from chat continuity.
+4. Transfer/durability projections use exhaustive states: `untested`, `not_demonstrated`, `demonstrated`, `contradicted`.
+5. Multi-objective challenges freeze objective-specific criteria before delivery, scope hints to objectives/criteria/all targets, and emit one evidence event per objective; ambiguous targets are `ungradable` rather than assigned synthetic scores.
+6. A registered challenge version is durably persisted before an attempt opens and can be reconstructed by a fresh compatible agent without regeneration.
+7. ChatGPT is the preferred V1 teacher client, but teacher identity is replaceable: Codex, OpenCode, AGY, or another compatible agent can continue from the same kernel state and protocol without learner-state migration.
+8. Goal urgency uses explicit objective importance plus deadline-derived urgency; automatic job-description ingestion is outside V1.
+9. Evidence and FSRS replay use learner-performance time, not assessment commit order; backdated assessment commits trigger deterministic rebuilds.
+10. The logical schema, projection rules, challenge/assessment/correction contracts, `tutor today` budget guards, and teacher-agent↔kernel protocol are specified in `docs/kernel-contracts.md`.
 
 Implementation may refine SQLite DDL details to match the upstream migration style, but it must not change these ownership or evidence semantics without updating the relevant ADR/spec first.

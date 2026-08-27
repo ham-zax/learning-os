@@ -13,7 +13,7 @@ The system must keep those questions separate. Grading, task selection, and spac
 ## System boundary
 
 ```text
-                  Agent / ChatGPT / CLI
+                Teacher Agent / CLI
                          |
              teach / lab / interview
                          |
@@ -84,9 +84,17 @@ Delivery context is not a capability or proficiency claim.
 
 ### Evidence event
 
-An append-only record of what happened on a specific task. It records the task/rubric identity, learner response or artifact, assessment basis, hint use, novelty, delay, evaluator, result, and rationale needed to audit later conclusions.
+An append-only objective-specific assessment record. It records the frozen task/rubric identity, learner response or artifact reference, assessment basis, derived objective-specific hint level, novelty, kernel-computed delay, evaluator, result, and rationale needed to audit later conclusions.
 
-Evidence events are authoritative. Derived summaries must be rebuildable from them plus explicit misconception records.
+Evidence validity is authoritative for every derived consequence. Invalidating or restoring evidence must deterministically change proficiency, misconception/weakness state, and scheduler replay without rewriting the original event.
+
+### Hint observation
+
+Append-only record of decisive help scoped to one objective, frozen criterion IDs, or all targets of an attempt. The final evidence event for each objective derives its own highest relevant hint level.
+
+### Exposure event
+
+Append-only record that the learner was materially re-exposed to an objective through an explanation, answer reveal, worked example, corrective feedback, or solution walkthrough. Together with prior targeted attempts, this is the durable owner of delayed-retrieval timing.
 
 ### Objective proficiency projection
 
@@ -94,8 +102,8 @@ A rebuildable materialized view derived from evidence. V1 stores three orthogona
 
 ```text
 readiness:   unknown | exposed | guided | independent
-transfer:    untested | demonstrated | contradicted
-durability:  untested | demonstrated | contradicted
+transfer:    untested | not_demonstrated | demonstrated | contradicted
+durability:  untested | not_demonstrated | demonstrated | contradicted
 ```
 
 `transfer` and `durability` are not later rungs in the readiness ladder. A convenience UI may display `transferable` or `durable`, but the durable projection keeps these dimensions separate. Later contradictory evidence can lower current readiness or contradict transfer/durability while historical evidence remains intact.
@@ -104,7 +112,7 @@ Persist the current projection for efficient reads, but treat evidence as the so
 
 ### Misconception
 
-An explicit durable semantic error worth retesting, such as confusing transaction atomicity with serialization. Misconceptions may be active or cleared, but their evidence history is retained.
+An explicit durable semantic error worth retesting, such as confusing transaction atomicity with serialization. Observed/cleared history is append-only and inherits validity from its source evidence, so invalidating evidence also removes the corresponding misconception observation from effective replay.
 
 ### Weakness projection
 
@@ -112,7 +120,7 @@ A rebuildable summary of repeated failure patterns used for challenge selection.
 
 ### Review card
 
-FSRS memory state associated with a learning objective. FSRS is allowed to schedule only evidence that qualifies as valid retrieval.
+FSRS memory state associated with a learning objective. The card is a rebuildable cache over effective `review_events`; a review event is effective only while its source evidence remains valid.
 
 ## Responsibility boundaries
 
@@ -133,7 +141,11 @@ Examples:
 
 ### ReviewRatingMapper owns evidence-to-scheduler translation
 
-The mapper receives already-assessed evidence and translates only qualifying retrieval into scheduler ratings. V1 accepts answer-hidden, gradable, L0 retrieval/application evidence (with deterministic verification when the frozen task requires execution) and maps `incorrect → Again`, `partially_correct → Hard`, and `correct → Good`. V1 does not emit `Easy`. FSRS must not interpret pedagogical concepts such as interview mode, transfer distance, or misconception semantics.
+The mapper receives already-assessed evidence and translates only qualifying retrieval into scheduler ratings. V1 accepts answer-hidden, gradable, objective-specific L0 retrieval/application evidence (with deterministic verification when the frozen task requires execution) and maps `incorrect → Again`, `partially_correct → Hard`, and `correct → Good`. V1 does not emit `Easy`. FSRS must not interpret pedagogical concepts such as interview mode, transfer distance, hint provenance, or misconception semantics.
+
+### Correction/replay owns causal consistency
+
+Evidence correction is not local to proficiency. Invalidating or restoring evidence atomically rebuilds every affected projection and the FSRS card. Scheduler replay uses only review events whose source evidence is currently effective; misconception observations follow the same source-validity rule.
 
 ### FSRS owns timing
 
@@ -181,13 +193,15 @@ Use priority tiers before designing a complicated weighted formula:
 
 Within a tier, rank using retrievability, prerequisite blocking, job/interview relevance, recent evidence, and task diversity. Bound review debt so overdue retrieval cannot consume the entire learning budget; preserve meaningful capacity for forward progress and application.
 
-## Agent boundary
+## Teacher / agent boundary
 
-Agents are workers over durable state, not the source of truth.
+The interactive teacher is a replaceable client over durable Learning OS state, not the source of truth.
 
-A fresh agent should be able to resume by reading persisted topic, objective, evidence, misconception, derived weakness/proficiency projections, scheduling, and pending-session state. Critical continuity must not depend on chat memory.
+ChatGPT is the preferred V1 teacher because it can conduct the learning dialogue while working against the learner's real WSL environment. That preference must not appear in persistent learning semantics or require ChatGPT-specific state.
 
-The first implementation should use one agent/orchestrator. Separate agents are justified only if a concrete failure mode requires isolation.
+A fresh compatible agent should be able to resume by reading persisted topic, objective, frozen challenge version, attempt, hint/exposure history, evidence, misconception, derived weakness/proficiency projections, scheduling, and pending-session state. Critical continuity must not depend on ChatGPT history, another provider's private memory, or provider-specific tool transcripts.
+
+Use one active teacher/orchestrator at a time in V1. Codex, OpenCode, AGY, or another agent may later replace ChatGPT by using the same kernel protocol. They may also act as bounded execution workers without becoming additional sources of learner truth. Do not build a generic plugin or multi-agent framework merely to achieve portability.
 
 ## First-version runtime target
 
@@ -196,10 +210,11 @@ The smallest useful runtime should support:
 ```text
 concepts
 + learning objectives
-+ append-only evidence
++ append-only evidence + evidence revisions
++ objective-scoped hint and exposure history
 + rebuildable proficiency projection
 + misconceptions + derived weakness projection
-+ ReviewRatingMapper
++ effective review-event replay through ReviewRatingMapper
 + FSRS cards
 + challenge selection
 + today command

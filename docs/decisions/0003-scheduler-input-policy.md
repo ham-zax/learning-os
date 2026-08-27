@@ -14,7 +14,7 @@ Guided performance also must not silently lengthen review intervals. A learner w
 
 Insert a versioned `ReviewRatingMapper` between evidence assessment and the FSRS adapter.
 
-Only an evidence event with `retrieval_valid=true` reaches the mapper. V1 sets `retrieval_valid=true` only for gradable, answer-hidden, L0 attempts that genuinely required retrieval/application and have deterministic verification when the frozen task requires it.
+Only an evidence event with `retrieval_valid=true` reaches the mapper. V1 sets `retrieval_valid=true` only for gradable, answer-hidden attempts whose objective-specific hint level, derived from scoped hint observations, is L0, that genuinely required retrieval/application, and that have deterministic verification when the frozen task requires it.
 
 Use this V1 mapping:
 
@@ -28,7 +28,9 @@ retrieval_invalid -> no scheduler update
 
 Do not emit `Easy` in V1.
 
-Persist every mapper output as an append-only `review_event` with the mapper version, scheduler version, review time, and FSRS parameters needed for replay.
+Persist every mapper output as an append-only `review_event` with the source evidence ID, mapper version, scheduler version, FSRS parameters, and `reviewed_at` equal to the source evidence learner-performance time (normally attempt submission). Append sequence is provenance/tie-breaker, not learner-time order.
+
+A `review_event` is effective only while its source evidence is currently valid. Evidence invalidation/restore does not rewrite or revise review events; it atomically rebuilds the affected FSRS card by replaying only effective review events in `(reviewed_at, seq)` order. If an assessment is committed after a newer learner attempt but has an earlier `reviewed_at`, rebuild rather than applying it out of chronological order. If no effective review history remains, remove the card projection.
 
 Persist current FSRS card state in `review_cards` as a rebuildable cache with indexed `due_at` and serialized card JSON.
 
@@ -40,7 +42,7 @@ Do not mathematically convert legacy concept-level SM-2 state into objective-lev
 
 - FSRS remains a timing engine rather than a learning-semantics engine.
 - Guided or answer-exposed practice cannot extend review intervals.
-- Scheduler decisions are auditable and replayable.
+- Scheduler decisions are auditable, replayable, and causally correctable when source evidence is invalidated/restored.
 - A future rating policy can coexist with historical policy through `mapper_version`.
 - Transfer success does not get misrepresented as an `Easy` memory rating.
 
@@ -48,7 +50,7 @@ Do not mathematically convert legacy concept-level SM-2 state into objective-lev
 
 - Some useful but assisted practice will not update the FSRS card.
 - Imported SM-2 users require baseline retrieval before trustworthy FSRS state exists.
-- `review_events` adds one more durable event stream.
+- `review_events` adds one more durable event stream and card rebuild work when source evidence validity changes.
 
 ## Rejected alternatives
 

@@ -4,7 +4,7 @@
 
 The evidence model prevents the system from turning exposure, confidence, or one successful surface form into a false claim of mastery.
 
-The authoritative record is the history of evidence events plus explicit misconception observations. Readiness, historical-highest readiness, transfer/durability state, blockers, broad weakness signals, and scheduler card state are derived from that history. Persisted projections exist for efficient reads but must be rebuildable.
+The authoritative assessment history is append-only evidence plus evidence revisions. Scoped hint observations, material exposure events, and misconception observations preserve the interaction provenance needed to interpret that evidence. Readiness, historical-highest readiness, transfer/durability state, blockers, broad weakness signals, and scheduler card state are derived and rebuildable.
 
 ## Learning objective
 
@@ -72,24 +72,21 @@ result: incorrect
 hint_level: L0
 novelty: transfer
 retrieval_valid: true
+performed_at: "..."
+delay_anchor_at: "..."
 delay_seconds: 345600
 
-criteria_met: []
-criteria_unmet:
-  - identifies-read-modify-write-race
-observed_strengths: []
+criteria:
+  met: []
+  unmet:
+    - identifies-read-modify-write-race
 observed_errors:
   - assumes-transaction-implies-serialization
-active_misconceptions:
-  - transaction-implies-serialization
-
-response: "..."
-feedback: "..."
 rationale: "..."
 created_at: "..."
 ```
 
-Preserve enough provenance to reconstruct exactly what was evaluated: task and rubric versions, attempt identity, artifact reference when applicable, evaluator type, assessment basis, learner response/artifact, and assessment rationale. A later agent should be able to explain every projection from stored evidence.
+Preserve enough provenance to reconstruct exactly what was evaluated. Learner response/artifact is stored once on the shared attempt; challenge/rubric/form/context/novelty fields on evidence are immutable audit snapshots copied by the kernel from the durably frozen challenge rather than independently supplied values. A later agent should be able to explain every projection from stored evidence plus its referenced attempt/challenge.
 
 ## Assessment result
 
@@ -121,11 +118,11 @@ L5  provides the answer/solution
 
 Default evidence ceilings:
 
-- L0 may support `independent` or higher when the task otherwise qualifies.
-- L1-L4 normally cap the event at `guided`.
+- L0 may support `independent`; transfer and durability are evaluated on their own evidence dimensions.
+- L1-L4 normally cap readiness evidence at `guided`.
 - L5 normally supports only exposure on that surface; use a fresh variant for new evidence.
 
-The evaluator may make a narrower exception only when the hint demonstrably did not affect the decisive part of the answer.
+Hint provenance is objective-specific. Every durable hint observation is scoped to one objective, frozen criterion IDs, or all challenge targets. Each objective-specific evidence event derives its `hint_level` as the highest relevant observation; no relevant observation means L0.
 
 ## Proficiency projection
 
@@ -133,34 +130,40 @@ V1 projects three orthogonal dimensions rather than one mastery ladder:
 
 ```text
 readiness:   unknown | exposed | guided | independent
-transfer:    untested | demonstrated | contradicted
-durability:  untested | demonstrated | contradicted
+transfer:    untested | not_demonstrated | demonstrated | contradicted
+durability:  untested | not_demonstrated | demonstrated | contradicted
 ```
 
 ### Readiness
 
 - `unknown`: no gradable evidence exists.
 - `exposed`: only answer-revealed/L5 evidence or unsuccessful attempts exist.
-- `guided`: there is useful successful/partial assisted performance, or a newer unaided failure has contradicted prior independent readiness.
+- `guided`: there is useful successful/partial assisted performance, or a newer qualifying unaided result other than `correct` has contradicted prior independent readiness.
 - `independent`: the two most recent qualifying unaided (`L0`) gradable attempts are both `correct`, use distinct task versions or materially distinct surfaces, and no active blocking misconception applies.
 
-A newer qualifying unaided `incorrect` event removes current `independent` readiness. Historical-highest readiness remains intact. `partially_correct` never establishes independent readiness.
+A newer qualifying unaided result other than `correct` prevents current `independent` readiness until two subsequent qualifying successes satisfy the gate. Historical-highest readiness remains intact.
 
 ### Transfer
 
 - `untested`: no qualifying `novelty=transfer` evidence.
+- `not_demonstrated`: qualifying transfer has been attempted but no transfer success has yet been demonstrated, and the latest qualifying result is not `correct`.
 - `demonstrated`: the latest qualifying unaided transfer event is `correct`.
-- `contradicted`: the latest qualifying unaided transfer event is `incorrect` or `partially_correct` after a prior demonstration.
+- `contradicted`: the latest qualifying unaided transfer event is `incorrect` or `partially_correct` after at least one prior transfer demonstration.
 
 A correct transfer event may also count toward independent readiness.
 
 ### Durability
 
-A delayed event qualifies only when the answer was hidden, `hint_level=L0`, the event is gradable and `retrieval_valid=true`, the learner responded before re-exposure, and the elapsed delay is at least seven days.
+Durability must be provable from durable interaction history. The kernel records material objective-specific re-exposure such as explanations, answer reveals, worked examples, corrective feedback, and solution walkthroughs in append-only `exposure_events`.
+
+For a new attempt, the kernel computes the delay anchor as the latest prior memory contact for that objective: `COALESCE(submitted_at, started_at)` for any prior attempt whose frozen challenge targeted the objective, or a material exposure event, whichever is later. An abandoned opened attempt therefore still counts as contact. A prior attempt remains a memory contact even if its assessment is later invalidated.
+
+A delayed event qualifies only when the answer was hidden, its objective-specific `hint_level=L0`, the event is gradable and `retrieval_valid=true`, the delay anchor is known, and at least seven days elapsed since that anchor.
 
 - `untested`: no qualifying delayed retrieval.
+- `not_demonstrated`: qualifying delayed retrieval has occurred but no durability success has yet been demonstrated, and the latest qualifying result is not `correct`.
 - `demonstrated`: the latest qualifying delayed retrieval is `correct`.
-- `contradicted`: the latest qualifying delayed retrieval is `incorrect` or `partially_correct` after a prior demonstration.
+- `contradicted`: the latest qualifying delayed retrieval is `incorrect` or `partially_correct` after at least one prior durability demonstration.
 
 The seven-day floor is a V1 policy constant for the durability summary. Later FSRS reviews continue testing retention.
 
@@ -182,7 +185,9 @@ last_event_seq
 projector_version
 ```
 
-Projection rebuild and incremental projection must produce the same result from the same valid event history. Never delete or rewrite prior evidence to manufacture a clean progression.
+Projection rebuild and incremental projection must produce the same result from the same effective event history ordered by learner-performance time (`performed_at`, then append sequence as tie-breaker). Assessment commit time must not reorder learner history. Never delete or rewrite prior evidence to manufacture a clean progression.
+
+If an assessment itself was wrong, invalidate the old evidence and append a corrected replacement tied to the same attempt/objective; at most one such event may be currently effective. Restore is reserved for reversing an erroneous invalidation and must not create two effective grades for one target attempt.
 
 ## Misconceptions
 
@@ -196,7 +201,7 @@ description: "Assumes wrapping operations in a transaction prevents concurrent o
 correction_strategy: "Use concurrent read-modify-write scenarios that distinguish atomicity from isolation/locking."
 ```
 
-Observed/cleared status is append-only history tied to evidence events. The latest valid misconception observation determines whether it is currently active. An active blocking misconception caps readiness below `independent`.
+Observed/cleared status is append-only history tied to evidence events. Current state uses effective observations ordered by source evidence learner-performance time, with event sequence only as a tie-breaker. Invalidating source evidence also removes that observation from effective replay until the evidence is restored. An active blocking misconception caps readiness below `independent`.
 
 ## Weakness projection
 
@@ -230,7 +235,7 @@ ts-fsrs
 
 The mapper accepts only evidence already marked as valid retrieval. Invalid retrieval evidence may still update proficiency, misconceptions, and challenge selection, but it must not update the FSRS card.
 
-Set `retrieval_valid=true` only when the target/rubric was frozen before the attempt, the answer was hidden, `hint_level=L0`, the task genuinely required retrieval/application, the result is gradable, required executable verification exists, and the learner response preceded corrective explanation or answer reveal.
+Set `retrieval_valid=true` only when the exact challenge version was durably frozen before the attempt, the answer was hidden, the objective-specific hint level derived from scoped hint observations is L0, the task genuinely required retrieval/application, the result is gradable, required executable verification exists, and the learner response preceded any objective-relevant corrective explanation or answer reveal recorded in `exposure_events`.
 
 V1 mapping is exact:
 
@@ -243,6 +248,8 @@ correct                  -> Good
 ```
 
 V1 does not emit `Easy`. Transfer novelty does not change the FSRS rating. Persist each mapper output as an append-only `review_event`; the current `review_card` is a rebuildable cache/projection.
+
+A `review_event` is effective only while its source evidence is currently valid. Its `reviewed_at` is the source learner-performance time, not the later grading time. Evidence invalidation or restore rebuilds the affected FSRS card by replaying effective review events in `(reviewed_at, seq)` order. `review_events` themselves remain append-only and need no separate revision stream.
 
 ## Confidence
 

@@ -57,16 +57,23 @@ FSRS
 
 FSRS answers **when** another valid retrieval is useful. The Learning OS decides **what kind of encounter** should happen next.
 
+## Teacher portability
+
+ChatGPT is the preferred V1 interactive teacher, but it is not part of the kernel's durable semantics. The teacher is a replaceable client of the Learning OS contract. Codex, OpenCode, AGY, or another compatible agent may replace ChatGPT later without migrating learner state.
+
+Use one active teacher/orchestrator at a time in V1. Durable objectives, challenges, attempts, evidence, projections, scheduling, and resumable session state belong to the kernel rather than to a provider's conversation history or private memory.
+
 ## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md) — system boundaries and runtime flow.
 - [`docs/evidence-model.md`](docs/evidence-model.md) — objective, evidence, proficiency, weakness, and scheduling semantics.
-- [`docs/kernel-contracts.md`](docs/kernel-contracts.md) — V1 logical schema, projection rules, challenge/assessment envelopes, scheduler policy, `tutor today`, and agent↔kernel protocol.
+- [`docs/kernel-contracts.md`](docs/kernel-contracts.md) — V1 logical schema, projection rules, challenge/assessment envelopes, scheduler policy, `tutor today`, and teacher-agent↔kernel protocol.
 - [`docs/implementation-plan.md`](docs/implementation-plan.md) — staged fork plan.
 - [`docs/research/source-comparison.md`](docs/research/source-comparison.md) — what we intend to reuse from existing projects.
 - [`docs/decisions/0001-fork-generic-tutor.md`](docs/decisions/0001-fork-generic-tutor.md) — fork and composition decision.
 - [`docs/decisions/0002-evidence-is-authoritative.md`](docs/decisions/0002-evidence-is-authoritative.md) — evidence/projection boundary.
 - [`docs/decisions/0003-scheduler-input-policy.md`](docs/decisions/0003-scheduler-input-policy.md) — versioned evidence→FSRS mapping and legacy scheduler migration policy.
+- [`docs/decisions/0004-teacher-agent-portability.md`](docs/decisions/0004-teacher-agent-portability.md) — ChatGPT-first V1 teacher experience with agent-agnostic durable state and protocol.
 
 ### Document authority
 

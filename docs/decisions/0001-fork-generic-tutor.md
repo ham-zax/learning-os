@@ -96,4 +96,5 @@ Rejected as the main application base because it is primarily an Agent Skill/pro
 
 - ADR 0002 records the evidence-as-truth and rebuildable-projection decision.
 - ADR 0003 records the scheduler-input policy, FSRS replay/cache boundary, and legacy SM-2 migration policy.
-- `docs/kernel-contracts.md` fixes the V1 multi-objective evidence rules, goal/deadline prioritization contract, logical schema, projection rules, and agent↔kernel protocol.
+- `docs/kernel-contracts.md` fixes the V1 multi-objective evidence rules, goal/deadline prioritization contract, logical schema, projection rules, and teacher-agent↔kernel protocol.
+- ADR 0004 records that ChatGPT is the preferred V1 teacher interface while the kernel remains agent-agnostic and replaceable by Codex, OpenCode, AGY, or another compatible client.

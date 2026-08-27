@@ -10,16 +10,18 @@ The scheduler has a different responsibility. `ts-fsrs` can estimate when a memo
 
 ## Decision
 
-Use append-only `EvidenceEvent` records as the authoritative learner-history record. Keep explicit misconception records because they encode semantic errors worth retesting.
+Use append-only `EvidenceEvent` records plus append-only `evidence_revisions` as the authoritative assessment history. Hint observations, material exposure events, and misconception observations preserve the provenance needed to interpret that history. Keep explicit misconception definitions because they encode semantic errors worth retesting.
 
-Persist current readiness, historical-highest readiness, transfer state, durability state, blockers, and broad weakness/lifecycle summaries only as rebuildable materialized projections over evidence and misconception history.
+Evidence validity is causal: invalidating or restoring an evidence event must change every derived consequence that depends on it, including readiness/transfer/durability projections, misconception/weakness state, scheduler replay, and FSRS card state.
+
+Persist current readiness, historical-highest readiness, transfer state, durability state, blockers, and broad weakness/lifecycle summaries only as rebuildable materialized projections over effective evidence and misconception history.
 
 V1 keeps these dimensions separate:
 
 ```text
 readiness:   unknown | exposed | guided | independent
-transfer:    untested | demonstrated | contradicted
-durability:  untested | demonstrated | contradicted
+transfer:    untested | not_demonstrated | demonstrated | contradicted
+durability:  untested | not_demonstrated | demonstrated | contradicted
 ```
 
 A human-facing summary may still say `transferable` or `durable`, but those labels are interpretations rather than irreversible transitions. Later failure may lower readiness or contradict transfer/durability without deleting earlier qualifying evidence.
@@ -42,7 +44,9 @@ ts-fsrs
 
 `ReviewRatingMapper` is the only component that translates pedagogical evidence into scheduler ratings. The FSRS adapter receives ratings and card state; it does not inspect interview mode, hint levels, novelty, transfer distance, misconceptions, or rubric semantics.
 
-Only evidence that qualifies as valid retrieval updates FSRS. Invalid retrieval evidence may still update proficiency projections, misconceptions, and challenge selection.
+Only evidence that qualifies as valid retrieval can produce a `review_event`. That review event remains effective only while its source evidence remains valid. Evidence invalidation/restore therefore rebuilds the affected FSRS card from the filtered effective review history; no separate `review_event` revision stream is required.
+
+Invalid retrieval evidence may still update proficiency projections, misconceptions, and challenge selection.
 
 ## Consequences
 
@@ -65,7 +69,8 @@ Only evidence that qualifies as valid retrieval updates FSRS. Invalid retrieval 
 ## Initial policy
 
 - Use a small extensible capability registry and instantiate only meaningful `concept × capability` objectives.
-- Preserve task/rubric identity and version, attempt identity, artifact reference when applicable, evaluator type, assessment basis, hint use, novelty, delay, result, and rationale.
+- Preserve task/rubric identity and version, attempt identity, artifact reference when applicable, evaluator type, assessment basis, objective-scoped hint provenance, novelty, kernel-computed delay provenance, result, and rationale.
+- Persist material objective-specific re-exposure so delayed-retrieval claims are provable from durable state rather than chat continuity.
 - Treat learner confidence as calibration metadata, never correctness authority.
 - Use deterministic execution evidence where possible and frozen rubrics where judgment is required.
 - Use `docs/decisions/0003-scheduler-input-policy.md` as the authoritative scheduler-input policy: only valid L0 retrieval reaches FSRS; V1 maps `incorrect → Again`, `partially_correct → Hard`, and `correct → Good`, and emits no `Easy` rating.
