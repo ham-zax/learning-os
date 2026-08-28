@@ -4,14 +4,14 @@
 **Source of truth:** `docs/flexible-learning-runtime-design.md`
 **Design base:** `79c239e4062fcee44f278dd5a7ee144bd5f8854b`
 **Execution shape:** sequential
-**Current wave:** 3
+**Current wave:** complete
 
 ## Current frontier
 
 | Mission | Type | Status | Can start | Workspace | Isolation reason | Blocked by |
 | --- | --- | --- | --- | --- | --- | --- |
 | Agent A — Learner-facing contract repair | docs/config + live dogfood | complete | finished at `9ef1040` | current `main` checkout | none; sole writer | none |
-| Agent B — Orchestration flexibility | executable + docs | ready | now from `9ef1040` | same current `main` checkout, sequentially | none; sole writer after A | Agent A `CLEAN_WAVE1` |
+| Agent B — Orchestration flexibility | executable + docs | complete | finished at `4e520748` | same current `main` checkout, sequentially | none; sole writer after A | Agent A `CLEAN_WAVE1` |
 
 ## Dependency map
 
@@ -24,7 +24,10 @@ Fresh-teacher verdict: `CLEAN_WAVE1`
         +-- Wave 2 pure TurnDirective helper SKIPPED
         |
         v
-Agent B: Wave 3 orchestration flexibility
+Agent B: Wave 3 orchestration flexibility (`4e520748`)
+        |
+        v
+Current effort complete
 
 Wave 4 persistence remains blocked until a real restart/continuity failure demonstrates need.
 ```
@@ -40,15 +43,15 @@ Wave 4 persistence remains blocked until a real restart/continuity failure demon
 
 ## Workspace policy
 
-Use the current `main` checkout sequentially. Do not create worktrees. Agent A is complete; Agent B is now the only delegated writer. The sequential topology avoids overlapping edits across the shared teacher/orchestration boundary.
+The effort used the current `main` checkout sequentially with no worktrees. Agent A and Agent B are complete. The sequential topology avoided overlapping edits across the shared teacher/orchestration boundary.
 
-Each agent commits only its owned changes and explicitly excludes `data/`.
+Both agents committed only their owned changes and excluded `data/`.
 
 ## Integration policy
 
-No branch integration is required. Agent A landed `9ef1040` directly on local `main` and returned `CLEAN_WAVE1`. Wave 2 is skipped. Agent B now works from `9ef1040` and commits its Wave 3 changes directly to `main`.
+No branch integration was required. Agent A landed `9ef1040` directly on local `main` and returned `CLEAN_WAVE1`; Wave 2 was skipped. Agent B then landed Wave 3 directly on `main` at `4e520748`.
 
-Do not push unless the user separately requests publication to the remote.
+No further mission is ready. Do not push unless the user separately requests publication to the remote.
 
 ## Execution lifetime policy
 
@@ -63,11 +66,12 @@ The source design explicitly requires fresh-teacher live dogfood for Wave 1, so 
 ## Future / blocked work
 
 - **Wave 2 helper**: skipped after Agent A's `CLEAN_WAVE1`; do not revive without new evidence that the strengthened contract is insufficient.
-- **Agent B — Wave 3 orchestration**: ready now. Own diagnostic-breadth policy, remaining-time replanning/session envelope, and optional soft-focus behavior while keeping FSRS unchanged.
-- **Wave 4 persistence**: response segments, scoped stable preferences, or durable reconstruction checkpoints only after a demonstrated fresh-agent restart gap.
+- **Wave 3 orchestration**: complete at `4e520748`; diagnostic breadth, remaining-time replanning/session envelope, and optional soft focus are implemented with FSRS unchanged.
+- **Wave 4 persistence**: response segments, scoped stable preferences, or durable reconstruction checkpoints remain blocked until a demonstrated fresh-agent restart gap.
 
 ## Status log
 
 - `2026-08-28` — V2 flexible runtime design committed on `main` at `79c239e4062fcee44f278dd5a7ee144bd5f8854b`.
 - `2026-08-28` — Execution chosen as two sequential sessions. Only Agent A was initially materialized because Agent B's correct mission depended on Wave 1 dogfood evidence.
 - `2026-08-28` — Agent A completed at `9ef1040` with fresh-teacher verdict `CLEAN_WAVE1`; Wave 2 skipped and Agent B Wave 3 mission materialized.
+- `2026-08-28` — Agent B completed at `4e520748`; episode-aware orchestration is implemented, FSRS is unchanged, and no new evidence justifies Wave 4. Current effort closed.

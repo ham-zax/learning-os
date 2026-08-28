@@ -2,7 +2,9 @@
 
 ## Status
 
-Design proposal based on two live Backend Systems learner sessions, the current Learning OS implementation, and the learner's prior systems-first mentor material.
+Implemented through the learner-facing contract and episode-aware orchestration waves on `main` (`9ef1040` and `4e520748`). The pure `TurnDirective` helper was skipped after clean fresh-teacher dogfood, and persistence extensions remain evidence-gated.
+
+This design is based on two live Backend Systems learner sessions, the current Learning OS implementation, and the learner's prior systems-first mentor material.
 
 This document proposes a more flexible learner-facing runtime without weakening the existing authority boundary:
 
