@@ -52,7 +52,7 @@ import {
   startDesignDrill,
   submitPhase,
   getPhasePrompt,
-  gradeDesignDrill,
+  assessDesignDrill,
   formatDesignResult,
 } from "./interview/system-design.js";
 import {
@@ -599,7 +599,7 @@ async function runCodingDrill(
     console.log();
 
     if (problem.testCases.length > 0) {
-      info("Test cases:");
+      info("Descriptive scenarios (not executable verification):");
       for (const tc of problem.testCases) {
         console.log(chalk.dim(`  Input:  ${tc.input}`));
         console.log(chalk.dim(`  Output: ${tc.expectedOutput}`));
@@ -619,23 +619,32 @@ async function runCodingDrill(
 
     const code = lines.join("\n");
     if (!code.trim()) {
-      warn("Empty submission — skipping grading.");
+      warn("Empty submission — leaving the opened attempt unsubmitted.");
       return;
     }
-
-    info("\nGrading...");
 
     const llm = tryCreateLLM();
-    if (!llm) {
-      warn("LLM provider is not configured in this Phase 0 baseline — skipping grading.");
-      console.log(chalk.dim(`Problem ID: ${problem.id}`));
-      rl.close();
-      return;
+    info("\nSubmitting attempt; deterministic verification is separate from qualitative review.");
+    const result = await submitCodingSolution(llm, db, state, code);
+
+    if (result.verificationOutput || result.qualitativeFeedback) {
+      recordExposure(db, null, {
+        objectiveIds: [result.objectiveId],
+        attemptId: result.attemptId,
+        exposureType: "corrective_feedback_shown",
+        sourceRef: "coding-post-submission-feedback",
+      });
+      if (result.qualitativeFeedback?.optimalSolution) {
+        recordExposure(db, null, {
+          objectiveIds: [result.objectiveId],
+          attemptId: result.attemptId,
+          exposureType: "solution_walkthrough",
+          sourceRef: "coding-suggested-approach",
+        });
+      }
     }
 
-    const result = await submitCodingSolution(llm, db, state, code);
     console.log(formatCodingResult(result));
-    rl.close();
   } catch (err) {
     error(err instanceof Error ? err.message : String(err));
   }
@@ -662,9 +671,6 @@ async function runDesignDrill(
       const prompt = getPhasePrompt(currentState);
       console.log(chalk.bold.underline(`\nPhase: ${prompt.phase}`));
       console.log(prompt.prompt);
-      if (prompt.followUp) {
-        console.log(chalk.dim(`  Hint: ${prompt.followUp}`));
-      }
       console.log();
 
       warn("Enter your response (type END on a blank line to finish):\n");
@@ -681,15 +687,17 @@ async function runDesignDrill(
 
     rl.close();
 
-    info("\nGrading all phases...");
     const llm = tryCreateLLM();
-    if (!llm) {
-      warn("LLM provider is not configured in this Phase 0 baseline — skipping grading.");
-      console.log(chalk.dim(`Problem ID: ${state.problem.id}`));
-      return;
+    info("\nAttempt submitted; assessing the frozen rubric when a trusted evaluator is available.");
+    const result = await assessDesignDrill(llm, db, currentState);
+    if (result.assessmentStatus === "recorded" && (result.criteria.length > 0 || result.feedback)) {
+      recordExposure(db, null, {
+        objectiveIds: [result.objectiveId],
+        attemptId: result.attemptId,
+        exposureType: "corrective_feedback_shown",
+        sourceRef: "system-design-rubric-feedback",
+      });
     }
-
-    const result = await gradeDesignDrill(llm, db, currentState);
     console.log(formatDesignResult(result));
   } catch (err) {
     error(err instanceof Error ? err.message : String(err));

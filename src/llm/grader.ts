@@ -8,20 +8,6 @@ import type { LLMClient } from "./client.js";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface GradingResult {
-  score: number; // 0-100 (system design only)
-  breakdown: {
-    correctness: number;
-    efficiency: number;
-    codeQuality: number;
-    clarity: number; // 0-100 (system design only)
-    scalability: number; // 0-100 (system design only)
-    tradeOffs: number; // 0-100 (system design only)
-  };
-  feedback: string;
-  optimalSolution?: string;
-}
-
 export interface CodingQualitativeFeedback {
   complexityAnalysis: string;
   codeQualityFeedback: string;
@@ -43,7 +29,11 @@ export interface DesignSubmission {
   problem: {
     title: string;
     description: string;
-    rubric: Record<string, string[]>;
+    criteria: Array<{
+      id: string;
+      description: string;
+      required: boolean;
+    }>;
   };
   phases: {
     requirements: string;
@@ -58,53 +48,7 @@ export interface DesignSubmission {
 // Constants
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT =
-  "You are a senior technical interviewer. Grade solutions rigorously but fairly.";
-
 const TEMPERATURE = 0.2;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function clampScore(value: unknown): number {
-  const n = Number(value);
-  if (Number.isNaN(n)) return 0;
-  return Math.max(0, Math.min(100, Math.round(n)));
-}
-
-function parseGradingJSON(raw: string): GradingResult {
-  // Strip markdown code fences if present.
-  const cleaned = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/, "");
-  const parsed = JSON.parse(cleaned);
-
-  const breakdown = parsed.breakdown ?? {};
-
-  return {
-    score: clampScore(parsed.score),
-    breakdown: {
-      correctness: clampScore(breakdown.correctness),
-      efficiency: clampScore(breakdown.efficiency),
-      codeQuality: clampScore(breakdown.codeQuality),
-      clarity: clampScore(breakdown.clarity),
-      scalability: clampScore(breakdown.scalability),
-      tradeOffs: clampScore(breakdown.tradeOffs),
-    },
-    feedback: String(parsed.feedback ?? ""),
-    optimalSolution: parsed.optimalSolution
-      ? String(parsed.optimalSolution)
-      : undefined,
-  };
-}
-
-function formatRubric(rubric: Record<string, string[]>): string {
-  return Object.entries(rubric)
-    .map(
-      ([criterion, points]) =>
-        `${criterion}:\n${points.map((p) => `  - ${p}`).join("\n")}`
-    )
-    .join("\n\n");
-}
 
 // ---------------------------------------------------------------------------
 // Coding grading
@@ -173,19 +117,58 @@ export async function reviewCodingSolutionQualitatively(
 }
 
 // ---------------------------------------------------------------------------
-// System design grading
+// System design rubric assessment
 // ---------------------------------------------------------------------------
 
+export interface DesignCriterionAssessment {
+  criterionId: string;
+  met: boolean;
+  rationale: string;
+}
+
+export interface DesignRubricAssessment {
+  criteria: DesignCriterionAssessment[];
+  feedback: string;
+}
+
+function parseDesignAssessmentJSON(raw: string): DesignRubricAssessment {
+  const cleaned = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/, "");
+  const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+  const criteria = Array.isArray(parsed.criteria) ? parsed.criteria : [];
+
+  return {
+    criteria: criteria.map((entry) => {
+      const value = entry as Record<string, unknown>;
+      if (typeof value.met !== "boolean") {
+        throw new Error("Design rubric assessment criterion must classify met as boolean");
+      }
+      return {
+        criterionId: String(value.criterionId ?? ""),
+        met: value.met,
+        rationale: String(value.rationale ?? ""),
+      };
+    }),
+    feedback: String(parsed.feedback ?? ""),
+  };
+}
+
 function buildDesignPrompt(submission: DesignSubmission): string {
-  return `Grade the following system design submission.
+  const criteria = submission.problem.criteria
+    .map(
+      (criterion) =>
+        `- ${criterion.id} [${criterion.required ? "required" : "optional"}]: ${criterion.description}`,
+    )
+    .join("\n");
+
+  return `Assess the following system design submission against the frozen rubric only.
 
 ## Problem
 Title: ${submission.problem.title}
 
 ${submission.problem.description}
 
-## Rubric
-${formatRubric(submission.problem.rubric)}
+## Frozen Criteria
+${criteria}
 
 ## Candidate's Response
 
@@ -203,40 +186,31 @@ ${submission.phases.tradeOffs}
 
 Time spent: ${submission.timeSpentSeconds} seconds
 
-## Grading Instructions
-1. Evaluate each phase against the rubric criteria.
-2. Assess clarity: how well does the candidate communicate ideas, use diagrams, and structure the explanation?
-3. Assess scalability: does the design handle growth in traffic, data, and users?
-4. Assess trade-offs: does the candidate acknowledge limitations and justify decisions?
-5. Provide phase-by-phase feedback in the feedback string.
+## Assessment Instructions
+1. Classify every frozen criterion exactly once as met or unmet.
+2. Use only the frozen criterion descriptions above; do not invent new success criteria from the response.
+3. Give a concise rationale for each classification.
+4. Provide optional overall feedback, but do not return a numeric score.
 
-Return ONLY a JSON object matching this TypeScript type (no markdown fences, no commentary):
-
+Return ONLY JSON matching this shape:
 {
-  "score": number,           // overall 0-100
-  "breakdown": {
-    "correctness": 0,
-    "efficiency": 0,
-    "codeQuality": 0,
-    "clarity": number,       // 0-100
-    "scalability": number,   // 0-100
-    "tradeOffs": number      // 0-100
-  },
+  "criteria": [
+    { "criterionId": string, "met": boolean, "rationale": string }
+  ],
   "feedback": string
 }`;
 }
 
-export async function gradeDesignSolution(
+export async function assessDesignAgainstRubric(
   client: LLMClient,
-  submission: DesignSubmission
-): Promise<GradingResult> {
-  const prompt = buildDesignPrompt(submission);
-
-  const raw = await client.complete(prompt, {
-    systemPrompt: SYSTEM_PROMPT,
+  submission: DesignSubmission,
+): Promise<DesignRubricAssessment> {
+  const raw = await client.complete(buildDesignPrompt(submission), {
+    systemPrompt:
+      "You are a system design evaluator. Assess only the frozen rubric criteria supplied by the caller and classify every criterion explicitly.",
     temperature: TEMPERATURE,
     maxTokens: 4096,
   });
 
-  return parseGradingJSON(raw);
+  return parseDesignAssessmentJSON(raw);
 }

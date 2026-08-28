@@ -12,9 +12,12 @@ import type { CodingQualitativeFeedback, CodingSubmission } from "../llm/grader.
 import { reviewCodingSolutionQualitatively } from "../llm/grader.js";
 import type { CodingProblem } from "./problems.js";
 import { getCodingProblems } from "./problems.js";
-import { getProblem, createLegacyAttempt } from "../db/database.js";
+import { getProblem } from "../db/database.js";
 import { VerificationOutputSchema } from "../db/types.js";
-import type { Problem, VerificationOutput } from "../db/types.js";
+import type { Novelty, Problem, VerificationOutput } from "../db/types.js";
+import { getAttempt, getChallenge, openAttempt, submitAttempt } from "../kernel/foundation.js";
+import { recordAssessment } from "../kernel/evidence.js";
+import { prepareInterviewChallenge } from "./evidence.js";
 
 /** Minimal row shape accepted by rowToCodingProblem (DB Problem type). */
 type ProblemRow = Problem;
@@ -32,10 +35,17 @@ export interface CodingDrillConfig {
   timeLimitMinutes?: number;
   /** Programming language. Defaults to 'typescript'. */
   language?: string;
+  /** Challenge novelty is independent from interview delivery context. */
+  novelty?: Novelty;
 }
 
 export interface CodingDrillState {
   problem: CodingProblem;
+  objectiveId: string;
+  challengeId: string;
+  challengeVersion: number;
+  attemptId: number;
+  language: string;
   /** Epoch ms when the drill started (Date.now()). */
   startedAt: number;
   /** Time limit in milliseconds. */
@@ -44,6 +54,7 @@ export interface CodingDrillState {
 
 export interface CodingVerificationRequest {
   problemId: string;
+  attemptId: number;
   artifact: {
     language: string;
     code: string;
@@ -71,6 +82,8 @@ export interface CodingSubmissionOptions {
 
 export interface CodingDrillResult {
   problemId: string;
+  objectiveId: string;
+  attemptId: number;
   /** Wall-clock seconds the candidate spent. */
   timeSpentSeconds: number;
   /** Whether the submission finished within the time limit. */
@@ -79,6 +92,7 @@ export interface CodingDrillResult {
   verificationRequest: CodingVerificationRequest;
   /** Null means executable correctness is not verified. */
   verificationOutput: VerificationOutput | null;
+  assessmentStatus: "pending" | "recorded";
   /** Optional LLM commentary; never correctness authority. */
   qualitativeFeedback: CodingQualitativeFeedback | null;
 }
@@ -192,6 +206,7 @@ export function createCodingVerificationRequest(
 
   return {
     problemId: state.problem.id,
+    attemptId: state.attemptId,
     artifact: { language, code },
     verifier,
   };
@@ -234,14 +249,14 @@ export function startCodingDrill(
     const candidates = getCodingProblems(db, {
       conceptId: config.conceptId,
       difficulty: config.difficulty,
-    });
+    }).filter((candidate) => candidate.conceptId !== null);
     if (candidates.length > 0) {
       problem = pickRandom(candidates);
     } else {
       // No concept-linked problem — fall back to random by difficulty
       const fallback = getCodingProblems(db, {
         difficulty: config.difficulty,
-      });
+      }).filter((candidate) => candidate.conceptId !== null);
       if (fallback.length === 0) {
         throw new Error(
           `No coding problems available${config.difficulty ? ` at difficulty ${config.difficulty}` : ""}.`,
@@ -254,7 +269,7 @@ export function startCodingDrill(
   else {
     const candidates = getCodingProblems(db, {
       difficulty: config?.difficulty,
-    });
+    }).filter((candidate) => candidate.conceptId !== null);
     if (candidates.length === 0) {
       throw new Error(
         `No coding problems available${config?.difficulty ? ` at difficulty ${config.difficulty}` : ""}.`,
@@ -263,19 +278,97 @@ export function startCodingDrill(
     problem = pickRandom(candidates);
   }
 
+  if (!problem.conceptId) {
+    throw new Error(
+      `Coding problem ${problem.id} is not mapped to a concept and cannot produce authoritative interview evidence.`,
+    );
+  }
+
+  const language = config?.language ?? DEFAULT_LANGUAGE;
+  const prepared = prepareInterviewChallenge(db, {
+    problemId: problem.id,
+    conceptId: problem.conceptId,
+    capabilityId: "implement",
+    taskForm: "implementation",
+    publicPrompt: `${problem.title}\n\n${problem.description}`,
+    novelty: config?.novelty,
+    timeBudgetMinutes,
+    criteria: [
+      {
+        id: "implementation-verification",
+        description:
+          "The submitted implementation passes the frozen executable verifier for this coding challenge.",
+      },
+    ],
+    verificationRequired: true,
+    verificationBasis: "deterministic_execution",
+  });
+  const opened = openAttempt(db, prepared.challenge.id, prepared.challenge.version);
+
   return {
     problem,
+    objectiveId: prepared.objectiveId,
+    challengeId: prepared.challenge.id,
+    challengeVersion: prepared.challenge.version,
+    attemptId: opened.attempt.id,
+    language,
     startedAt: Date.now(),
     timeLimitMs,
   };
 }
 
+export function assessCodingAttempt(
+  db: Database,
+  attemptId: number,
+  evidence: CodingVerificationEvidence,
+): VerificationOutput {
+  const attempt = getAttempt(db, attemptId);
+  if (!attempt || attempt.submitted_at === null) {
+    throw new Error(`Submitted coding attempt not found: ${attemptId}`);
+  }
+  if (attempt.challenge_id === null || attempt.challenge_version === null) {
+    throw new Error(`Coding attempt is not attached to a frozen challenge: ${attemptId}`);
+  }
+
+  const challenge = getChallenge(db, attempt.challenge_id, attempt.challenge_version);
+  if (
+    !challenge ||
+    challenge.deliveryContext !== "interview" ||
+    challenge.taskForm !== "implementation" ||
+    challenge.targets.length !== 1 ||
+    challenge.rubric.criteria.length !== 1 ||
+    !challenge.verification.required ||
+    challenge.verification.basis !== "deterministic_execution"
+  ) {
+    throw new Error(`Attempt is not a single-objective verified coding interview: ${attemptId}`);
+  }
+
+  const verificationOutput = normalizeVerificationEvidence(evidence)!;
+  const target = challenge.targets[0];
+  const criterion = challenge.rubric.criteria[0];
+  const passed = verificationOutput.outcome === "passed";
+
+  recordAssessment(db, attemptId, {
+    evaluatorType: "agent",
+    assessmentBasis: "deterministic_execution",
+    verificationOutput,
+    objectiveResults: [
+      {
+        objectiveId: target.objectiveId,
+        result: passed ? "correct" : "incorrect",
+        criteriaMet: passed ? [criterion.id] : [],
+        criteriaUnmet: passed ? [] : [criterion.id],
+        rationale: verificationOutput.summary,
+      },
+    ],
+  });
+
+  return verificationOutput;
+}
+
 /**
- * Submit a coding solution with optional deterministic verification and qualitative review.
- *
- * Verification must already have happened in the agent/local repository environment. This
- * legacy interview path intentionally does not persist VerificationOutput as evidence; B2 will
- * converge interview attempts onto the frozen challenge/assessment kernel contracts.
+ * Persist a coding submission first, then optionally attach real deterministic verification and
+ * qualitative LLM feedback. Missing verification leaves the authoritative assessment pending.
  */
 export async function submitCodingSolution(
   client: LLMClient | null,
@@ -284,17 +377,25 @@ export async function submitCodingSolution(
   code: string,
   options?: CodingSubmissionOptions,
 ): Promise<CodingDrillResult> {
-  const lang = options?.language ?? DEFAULT_LANGUAGE;
+  const lang = options?.language ?? state.language;
   const elapsedMs = Date.now() - state.startedAt;
   const timeSpentSeconds = Math.round(elapsedMs / 1000);
   const withinTimeLimit = elapsedMs <= state.timeLimitMs;
-  const verificationOutput = normalizeVerificationEvidence(options?.verification);
+
+  submitAttempt(db, state.attemptId, {
+    responseText: code,
+    artifactRef: { kind: "inline_code", language: lang },
+  });
+
   const verificationRequest = createCodingVerificationRequest(
     state,
     code,
     lang,
     options?.verification?.verifierReference,
   );
+  const verificationOutput = options?.verification
+    ? assessCodingAttempt(db, state.attemptId, options.verification)
+    : null;
 
   const submission: CodingSubmission = {
     problem: {
@@ -305,26 +406,19 @@ export async function submitCodingSolution(
     language: lang,
     timeSpentSeconds,
   };
-
   const qualitativeFeedback = client
     ? await reviewCodingSolutionQualitatively(client, submission)
     : null;
 
-  // Legacy persistence retained pending B2 interview convergence. A qualitative LLM review is
-  // stored only as feedback; it does not populate the legacy numeric score or evidence semantics.
-  createLegacyAttempt(db, {
-    problemId: state.problem.id,
-    responseText: code,
-    feedback: qualitativeFeedback ? formatQualitativeFeedback(qualitativeFeedback) : undefined,
-    timeSpentSeconds,
-  });
-
   return {
     problemId: state.problem.id,
+    objectiveId: state.objectiveId,
+    attemptId: state.attemptId,
     timeSpentSeconds,
     withinTimeLimit,
     verificationRequest,
     verificationOutput,
+    assessmentStatus: verificationOutput ? "recorded" : "pending",
     qualitativeFeedback,
   };
 }
@@ -340,6 +434,8 @@ export function formatCodingResult(result: CodingDrillResult): string {
   lines.push(
     `Time:         ${result.timeSpentSeconds}s ${result.withinTimeLimit ? "(within limit)" : "(OVERTIME)"}`,
   );
+
+  lines.push(`Assessment:   ${result.assessmentStatus.toUpperCase()}`);
 
   if (result.verificationOutput) {
     lines.push(`Verification: ${result.verificationOutput.outcome.toUpperCase()}`);
