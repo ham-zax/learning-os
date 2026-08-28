@@ -150,7 +150,10 @@ function suggestedCatalogConcepts(concepts: readonly CatalogConcept[], label: st
       const containment = normalized.includes(conceptId) || normalized.includes(title);
       const candidateFullyNamed =
         candidateTokens.size > 0 && [...candidateTokens].every((token) => inputTokens.has(token));
-      return containment || candidateFullyNamed;
+      const sharedTokenCount = [...candidateTokens].filter((token) => inputTokens.has(token)).length;
+      const partialOverlap =
+        sharedTokenCount > 0 && inputTokens.size >= 2 && candidateTokens.size >= 2;
+      return containment || candidateFullyNamed || partialOverlap;
     })
     .sort(
       (left, right) =>
