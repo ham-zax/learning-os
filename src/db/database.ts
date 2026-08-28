@@ -7,7 +7,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
-import { ReviewSchema, SessionSchema } from "./types.js";
+import { AttemptSchema, ReviewSchema, SessionSchema } from "./types.js";
 import type {
   Topic,
   Concept,
@@ -20,7 +20,7 @@ import type {
   DeliveryContext,
 } from "./types.js";
 
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 3;
 
 // ─── Schema DDL ──────────────────────────────────────────────────────────────
 
@@ -197,6 +197,365 @@ const migrations: Migration[] = [
           END
           WHERE mode IN ('explore', 'quiz', 'teach-back');
         `);
+      })();
+    },
+  },
+  {
+    version: 3,
+    up: (db) => {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE capabilities (
+            id          TEXT PRIMARY KEY,
+            description TEXT NOT NULL,
+            is_core     INTEGER NOT NULL CHECK (is_core IN (0, 1)),
+            created_at  TEXT NOT NULL
+          );
+
+          CREATE TABLE learning_objectives (
+            id            TEXT PRIMARY KEY,
+            concept_id    TEXT NOT NULL REFERENCES concepts(id) ON DELETE CASCADE,
+            capability_id TEXT NOT NULL REFERENCES capabilities(id) ON DELETE RESTRICT,
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT NOT NULL,
+            UNIQUE(concept_id, capability_id)
+          );
+
+          CREATE TABLE objective_projections (
+            objective_id                  TEXT PRIMARY KEY REFERENCES learning_objectives(id) ON DELETE CASCADE,
+            readiness                     TEXT NOT NULL DEFAULT 'unknown'
+              CHECK (readiness IN ('unknown', 'exposed', 'guided', 'independent')),
+            historical_highest_readiness  TEXT NOT NULL DEFAULT 'unknown'
+              CHECK (historical_highest_readiness IN ('unknown', 'exposed', 'guided', 'independent')),
+            transfer_state                TEXT NOT NULL DEFAULT 'untested'
+              CHECK (transfer_state IN ('untested', 'not_demonstrated', 'demonstrated', 'contradicted')),
+            durability_state              TEXT NOT NULL DEFAULT 'untested'
+              CHECK (durability_state IN ('untested', 'not_demonstrated', 'demonstrated', 'contradicted')),
+            blocking_misconception_count  INTEGER NOT NULL DEFAULT 0 CHECK (blocking_misconception_count >= 0),
+            recent_failure                INTEGER NOT NULL DEFAULT 0 CHECK (recent_failure IN (0, 1)),
+            last_qualifying_evidence_at   TEXT,
+            last_event_seq                INTEGER NOT NULL DEFAULT 0 CHECK (last_event_seq >= 0),
+            projector_version             TEXT NOT NULL DEFAULT 'v1',
+            rebuilt_at                    TEXT NOT NULL
+          );
+
+          CREATE TABLE challenge_versions (
+            challenge_id          TEXT NOT NULL,
+            version               INTEGER NOT NULL CHECK (version > 0),
+            source_problem_id     TEXT,
+            public_prompt         TEXT NOT NULL,
+            task_form             TEXT NOT NULL
+              CHECK (task_form IN ('explanation', 'runtime_trace', 'implementation', 'debugging', 'design')),
+            delivery_context      TEXT NOT NULL
+              CHECK (delivery_context IN ('learn', 'practice', 'review', 'interview', 'mock')),
+            time_budget_minutes   INTEGER CHECK (time_budget_minutes IS NULL OR time_budget_minutes > 0),
+            rubric_id             TEXT NOT NULL,
+            rubric_version        INTEGER NOT NULL CHECK (rubric_version > 0),
+            hint_ladder_json      TEXT NOT NULL,
+            verification_required INTEGER NOT NULL CHECK (verification_required IN (0, 1)),
+            verification_basis    TEXT NOT NULL
+              CHECK (verification_basis IN ('deterministic_execution', 'frozen_rubric', 'human', 'mixed')),
+            private_solution_ref  TEXT,
+            is_frozen             INTEGER NOT NULL DEFAULT 0 CHECK (is_frozen IN (0, 1)),
+            created_at            TEXT NOT NULL,
+            PRIMARY KEY(challenge_id, version)
+          );
+
+          CREATE TABLE challenge_targets (
+            challenge_id       TEXT NOT NULL,
+            version            INTEGER NOT NULL,
+            objective_id       TEXT NOT NULL REFERENCES learning_objectives(id) ON DELETE RESTRICT,
+            novelty            TEXT NOT NULL CHECK (novelty IN ('same', 'variant', 'transfer')),
+            criterion_ids_json TEXT NOT NULL,
+            position           INTEGER NOT NULL CHECK (position >= 0),
+            PRIMARY KEY(challenge_id, version, objective_id),
+            UNIQUE(challenge_id, version, position),
+            FOREIGN KEY(challenge_id, version)
+              REFERENCES challenge_versions(challenge_id, version) ON DELETE RESTRICT
+          );
+
+          CREATE TABLE challenge_criteria (
+            challenge_id             TEXT NOT NULL,
+            version                  INTEGER NOT NULL,
+            criterion_id             TEXT NOT NULL,
+            objective_id             TEXT NOT NULL,
+            required                 INTEGER NOT NULL CHECK (required IN (0, 1)),
+            description              TEXT NOT NULL,
+            acceptable_variants_json TEXT NOT NULL DEFAULT '[]',
+            position                 INTEGER NOT NULL CHECK (position >= 0),
+            PRIMARY KEY(challenge_id, version, criterion_id),
+            UNIQUE(challenge_id, version, position),
+            FOREIGN KEY(challenge_id, version)
+              REFERENCES challenge_versions(challenge_id, version) ON DELETE RESTRICT,
+            FOREIGN KEY(challenge_id, version, objective_id)
+              REFERENCES challenge_targets(challenge_id, version, objective_id) ON DELETE RESTRICT
+          );
+
+          CREATE TABLE attempts_v3 (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            problem_id          TEXT REFERENCES problems(id) ON DELETE CASCADE,
+            challenge_id        TEXT,
+            challenge_version   INTEGER,
+            session_id          INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+            response_text       TEXT,
+            artifact_ref_json   TEXT,
+            score               REAL,
+            feedback            TEXT,
+            time_spent_seconds  INTEGER,
+            started_at          TEXT NOT NULL,
+            submitted_at        TEXT,
+            created_at          TEXT NOT NULL,
+            CHECK (
+              (challenge_id IS NULL AND challenge_version IS NULL) OR
+              (challenge_id IS NOT NULL AND challenge_version IS NOT NULL)
+            ),
+            FOREIGN KEY(challenge_id, challenge_version)
+              REFERENCES challenge_versions(challenge_id, version) ON DELETE RESTRICT
+          );
+
+          INSERT INTO attempts_v3 (
+            id,
+            problem_id,
+            response_text,
+            score,
+            feedback,
+            time_spent_seconds,
+            started_at,
+            submitted_at,
+            created_at
+          )
+          SELECT
+            id,
+            problem_id,
+            response,
+            score,
+            feedback,
+            time_spent_seconds,
+            COALESCE(created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            COALESCE(created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            COALESCE(created_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+          FROM attempts;
+
+          DROP TABLE attempts;
+          ALTER TABLE attempts_v3 RENAME TO attempts;
+
+          CREATE TABLE hint_observations (
+            seq                INTEGER PRIMARY KEY AUTOINCREMENT,
+            attempt_id         INTEGER NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
+            level              INTEGER NOT NULL CHECK (level BETWEEN 1 AND 5),
+            scope_kind         TEXT NOT NULL CHECK (scope_kind IN ('objective', 'criteria', 'all_targets')),
+            objective_id       TEXT REFERENCES learning_objectives(id) ON DELETE RESTRICT,
+            criterion_ids_json TEXT,
+            recorded_at        TEXT NOT NULL,
+            CHECK (
+              (scope_kind = 'objective' AND objective_id IS NOT NULL AND criterion_ids_json IS NULL) OR
+              (scope_kind = 'criteria' AND objective_id IS NULL AND criterion_ids_json IS NOT NULL) OR
+              (scope_kind = 'all_targets' AND objective_id IS NULL AND criterion_ids_json IS NULL)
+            )
+          );
+
+          CREATE TABLE exposure_events (
+            seq               INTEGER PRIMARY KEY AUTOINCREMENT,
+            objective_id      TEXT NOT NULL REFERENCES learning_objectives(id) ON DELETE RESTRICT,
+            session_id        INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+            challenge_id      TEXT,
+            challenge_version INTEGER,
+            attempt_id        INTEGER REFERENCES attempts(id) ON DELETE SET NULL,
+            exposure_type     TEXT NOT NULL CHECK (
+              exposure_type IN (
+                'explanation_shown',
+                'answer_revealed',
+                'worked_example_shown',
+                'corrective_feedback_shown',
+                'solution_walkthrough'
+              )
+            ),
+            source_ref        TEXT,
+            occurred_at       TEXT NOT NULL,
+            CHECK (
+              (challenge_id IS NULL AND challenge_version IS NULL) OR
+              (challenge_id IS NOT NULL AND challenge_version IS NOT NULL)
+            ),
+            FOREIGN KEY(challenge_id, challenge_version)
+              REFERENCES challenge_versions(challenge_id, version) ON DELETE RESTRICT
+          );
+
+          CREATE INDEX idx_learning_objectives_concept
+            ON learning_objectives(concept_id);
+          CREATE INDEX idx_learning_objectives_capability
+            ON learning_objectives(capability_id);
+          CREATE INDEX idx_challenge_targets_objective
+            ON challenge_targets(objective_id, challenge_id, version);
+          CREATE INDEX idx_attempts_problem_id
+            ON attempts(problem_id);
+          CREATE INDEX idx_attempts_challenge
+            ON attempts(challenge_id, challenge_version);
+          CREATE INDEX idx_attempts_session_id
+            ON attempts(session_id);
+          CREATE INDEX idx_hint_observations_attempt
+            ON hint_observations(attempt_id, seq);
+          CREATE INDEX idx_exposure_events_objective_time
+            ON exposure_events(objective_id, occurred_at, seq);
+
+          CREATE TRIGGER challenge_versions_no_update_after_freeze
+          BEFORE UPDATE ON challenge_versions
+          WHEN OLD.is_frozen = 1
+          BEGIN
+            SELECT RAISE(ABORT, 'frozen challenge versions are immutable');
+          END;
+
+          CREATE TRIGGER challenge_versions_no_delete_after_freeze
+          BEFORE DELETE ON challenge_versions
+          WHEN OLD.is_frozen = 1
+          BEGIN
+            SELECT RAISE(ABORT, 'frozen challenge versions are immutable');
+          END;
+
+          CREATE TRIGGER challenge_targets_no_insert_after_freeze
+          BEFORE INSERT ON challenge_targets
+          WHEN (
+            SELECT is_frozen FROM challenge_versions
+            WHERE challenge_id = NEW.challenge_id AND version = NEW.version
+          ) = 1
+          BEGIN
+            SELECT RAISE(ABORT, 'frozen challenge targets are immutable');
+          END;
+
+          CREATE TRIGGER challenge_targets_no_update_after_freeze
+          BEFORE UPDATE ON challenge_targets
+          WHEN (
+            SELECT is_frozen FROM challenge_versions
+            WHERE challenge_id = OLD.challenge_id AND version = OLD.version
+          ) = 1
+          BEGIN
+            SELECT RAISE(ABORT, 'frozen challenge targets are immutable');
+          END;
+
+          CREATE TRIGGER challenge_targets_no_delete_after_freeze
+          BEFORE DELETE ON challenge_targets
+          WHEN (
+            SELECT is_frozen FROM challenge_versions
+            WHERE challenge_id = OLD.challenge_id AND version = OLD.version
+          ) = 1
+          BEGIN
+            SELECT RAISE(ABORT, 'frozen challenge targets are immutable');
+          END;
+
+          CREATE TRIGGER challenge_criteria_no_insert_after_freeze
+          BEFORE INSERT ON challenge_criteria
+          WHEN (
+            SELECT is_frozen FROM challenge_versions
+            WHERE challenge_id = NEW.challenge_id AND version = NEW.version
+          ) = 1
+          BEGIN
+            SELECT RAISE(ABORT, 'frozen challenge criteria are immutable');
+          END;
+
+          CREATE TRIGGER challenge_criteria_no_update_after_freeze
+          BEFORE UPDATE ON challenge_criteria
+          WHEN (
+            SELECT is_frozen FROM challenge_versions
+            WHERE challenge_id = OLD.challenge_id AND version = OLD.version
+          ) = 1
+          BEGIN
+            SELECT RAISE(ABORT, 'frozen challenge criteria are immutable');
+          END;
+
+          CREATE TRIGGER challenge_criteria_no_delete_after_freeze
+          BEFORE DELETE ON challenge_criteria
+          WHEN (
+            SELECT is_frozen FROM challenge_versions
+            WHERE challenge_id = OLD.challenge_id AND version = OLD.version
+          ) = 1
+          BEGIN
+            SELECT RAISE(ABORT, 'frozen challenge criteria are immutable');
+          END;
+
+          CREATE TRIGGER attempts_require_frozen_challenge
+          BEFORE INSERT ON attempts
+          WHEN NEW.challenge_id IS NOT NULL AND NOT EXISTS (
+            SELECT 1 FROM challenge_versions
+            WHERE challenge_id = NEW.challenge_id
+              AND version = NEW.challenge_version
+              AND is_frozen = 1
+          )
+          BEGIN
+            SELECT RAISE(ABORT, 'attempts require a frozen challenge version');
+          END;
+
+          CREATE TRIGGER attempts_challenge_identity_immutable
+          BEFORE UPDATE OF challenge_id, challenge_version, started_at ON attempts
+          BEGIN
+            SELECT RAISE(ABORT, 'attempt challenge identity is immutable');
+          END;
+
+          CREATE TRIGGER attempts_submission_payload_immutable
+          BEFORE UPDATE OF response_text, artifact_ref_json, submitted_at ON attempts
+          WHEN OLD.submitted_at IS NOT NULL
+          BEGIN
+            SELECT RAISE(ABORT, 'submitted attempt work is immutable');
+          END;
+
+          CREATE TRIGGER hint_observations_require_challenge_attempt
+          BEFORE INSERT ON hint_observations
+          WHEN NOT EXISTS (
+            SELECT 1 FROM attempts
+            WHERE id = NEW.attempt_id AND challenge_id IS NOT NULL
+          )
+          BEGIN
+            SELECT RAISE(ABORT, 'hint observations require a frozen challenge attempt');
+          END;
+
+          CREATE TRIGGER hint_observations_no_update
+          BEFORE UPDATE ON hint_observations
+          BEGIN
+            SELECT RAISE(ABORT, 'hint observations are append-only');
+          END;
+
+          CREATE TRIGGER hint_observations_no_delete
+          BEFORE DELETE ON hint_observations
+          BEGIN
+            SELECT RAISE(ABORT, 'hint observations are append-only');
+          END;
+
+          CREATE TRIGGER hint_observations_only_before_submission
+          BEFORE INSERT ON hint_observations
+          WHEN EXISTS (
+            SELECT 1 FROM attempts
+            WHERE id = NEW.attempt_id AND submitted_at IS NOT NULL
+          )
+          BEGIN
+            SELECT RAISE(ABORT, 'cannot record hints after attempt submission');
+          END;
+
+          CREATE TRIGGER exposure_events_no_update
+          BEFORE UPDATE ON exposure_events
+          BEGIN
+            SELECT RAISE(ABORT, 'exposure events are append-only');
+          END;
+
+          CREATE TRIGGER exposure_events_no_delete
+          BEFORE DELETE ON exposure_events
+          BEGIN
+            SELECT RAISE(ABORT, 'exposure events are append-only');
+          END;
+        `);
+
+        const createdAt = new Date().toISOString();
+        const insertCapability = db.prepare(
+          `INSERT INTO capabilities (id, description, is_core, created_at)
+           VALUES (?, ?, 1, ?)`,
+        );
+        const capabilities = [
+          ["explain", "State the mechanism and relevant boundaries."],
+          ["predict", "Anticipate behavior before seeing the result."],
+          ["implement", "Produce a correct working implementation."],
+          ["debug", "Locate and repair a failure from symptoms and evidence."],
+          ["design", "Choose and justify a solution under constraints."],
+        ] as const;
+        for (const [id, description] of capabilities) {
+          insertCapability.run(id, description, createdAt);
+        }
       })();
     },
   },
@@ -663,11 +1022,11 @@ export function getProblemsByConcept(
 
 // ─── CRUD: Attempts ───────────────────────────────────────────────────────
 
-export function createAttempt(
+export function createLegacyAttempt(
   db: Database.Database,
   input: {
     problemId: string;
-    response: string;
+    responseText: string;
     score?: number;
     feedback?: string;
     timeSpentSeconds?: number;
@@ -676,27 +1035,49 @@ export function createAttempt(
   const now = new Date().toISOString();
   const info = db
     .prepare(
-      `INSERT INTO attempts (problem_id, response, score, feedback, time_spent_seconds, created_at)
-       VALUES (@problem_id, @response, @score, @feedback, @time_spent_seconds, @created_at)`,
+      `INSERT INTO attempts (
+         problem_id,
+         response_text,
+         score,
+         feedback,
+         time_spent_seconds,
+         started_at,
+         submitted_at,
+         created_at
+       )
+       VALUES (
+         @problem_id,
+         @response_text,
+         @score,
+         @feedback,
+         @time_spent_seconds,
+         @started_at,
+         @submitted_at,
+         @created_at
+       )`,
     )
     .run({
       problem_id: input.problemId,
-      response: input.response,
+      response_text: input.responseText,
       score: input.score ?? null,
       feedback: input.feedback ?? null,
       time_spent_seconds: input.timeSpentSeconds ?? null,
+      started_at: now,
+      submitted_at: now,
       created_at: now,
     });
-  return db
+  const row = db
     .prepare(`SELECT * FROM attempts WHERE id = ?`)
-    .get(Number(info.lastInsertRowid)) as Attempt;
+    .get(Number(info.lastInsertRowid));
+  return AttemptSchema.parse(row);
 }
 
 export function getAttemptsByProblem(
   db: Database.Database,
   problemId: string,
 ): Attempt[] {
-  return db
+  const rows = db
     .prepare(`SELECT * FROM attempts WHERE problem_id = ? ORDER BY created_at`)
-    .all(problemId) as Attempt[];
+    .all(problemId);
+  return AttemptSchema.array().parse(rows);
 }

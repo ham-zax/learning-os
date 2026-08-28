@@ -12,7 +12,7 @@ import type { GradingResult, CodingSubmission } from "../llm/grader.js";
 import { gradeCodingSolution } from "../llm/grader.js";
 import type { CodingProblem } from "./problems.js";
 import { getCodingProblems } from "./problems.js";
-import { getProblem, createAttempt } from "../db/database.js";
+import { getProblem, createLegacyAttempt } from "../db/database.js";
 import type { Problem } from "../db/types.js";
 
 /** Minimal row shape accepted by rowToCodingProblem (DB Problem type). */
@@ -215,9 +215,9 @@ export async function submitCodingSolution(
   const grading: GradingResult = await gradeCodingSolution(client, submission);
 
   // Persist attempt
-  createAttempt(db, {
+  createLegacyAttempt(db, {
     problemId: state.problem.id,
-    response: code,
+    responseText: code,
     score: grading.score,
     feedback: grading.feedback,
     timeSpentSeconds,

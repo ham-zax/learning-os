@@ -11,7 +11,7 @@ import type { SystemDesignProblem } from "./problems.js";
 import { gradeDesignSolution } from "../llm/grader.js";
 import type { DesignSubmission, GradingResult } from "../llm/grader.js";
 import type { LLMClient } from "../llm/client.js";
-import { createAttempt } from "../db/database.js";
+import { createLegacyAttempt } from "../db/database.js";
 
 // ─── Exported types ────────────────────────────────────────────────────────
 
@@ -359,9 +359,9 @@ export async function gradeDesignDrill(
     "## Trade-Offs\n" + state.phases.tradeOffs,
   ].join("\n\n");
 
-  createAttempt(db, {
+  createLegacyAttempt(db, {
     problemId: state.problem.id,
-    response: allResponses,
+    responseText: allResponses,
     score: grading.score,
     feedback: grading.feedback,
     timeSpentSeconds,
