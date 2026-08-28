@@ -1,0 +1,42 @@
+{
+  "topic": "foundry",
+  "topicId": "foundry",
+  "topicName": "Foundry",
+  "version": "1.0.0",
+  "description": "How foundry is built: the company OS for an AI-native one-person company. Architecture and seams, the platform invariants, the working loop that ships a ticket, and the decision history behind all three.",
+  "concepts": [
+    { "id": "foundry-what-it-is", "title": "What Foundry Is", "file": "foundry-what-it-is.md", "prerequisites": [], "difficulty": 1, "phase": 1, "tags": ["orientation", "foundation"] },
+    { "id": "two-planes", "title": "The Two Planes", "file": "two-planes.md", "prerequisites": ["foundry-what-it-is"], "difficulty": 1, "phase": 1, "tags": ["orientation", "foundation", "architecture"] },
+    { "id": "three-layers", "title": "Three Layers and the Dependency Direction", "file": "three-layers.md", "prerequisites": ["foundry-what-it-is"], "difficulty": 1, "phase": 1, "tags": ["architecture", "seams", "foundation"] },
+    { "id": "reserved-vocabulary", "title": "Reserved Vocabulary and the Lexicon Gate", "file": "reserved-vocabulary.md", "prerequisites": ["three-layers"], "difficulty": 2, "phase": 1, "tags": ["architecture", "seams", "foundation"] },
+    { "id": "platform-nouns", "title": "The Platform Nouns", "file": "platform-nouns.md", "prerequisites": ["reserved-vocabulary"], "difficulty": 2, "phase": 1, "tags": ["vocabulary", "foundation", "dispatch"] },
+    { "id": "naming-mechanics", "title": "Naming Mechanics", "file": "naming-mechanics.md", "prerequisites": ["platform-nouns"], "difficulty": 1, "phase": 1, "tags": ["vocabulary", "conventions", "foundation"] },
+
+    { "id": "unit-of-work", "title": "The Unit of Work", "file": "unit-of-work.md", "prerequisites": ["platform-nouns"], "difficulty": 3, "phase": 2, "tags": ["invariants", "mechanics", "storage"] },
+    { "id": "audit-log", "title": "The Audit Log, Correlation and Causation", "file": "audit-log.md", "prerequisites": ["unit-of-work"], "difficulty": 3, "phase": 2, "tags": ["invariants", "mechanics", "audit"] },
+    { "id": "table-classification", "title": "Table Classification — System-of-Record, Derived, Operational", "file": "table-classification.md", "prerequisites": ["audit-log"], "difficulty": 3, "phase": 2, "tags": ["invariants", "mechanics", "data-model"] },
+    { "id": "dispatch-spine", "title": "The Dispatch Spine", "file": "dispatch-spine.md", "prerequisites": ["platform-nouns"], "difficulty": 3, "phase": 2, "tags": ["mechanics", "dispatch", "invariants"] },
+    { "id": "effects-and-idempotency", "title": "Effects and Idempotency", "file": "effects-and-idempotency.md", "prerequisites": ["dispatch-spine"], "difficulty": 3, "phase": 2, "tags": ["mechanics", "invariants", "dispatch"] },
+    { "id": "metering-and-budget", "title": "Metering and Budget", "file": "metering-and-budget.md", "prerequisites": ["dispatch-spine"], "difficulty": 2, "phase": 2, "tags": ["mechanics", "cost", "dispatch"] },
+    { "id": "tenant-scope", "title": "Tenant Scope — No Unscoped Query API", "file": "tenant-scope.md", "prerequisites": ["unit-of-work"], "difficulty": 2, "phase": 2, "tags": ["invariants", "mechanics", "storage"] },
+    { "id": "taint-and-quarantine", "title": "Taint, Quarantine and Tools by Construction", "file": "taint-and-quarantine.md", "prerequisites": ["platform-nouns", "effects-and-idempotency"], "difficulty": 4, "phase": 2, "tags": ["invariants", "security", "mechanics"] },
+    { "id": "provenance-chain", "title": "The Provenance Chain", "file": "provenance-chain.md", "prerequisites": ["audit-log", "table-classification"], "difficulty": 3, "phase": 2, "tags": ["mechanics", "knowledge", "invariants"] },
+    { "id": "the-services", "title": "The Services Layer", "file": "the-services.md", "prerequisites": ["three-layers"], "difficulty": 2, "phase": 2, "tags": ["architecture", "services", "foundation"] },
+    { "id": "data-flow", "title": "The First Slice, End to End", "file": "data-flow.md", "prerequisites": ["the-services", "dispatch-spine", "unit-of-work"], "difficulty": 3, "phase": 2, "tags": ["architecture", "mechanics"] },
+
+    { "id": "spec-altitudes", "title": "The Five Spec Altitudes", "file": "spec-altitudes.md", "prerequisites": ["foundry-what-it-is"], "difficulty": 3, "phase": 3, "tags": ["workflow", "process", "judgment"] },
+    { "id": "the-phase-gate", "title": "The Phase Gate", "file": "the-phase-gate.md", "prerequisites": ["spec-altitudes"], "difficulty": 2, "phase": 3, "tags": ["workflow", "process", "judgment"] },
+    { "id": "ticket-lifecycle", "title": "The Ticket Lifecycle", "file": "ticket-lifecycle.md", "prerequisites": ["the-phase-gate"], "difficulty": 3, "phase": 3, "tags": ["workflow", "process", "judgment"] },
+    { "id": "information-barrier", "title": "The Information Barrier", "file": "information-barrier.md", "prerequisites": ["ticket-lifecycle"], "difficulty": 4, "phase": 3, "tags": ["workflow", "process", "judgment", "agents"] },
+    { "id": "no-red-round", "title": "The no_red_round Declaration", "file": "no-red-round.md", "prerequisites": ["information-barrier"], "difficulty": 3, "phase": 3, "tags": ["workflow", "process", "judgment"] },
+    { "id": "the-gate", "title": "The Five-Command Gate and the Custom Checkers", "file": "the-gate.md", "prerequisites": ["the-phase-gate"], "difficulty": 2, "phase": 3, "tags": ["workflow", "process", "verification"] },
+    { "id": "mutation-review", "title": "Mutation Review", "file": "mutation-review.md", "prerequisites": ["unit-of-work", "ticket-lifecycle"], "difficulty": 3, "phase": 3, "tags": ["workflow", "invariants", "judgment"] },
+    { "id": "status-and-handoff", "title": "STATUS, the Journal, and the Handoff", "file": "status-and-handoff.md", "prerequisites": ["ticket-lifecycle"], "difficulty": 2, "phase": 3, "tags": ["workflow", "process", "judgment"] },
+    { "id": "change-lanes", "title": "Change Lanes and the Ambiguity Rule", "file": "change-lanes.md", "prerequisites": ["spec-altitudes"], "difficulty": 4, "phase": 3, "tags": ["workflow", "governance", "judgment"] },
+    { "id": "local-first-and-ports", "title": "Local-First Development and the Port Pattern", "file": "local-first-and-ports.md", "prerequisites": ["three-layers"], "difficulty": 3, "phase": 3, "tags": ["architecture", "operations", "judgment"] },
+
+    { "id": "seam-validation", "title": "Seam Validation and the Missing Control", "file": "seam-validation.md", "prerequisites": ["three-layers", "the-services"], "difficulty": 5, "phase": 4, "tags": ["architecture", "mastery", "judgment"] },
+    { "id": "application-is-a-manifest", "title": "An Application Is a Manifest", "file": "application-is-a-manifest.md", "prerequisites": ["seam-validation", "ticket-lifecycle"], "difficulty": 5, "phase": 4, "tags": ["architecture", "mastery", "judgment"] },
+    { "id": "the-quality-gap", "title": "The Quality Gap — succeeded Means the Handler Returned", "file": "the-quality-gap.md", "prerequisites": ["taint-and-quarantine", "metering-and-budget"], "difficulty": 5, "phase": 4, "tags": ["mastery", "judgment", "open-problems"] }
+  ]
+}

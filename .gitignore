@@ -1,0 +1,31 @@
+state/
+!state/.gitkeep
+.pipeline/
+CLAUDE.local.md
+.claude/settings.local.json
+# User config overrides (personal, not shared)
+~/.claude/config/
+# Data (SQLite databases)
+data/
+!data/.gitkeep
+
+# TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+
+# Personal data
+config.json
+plans/
+specs/
+knowledge/airwallex-interview-prep.md
+# Duplicate standalone files (also in system-design/)
+knowledge/cqrs-event-sourcing.md
+knowledge/grpc-basics.md
+knowledge/payment-systems.md
+knowledge/sql-fundamentals.md
+.DS_Store
+.claude/worktrees/
+knowledge/coding-interview/behavioral-prep.md

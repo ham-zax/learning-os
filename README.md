@@ -2,11 +2,11 @@
 
 Learning OS is an evidence-driven programming learning system built around one rule: **a learner should advance because they demonstrated a capability, not because content was shown or they reported confidence.**
 
-This repository currently contains design documentation only. No application architecture is considered final until the evidence model and execution boundaries are stable.
+This repository now contains the preserved `generic-tutor` TypeScript/SQLite application shell plus the Learning OS design contracts. The evidence-driven kernel is not implemented yet; surviving upstream scalar mastery and SM-2 behavior is legacy compatibility, not the target Learning OS source of learner truth.
 
-## Current direction
+## Current baseline
 
-The working direction is to fork `alienz-dev/generic-tutor` for its TypeScript/SQLite application shell, then replace its learning-state core rather than build a tutor from zero.
+Learning OS preserves `alienz-dev/generic-tutor` for its TypeScript/SQLite application shell and is replacing its learning-state core rather than building a tutor from zero.
 
 We plan to reuse ideas from other projects selectively:
 
@@ -63,6 +63,19 @@ ChatGPT is the preferred V1 interactive teacher, but it is not part of the kerne
 
 Use one active teacher/orchestrator at a time in V1. Durable objectives, challenges, attempts, evidence, projections, scheduling, and resumable session state belong to the kernel rather than to a provider's conversation history or private memory.
 
+## Operational baseline
+
+The inherited CLI requires Node.js >=22 and npm. The Phase 0 standalone baseline keeps the existing npm/TypeScript workflow:
+
+```bash
+npm install
+npm run tutor -- stats
+npm run build
+node dist/cli.js stats
+```
+
+Surviving CLI surfaces include topic sessions, ingestion, gap/signal sync, interview drills, due-review queries, stats, and planning. The sibling `../job-hunter` and `../ai-feeds` integrations remain optional integration points; they do not define Learning OS learner-state semantics.
+
 ## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md) — system boundaries and runtime flow.
@@ -107,6 +120,8 @@ Do not build these until the evidence loop works in real use:
 
 The first milestone should be capable of learning, practicing, debugging, retrieving, and interviewing against the same durable evidence model.
 
-## Repository strategy
+## Repository strategy and provenance
 
-`/home/hamza/repo/learning-os` is intended to become the actual product working tree, not a permanent documentation-only sibling of the fork. When implementation begins, preserve `generic-tutor` upstream history and provenance rather than copying its source into an unrelated history.
+`/home/hamza/repo/learning-os` is the product working tree. Its Git graph preserves both the Learning OS design lineage and the complete reachable ancestry of `alienz-dev/generic-tutor` at pinned upstream commit `2fffb72201aba055a4c270e2fddb29352edf2efb` from `https://github.com/alienz-dev/generic-tutor.git`.
+
+Upstream `package.json` and README metadata declare MIT, but the inspected pinned repository has no root `LICENSE` text or copyright notice. Public redistribution and package publication therefore remain separately gated on provenance/license clarification; this repository does not manufacture missing notice text, ownership, or transfer history.

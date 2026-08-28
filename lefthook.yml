@@ -1,0 +1,13 @@
+# lefthook.yml — pre-commit hooks for generic-tutor
+pre-commit:
+  parallel: true
+  commands:
+    shellcheck:
+      glob: "*.sh"
+      run: shellcheck {staged_files}
+    json-validate:
+      glob: "*.json"
+      run: jq . {staged_files} > /dev/null
+    skill-md-lint:
+      glob: "SKILL.md"
+      run: echo "SKILL.md changed — verify tutor protocol is consistent"

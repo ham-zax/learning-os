@@ -1,0 +1,36 @@
+{
+  "topicId": "system-design",
+  "topicName": "System Design",
+  "description": "System design interview preparation: scalability, databases, distributed systems, microservices, resilience, and payment systems",
+  "concepts": [
+    { "id": "scalability", "title": "Scalability Fundamentals", "prerequisites": [], "difficulty": 1, "tags": ["foundation"] },
+    { "id": "cap-theorem", "title": "CAP Theorem", "prerequisites": [], "difficulty": 2, "tags": ["foundation"] },
+    { "id": "sql-fundamentals", "title": "SQL Fundamentals", "prerequisites": [], "difficulty": 1, "tags": ["foundation", "databases"] },
+    { "id": "sql-vs-nosql", "title": "SQL vs NoSQL", "prerequisites": ["sql-fundamentals"], "difficulty": 1, "tags": ["foundation", "databases"] },
+    { "id": "acid-vs-base", "title": "ACID vs BASE", "prerequisites": ["sql-fundamentals"], "difficulty": 2, "tags": ["foundation", "databases"] },
+    { "id": "blob-storage", "title": "Blob Storage", "prerequisites": [], "difficulty": 1, "tags": ["storage"] },
+
+    { "id": "load-balancing", "title": "Load Balancing", "prerequisites": ["scalability"], "difficulty": 2, "tags": ["infrastructure"] },
+    { "id": "caching", "title": "Caching", "prerequisites": ["scalability"], "difficulty": 2, "tags": ["infrastructure"] },
+    { "id": "cdn", "title": "CDN (Content Delivery Network)", "prerequisites": ["caching"], "difficulty": 2, "tags": ["infrastructure"] },
+    { "id": "database-indexing", "title": "Database Indexing", "prerequisites": ["sql-fundamentals"], "difficulty": 2, "tags": ["databases"] },
+    { "id": "replication", "title": "Database Replication", "prerequisites": ["sql-fundamentals", "cap-theorem"], "difficulty": 3, "tags": ["databases"] },
+    { "id": "consistent-hashing", "title": "Consistent Hashing", "prerequisites": ["load-balancing"], "difficulty": 3, "tags": ["infrastructure"] },
+    { "id": "sharding", "title": "Database Sharding", "prerequisites": ["replication", "consistent-hashing"], "difficulty": 3, "tags": ["databases"] },
+
+    { "id": "microservices-vs-monolith", "title": "Microservices vs Monolith", "prerequisites": ["scalability"], "difficulty": 2, "tags": ["architecture"] },
+    { "id": "api-gateway", "title": "API Gateway", "prerequisites": ["microservices-vs-monolith"], "difficulty": 2, "tags": ["architecture"] },
+    { "id": "message-queues", "title": "Message Queues", "prerequisites": ["microservices-vs-monolith"], "difficulty": 2, "tags": ["architecture"] },
+    { "id": "event-driven-architecture", "title": "Event-Driven Architecture", "prerequisites": ["message-queues"], "difficulty": 3, "tags": ["architecture"] },
+    { "id": "cqrs", "title": "CQRS (Command Query Responsibility Segregation)", "prerequisites": ["event-driven-architecture"], "difficulty": 3, "tags": ["architecture"] },
+    { "id": "cqrs-event-sourcing", "title": "CQRS + Event Sourcing", "prerequisites": ["cqrs"], "difficulty": 4, "tags": ["architecture", "advanced"] },
+
+    { "id": "circuit-breaker", "title": "Circuit Breaker", "prerequisites": ["microservices-vs-monolith"], "difficulty": 2, "tags": ["resilience"] },
+    { "id": "rate-limiting", "title": "Rate Limiting", "prerequisites": ["api-gateway"], "difficulty": 2, "tags": ["resilience"] },
+
+    { "id": "distributed-consensus", "title": "Distributed Consensus", "prerequisites": ["cap-theorem", "replication"], "difficulty": 4, "tags": ["advanced"] },
+    { "id": "grpc-basics", "title": "gRPC Basics", "prerequisites": ["microservices-vs-monolith"], "difficulty": 2, "tags": ["architecture"] },
+    { "id": "payment-systems", "title": "Payment Systems Design", "prerequisites": ["acid-vs-base", "event-driven-architecture"], "difficulty": 4, "tags": ["advanced", "domain"] },
+    { "id": "airwallex-payment-system", "title": "Airwallex Payment System", "prerequisites": ["payment-systems"], "difficulty": 4, "tags": ["advanced", "domain"] }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "topic": "topic-name",
+  "version": "1.0",
+  "description": "Description of the topic",
+  "concepts": [
+    {
+      "id": "concept-id",
+      "title": "Concept Title",
+      "file": "concepts/concept-id.md",
+      "prerequisites": [],
+      "difficulty": 1,
+      "tags": ["core"]
+    }
+  ]
+}

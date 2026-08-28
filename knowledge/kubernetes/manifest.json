@@ -1,0 +1,17 @@
+{
+  "topicId": "kubernetes",
+  "topicName": "Kubernetes",
+  "description": "Core Kubernetes concepts: Pods, Deployments, Services, storage, networking, and workload management",
+  "concepts": [
+    { "id": "pods", "title": "Pods", "prerequisites": [], "difficulty": 1, "tags": ["core", "foundation"] },
+    { "id": "namespaces", "title": "Namespaces", "prerequisites": ["pods"], "difficulty": 1, "tags": ["core", "foundation"] },
+    { "id": "deployments", "title": "Deployments", "prerequisites": ["pods"], "difficulty": 2, "tags": ["core", "workloads"] },
+    { "id": "services", "title": "Services", "prerequisites": ["pods"], "difficulty": 2, "tags": ["core", "networking"] },
+    { "id": "configmaps-secrets", "title": "ConfigMaps and Secrets", "prerequisites": ["pods"], "difficulty": 2, "tags": ["core", "configuration"] },
+    { "id": "volumes", "title": "Volumes and Storage", "prerequisites": ["pods", "namespaces"], "difficulty": 3, "tags": ["core", "storage"] },
+    { "id": "ingress", "title": "Ingress", "prerequisites": ["services", "namespaces"], "difficulty": 3, "tags": ["networking", "advanced"] },
+    { "id": "statefulsets", "title": "StatefulSets", "prerequisites": ["deployments", "volumes"], "difficulty": 3, "tags": ["workloads", "advanced"] },
+    { "id": "daemonsets-jobs", "title": "DaemonSets, Jobs, and CronJobs", "prerequisites": ["deployments"], "difficulty": 2, "tags": ["workloads"] },
+    { "id": "helm", "title": "Helm", "prerequisites": ["deployments", "services", "configmaps-secrets"], "difficulty": 3, "tags": ["tooling", "advanced"] }
+  ]
+}

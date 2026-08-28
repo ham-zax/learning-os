@@ -1,0 +1,47 @@
+{
+  "description": "Topic index for the generic tutor knowledge base. Each topic has its own manifest.json in its subdirectory.",
+  "topics": [
+    {
+      "id": "coding-interview",
+      "name": "Coding Interview",
+      "manifest": "knowledge/coding-interview/manifest.json",
+      "conceptCount": 11
+    },
+    {
+      "id": "foundry",
+      "name": "Foundry",
+      "manifest": "knowledge/foundry/manifest.json",
+      "conceptCount": 30
+    },
+    {
+      "id": "llm",
+      "name": "LLM Engineering",
+      "manifest": "knowledge/llm/manifest.json",
+      "conceptCount": 32
+    },
+    {
+      "id": "kubernetes",
+      "name": "Kubernetes",
+      "manifest": "knowledge/kubernetes/manifest.json",
+      "conceptCount": 10
+    },
+    {
+      "id": "spring-framework",
+      "name": "Spring Framework",
+      "manifest": "knowledge/spring-framework/manifest.json",
+      "conceptCount": 11
+    },
+    {
+      "id": "system-design",
+      "name": "System Design",
+      "manifest": "knowledge/system-design/manifest.json",
+      "conceptCount": 25
+    },
+    {
+      "id": "trader",
+      "name": "trader (codebase onboarding)",
+      "manifest": "knowledge/trader/manifest.json",
+      "conceptCount": 18
+    }
+  ]
+}
