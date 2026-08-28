@@ -11,6 +11,7 @@
  *   tutor interview <topic>    Start interview drill
  *   tutor goal <topic>         Configure/list active goal objectives
  *   tutor today <topic>        Build today's evidence-driven mission
+ *   tutor profile <command>    Create/list/select learner profiles
  *   tutor due                  Show due concepts
  *   tutor stats                Show topic summary
  *   tutor plan <topic>         Generate learning plan
@@ -23,7 +24,15 @@ import { createInterface } from "node:readline";
 import { Command } from "commander";
 import chalk from "chalk";
 
-import { createDatabase } from "./db/database.js";
+import type { createDatabase } from "./db/database.js";
+import {
+  createProfile,
+  getActiveProfile,
+  getProfile,
+  listProfiles,
+  openProfileDatabase,
+  selectProfile,
+} from "./profile/index.js";
 import {
   getTopicSummary,
   initializeTopic,
@@ -89,7 +98,7 @@ import { DeliveryContext, GoalImportance, GoalTargetReadiness } from "./db/types
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const DB_PATH = resolve("./data/tutor.db");
+const PROFILE_DATA_DIR = resolve("./data");
 const JOB_HUNTER_DB_PATH = resolve("../job-hunter/data/job_hunter.db");
 const AI_FEEDS_DB_PATH = resolve("../ai-feeds/db/ai-feeds.sqlite");
 const KNOWLEDGE_DIR = resolve("./knowledge");
@@ -160,6 +169,18 @@ function warn(text: string): void {
 
 function error(text: string): void {
   console.error(chalk.red(text));
+}
+
+function profileStoreOptions() {
+  return { dataDir: PROFILE_DATA_DIR } as const;
+}
+
+function cliProfileOverride(): string | undefined {
+  return program.opts<{ profile?: string }>().profile;
+}
+
+function openCliDatabase(): ReturnType<typeof createDatabase> {
+  return openProfileDatabase(cliProfileOverride(), profileStoreOptions());
 }
 
 // ─── Topic auto-detection ────────────────────────────────────────────────────
@@ -733,7 +754,96 @@ const program = new Command();
 program
   .name("tutor")
   .description("AI tutor with spaced repetition, interview prep, and ecosystem integration")
-  .version("0.1.0");
+  .version("0.1.0")
+  .option("--profile <id>", "Use a learner profile for this command");
+
+const profileCommand = program.command("profile").description("Manage learner profiles");
+
+profileCommand
+  .command("create")
+  .description("Create and select a fresh learner profile")
+  .argument("<name>", "Learner-facing display name")
+  .option("--id <id>", "Filesystem-safe profile ID (derived from name by default)")
+  .option("-d, --description <text>", "Short profile label or description")
+  .action((name: string, opts: { id?: string; description?: string }) => {
+    try {
+      const profile = createProfile(
+        { displayName: name, id: opts.id, description: opts.description },
+        profileStoreOptions(),
+      );
+      selectProfile(profile.id, profileStoreOptions());
+      success(`Created and selected profile ${profile.id} (${profile.displayName}).`);
+    } catch (err) {
+      error(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+    }
+  });
+
+profileCommand
+  .command("list")
+  .description("List local learner profiles")
+  .action(() => {
+    try {
+      const profiles = listProfiles(profileStoreOptions());
+      const active = getActiveProfile(profileStoreOptions());
+      if (profiles.length === 0) {
+        warn("No learner profiles exist yet. Create one with `tutor profile create <name>`.");
+        return;
+      }
+      header("Learner Profiles");
+      for (const profile of profiles) {
+        const marker = profile.id === active?.id ? "*" : " ";
+        const source = profile.source === "legacy" ? " [legacy]" : "";
+        console.log(`${marker} ${profile.id.padEnd(20)} ${profile.displayName}${source}`);
+      }
+    } catch (err) {
+      error(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+    }
+  });
+
+profileCommand
+  .command("use")
+  .description("Select the learner profile used by ordinary tutor commands")
+  .argument("<id>", "Profile ID")
+  .action((id: string) => {
+    try {
+      const profile = selectProfile(id, profileStoreOptions());
+      success(`Selected profile ${profile.id} (${profile.displayName}).`);
+    } catch (err) {
+      error(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+    }
+  });
+
+profileCommand
+  .command("show")
+  .description("Show the selected learner profile")
+  .argument("[id]", "Profile ID (defaults to selected profile)")
+  .action((id?: string) => {
+    try {
+      const requestedId = id ?? cliProfileOverride();
+      const profile = requestedId
+        ? getProfile(requestedId, profileStoreOptions())
+        : getActiveProfile(profileStoreOptions());
+      if (!profile) {
+        throw new Error(
+          requestedId
+            ? `Profile not found: ${requestedId}`
+            : "No learner profile is selected.",
+        );
+      }
+      header("Learner Profile");
+      console.log(`  ID:          ${profile.id}`);
+      console.log(`  Name:        ${profile.displayName}`);
+      console.log(`  Created:     ${profile.createdAt}`);
+      console.log(`  Source:      ${profile.source}`);
+      console.log(`  Description: ${profile.description ?? "(none)"}`);
+    } catch (err) {
+      error(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+    }
+  });
 
 // tutor <topic> — auto-detect mode
 program
@@ -744,7 +854,7 @@ program
     "learn",
   )
   .action(async (topic: string, opts: { mode: string }) => {
-    const db = createDatabase(DB_PATH);
+    const db = openCliDatabase();
 
     try {
       const topicId = topic.toLowerCase().replace(/\s+/g, "-");
@@ -782,7 +892,7 @@ program
       topic: string,
       opts: { from: string; material?: string },
     ) => {
-      const db = createDatabase(DB_PATH);
+      const db = openCliDatabase();
 
       try {
         const topicId = topic.toLowerCase().replace(/\s+/g, "-");
@@ -804,7 +914,7 @@ program
   .argument("<topic>", "Topic ID (e.g., kubernetes)")
   .argument("<manifest-path>", "Path to manifest JSON file")
   .action(async (topicArg: string, manifestPath: string) => {
-    const db = createDatabase(DB_PATH);
+    const db = openCliDatabase();
 
     try {
       const topicId = topicArg.toLowerCase().replace(/\s+/g, "-");
@@ -830,7 +940,7 @@ program
   .option("-j, --job-id <id>", "Scope to a specific job listing")
   .option("-n, --top <n>", "Show top N gaps", "20")
   .action(async (opts: { jobId?: string; top: string }) => {
-    const db = createDatabase(DB_PATH);
+    const db = openCliDatabase();
 
     try {
       let jhDb: ReturnType<typeof openJobHunterDb>;
@@ -889,7 +999,7 @@ program
   .option("-t, --type <type>", "Interview type: coding or system-design", "coding")
   .option("-d, --difficulty <n>", "Difficulty level (1-5)")
   .action(async (_topic: string, opts: { type: string; difficulty?: string }) => {
-    const db = createDatabase(DB_PATH);
+    const db = openCliDatabase();
 
     try {
       const difficulty = opts.difficulty ? parseInt(opts.difficulty, 10) : undefined;
@@ -930,7 +1040,7 @@ program
         inactive?: boolean;
       },
     ) => {
-      const db = createDatabase(DB_PATH);
+      const db = openCliDatabase();
       try {
         const goalId = topic.toLowerCase().replace(/\s+/g, "-");
         const topicRow = getTopic(db, goalId);
@@ -1035,7 +1145,7 @@ program
         retest: string[];
       },
     ) => {
-      const db = createDatabase(DB_PATH);
+      const db = openCliDatabase();
       try {
         const goalId = topic.toLowerCase().replace(/\s+/g, "-");
         const topicRow = getTopic(db, goalId);
@@ -1128,7 +1238,7 @@ program
   .description("Show concepts due for review")
   .option("-t, --topic <topic>", "Filter by topic")
   .action(async (opts: { topic?: string }) => {
-    const db = createDatabase(DB_PATH);
+    const db = openCliDatabase();
 
     try {
       const topicId = opts.topic?.toLowerCase().replace(/\s+/g, "-");
@@ -1170,7 +1280,7 @@ program
   .description("Show topic statistics")
   .option("-t, --topic <topic>", "Topic to show stats for")
   .action(async (opts: { topic?: string }) => {
-    const db = createDatabase(DB_PATH);
+    const db = openCliDatabase();
 
     try {
       if (opts.topic) {
@@ -1237,7 +1347,7 @@ program
   .requiredOption("-g, --goal <text>", "Learning goal")
   .option("--deadline <date>", "Deadline (YYYY-MM-DD)")
   .action(async (topic: string, opts: { goal: string; deadline?: string }) => {
-    const db = createDatabase(DB_PATH);
+    const db = openCliDatabase();
 
     try {
       const topicId = topic.toLowerCase().replace(/\s+/g, "-");
@@ -1310,7 +1420,7 @@ program
   .option("--anki <path>", "Export to Anki TSV format at the given path")
   .option("--obsidian <vault>", "Sync to Obsidian vault at the given path")
   .action(async (opts: { topic?: string; anki?: string; obsidian?: string }) => {
-    const db = createDatabase(DB_PATH);
+    const db = openCliDatabase();
 
     try {
       // Anki export
@@ -1373,7 +1483,7 @@ program
   .argument("<query>", "Search query")
   .option("-t, --topic <topic>", "Scope to a specific topic")
   .action(async (query: string, opts: { topic?: string }) => {
-    const db = createDatabase(DB_PATH);
+    const db = openCliDatabase();
 
     try {
       if (!opts.topic) {
@@ -1407,4 +1517,7 @@ program
 
 // ─── Parse and run ───────────────────────────────────────────────────────────
 
-program.parse();
+program.parseAsync().catch((err: unknown) => {
+  error(err instanceof Error ? err.message : String(err));
+  process.exitCode = 1;
+});
