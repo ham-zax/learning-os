@@ -142,23 +142,30 @@ export function planInformationNeeds(
       reason: "Interview timing determines whether to cram high-value retrieval/transfer or build missing foundations first.",
     });
   }
+  const availability = intake.availability;
+  const inconsistentWeeklyBudget =
+    availability?.minutesPerDay !== undefined &&
+    availability.daysPerWeek !== undefined &&
+    availability.minutesPerWeek !== undefined &&
+    availability.minutesPerDay * availability.daysPerWeek !== availability.minutesPerWeek;
   if (
-    !intake.availability ||
-    (intake.availability.minutesPerDay === undefined &&
-      intake.availability.minutesPerWeek === undefined) ||
-    (intake.availability.minutesPerDay !== undefined &&
-      intake.availability.minutesPerWeek === undefined &&
-      intake.availability.daysPerWeek === undefined)
+    !availability ||
+    (availability.minutesPerDay === undefined && availability.minutesPerWeek === undefined) ||
+    (availability.minutesPerDay !== undefined &&
+      availability.minutesPerWeek === undefined &&
+      availability.daysPerWeek === undefined) ||
+    inconsistentWeeklyBudget
   ) {
     addNeed(needs, {
       code: "time_budget",
       subject: null,
       blocking: true,
       changes: ["schedule", "coverage"],
-      reason:
-        intake.availability?.minutesPerDay !== undefined &&
-        intake.availability.minutesPerWeek === undefined &&
-        intake.availability.daysPerWeek === undefined
+      reason: inconsistentWeeklyBudget
+        ? "Daily minutes, study days per week, and weekly minutes disagree; use one consistent study budget before planning."
+        : availability?.minutesPerDay !== undefined &&
+            availability.minutesPerWeek === undefined &&
+            availability.daysPerWeek === undefined
           ? "Study days per week are required to turn the daily budget into weekly capacity without assuming seven days."
           : "Available study time is required to decide what can fit before the target date.",
     });

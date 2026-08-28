@@ -170,7 +170,7 @@ Confirmed onboarding prints the new goal ID. Use it with:
 npm run tutor -- today <goal-id>
 ```
 
-If onboarding recorded `minutesPerDay`, that becomes the default daily budget for the goal.
+If onboarding recorded `minutesPerDay`, that becomes the default daily budget for the goal. If an integration also supplies `minutesPerWeek`, it must agree with `minutesPerDay × daysPerWeek`; conflicting availability remains a blocking onboarding question.
 
 Override it for one run:
 
@@ -195,7 +195,7 @@ npm run tutor -- stats
 npm run tutor -- goal <goal-id>
 ```
 
-Ordinary learning sessions, interviews, reviews, and resumed sessions all feed the same evidence model. A learner does not get a separate interview-only notion of mastery.
+Ordinary learning sessions, interviews, reviews, and resumed sessions all feed the same evidence model. `due` and `stats` report objective-level FSRS/readiness state rather than legacy scalar concept status. A learner does not get a separate interview-only notion of mastery.
 
 Run:
 

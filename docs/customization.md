@@ -37,7 +37,7 @@ daily_minutes = 30
 knowledge_dir = ./knowledge
 ```
 
-A confirmed goal may have its own onboarding `minutesPerDay`. For `tutor today`, precedence is:
+A confirmed goal may have its own onboarding `minutesPerDay`. When onboarding supplies both daily and weekly availability (`minutesPerDay`, `daysPerWeek`, and `minutesPerWeek`), the values must agree; Learning OS blocks confirmation instead of choosing one conflicting budget. For `tutor today`, precedence is:
 
 ```text
 --minutes override
@@ -100,7 +100,8 @@ A minimal `manifest.json` looks like:
 Manifest rules enforced by the catalog loader:
 
 - `topicId` and `topicName` must be non-empty strings;
-- concept IDs must be unique inside the topic;
+- topic IDs must be unique across the catalog;
+- concept IDs must be unique across the catalog because learner databases and objective IDs use the concept ID as a profile-wide identity;
 - difficulty must be an integer from 1 to 5;
 - prerequisites must name concepts in the same topic manifest;
 - tags and prerequisites are string arrays.

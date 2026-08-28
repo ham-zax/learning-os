@@ -138,6 +138,8 @@ teach-back -> practice
 - Phase 0 leaves only the known active legacy SM-2 mutation path and removes hidden legacy-state mutation from topic-summary reads.
 - No new subsystem is coupled to scalar concept mastery as Learning OS truth.
 
+**Current convergence note:** The later evidence/FSRS migration completed this deferred reader contraction. Current `due`, `stats`, Anki export, and Obsidian sync use objective-level learner state; the legacy static `tutor plan` surface and its status-driven planner modules were removed. Legacy scalar concept fields remain provenance only.
+
 ## Phase 1 — Evidence kernel
 
 ### Task 4: Add learning objectives

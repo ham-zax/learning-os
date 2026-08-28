@@ -210,8 +210,8 @@ These are examples and starter material, not a mandatory universal curriculum. A
 | `npm run tutor -- today <goal-id>` | Build today's bounded evidence-driven mission |
 | `npm run tutor -- goal <goal-id>` | Inspect/configure goal objective requirements |
 | `npm run tutor -- interview <concept-id>` | Start an interview drill scoped to one concept |
-| `npm run tutor -- due` | Show due review concepts |
-| `npm run tutor -- stats` | Show topic statistics |
+| `npm run tutor -- due` | Show due objective-level review cards |
+| `npm run tutor -- stats` | Show objective-level readiness and review statistics |
 | `npm run tutor -- init <topic> <manifest.json>` | Materialize a topic manifest into the selected profile |
 | `npm run tutor -- search <query> --topic <topic>` | Search profile concepts |
 

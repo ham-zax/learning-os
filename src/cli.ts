@@ -13,9 +13,8 @@
  *   tutor today <topic>        Build today's evidence-driven mission
  *   tutor onboard              Structured offline onboarding fallback
  *   tutor profile <command>    Create/list/select learner profiles
- *   tutor due                  Show due concepts
- *   tutor stats                Show topic summary
- *   tutor plan <topic>         Generate learning plan
+ *   tutor due                  Show due objectives
+ *   tutor stats                Show objective-level topic summary
  *   tutor sync                 Sync gaps and signals
  */
 
@@ -37,7 +36,6 @@ import {
 import {
   getTopicSummary,
   initializeTopic,
-  getDueConcepts as getDueConceptsFromState,
 } from "./state.js";
 import {
   startSession,
@@ -52,9 +50,8 @@ import {
   syncGaps,
   syncSignals,
 } from "./ingest/orchestrator.js";
-import { generateLearningPlan } from "./plan/planner.js";
-import { generateEnhancedPlan } from "./plan/nexus-planner.js";
 import { getTodayMission, resolveTodayAvailableMinutes } from "./plan/today.js";
+import { getDueObjectives } from "./scheduler/index.js";
 import { searchConcepts, findRelatedConcepts } from "./knowledge/search.js";
 import { exportToAnki } from "./sync/anki-export.js";
 import { syncToObsidian } from "./sync/obsidian-sync.js";
@@ -429,9 +426,7 @@ async function runSession(
 
   for (const concept of sessionState.concepts) {
     console.log(chalk.bold.underline(`\nConcept: ${concept.title}`));
-    console.log(
-      chalk.dim(`  Difficulty: ${concept.difficulty}/5 | Legacy status: ${concept.status}`),
-    );
+    console.log(chalk.dim(`  Difficulty: ${concept.difficulty}/5`));
 
     const file = tryLoadConceptFile(knowledgeDir, topicId, concept.id);
     if (!file) missingFiles++;
@@ -688,6 +683,7 @@ async function runCodingDrill(
     }
   } catch (err) {
     error(err instanceof Error ? err.message : String(err));
+    process.exitCode = 1;
   }
 }
 
@@ -748,6 +744,7 @@ async function runDesignDrill(
     }
   } catch (err) {
     error(err instanceof Error ? err.message : String(err));
+    process.exitCode = 1;
   }
 }
 
@@ -1257,35 +1254,35 @@ program
 // tutor due
 program
   .command("due")
-  .description("Show concepts due for review")
+  .description("Show learning objectives due for review")
   .option("-t, --topic <topic>", "Filter by topic")
   .action(async (opts: { topic?: string }) => {
     const db = openCliDatabase();
 
     try {
       const topicId = opts.topic?.toLowerCase().replace(/\s+/g, "-");
-      const due = getDueConceptsFromState(db, topicId);
+      const due = getDueObjectives(db, { topicId });
 
       if (due.length === 0) {
-        success("No concepts due for review. You're all caught up!");
+        success("No learning objectives are due for review. You're all caught up!");
         return;
       }
 
-      header(`Due Concepts (${due.length})`);
+      header(`Due Objectives (${due.length})`);
       console.log(
         chalk.bold(
           "  " +
-            "ID".padEnd(35) +
-            "Title".padEnd(30) +
-            "Status".padEnd(12) +
-            "Next Review",
+            "Objective".padEnd(42) +
+            "Concept".padEnd(28) +
+            "Capability".padEnd(14) +
+            "Due",
         ),
       );
-      console.log("  " + "-".repeat(90));
+      console.log("  " + "-".repeat(110));
 
-      for (const c of due) {
+      for (const item of due) {
         console.log(
-          `  ${c.id.padEnd(35)}${c.title.slice(0, 28).padEnd(30)}${c.status.padEnd(12)}${c.next_review ?? "new"}`,
+          `  ${item.objectiveId.padEnd(42)}${item.conceptTitle.slice(0, 26).padEnd(28)}${item.capabilityId.padEnd(14)}${item.dueAt}`,
         );
       }
     } catch (err) {
@@ -1310,14 +1307,14 @@ program
         const summary = getTopicSummary(db, topicId);
 
         header(`Topic: ${summary.topic}`);
-        console.log(`  Phase:    ${summary.phase}/5`);
-        console.log(`  Total:    ${summary.total} concepts`);
+        console.log(`  Concepts:   ${summary.totalConcepts}`);
+        console.log(`  Objectives: ${summary.totalObjectives}`);
         console.log();
-        console.log("  Status breakdown:");
-        console.log(`    Unseen:    ${chalk.dim(String(summary.unseen))}`);
-        console.log(`    Learning:  ${chalk.yellow(String(summary.learning))}`);
-        console.log(`    Reviewing: ${chalk.cyan(String(summary.reviewing))}`);
-        console.log(`    Mastered:  ${chalk.green(String(summary.mastered))}`);
+        console.log("  Objective readiness:");
+        console.log(`    Unknown:     ${chalk.dim(String(summary.unknown))}`);
+        console.log(`    Exposed:     ${chalk.yellow(String(summary.exposed))}`);
+        console.log(`    Guided:      ${chalk.cyan(String(summary.guided))}`);
+        console.log(`    Independent: ${chalk.green(String(summary.independent))}`);
         console.log();
         console.log(`  Due for review:   ${chalk.bold(String(summary.dueCount))}`);
         console.log(`  Overdue:          ${chalk.red(String(summary.overdueCount))}`);
@@ -1338,8 +1335,8 @@ program
           chalk.bold(
             "  " +
               "Topic".padEnd(25) +
-              "Phase".padEnd(8) +
               "Concepts".padEnd(10) +
+              "Objectives".padEnd(12) +
               "Due".padEnd(6) +
               "Last Session",
           ),
@@ -1349,82 +1346,9 @@ program
         for (const t of topics) {
           const summary = getTopicSummary(db, t.id);
           console.log(
-            `  ${summary.topic.padEnd(25)}${String(summary.phase).padEnd(8)}${String(summary.total).padEnd(10)}${String(summary.dueCount).padEnd(6)}${summary.lastSession ?? "never"}`,
+            `  ${summary.topic.padEnd(25)}${String(summary.totalConcepts).padEnd(10)}${String(summary.totalObjectives).padEnd(12)}${String(summary.dueCount).padEnd(6)}${summary.lastSession ?? "never"}`,
           );
         }
-      }
-    } catch (err) {
-      error(err instanceof Error ? err.message : String(err));
-      process.exitCode = 1;
-    } finally {
-      db.close();
-    }
-  });
-
-// tutor plan <topic>
-program
-  .command("plan")
-  .description("Generate a learning plan for a topic")
-  .argument("<topic>", "Topic to plan")
-  .requiredOption("-g, --goal <text>", "Learning goal")
-  .option("--deadline <date>", "Deadline (YYYY-MM-DD)")
-  .action(async (topic: string, opts: { goal: string; deadline?: string }) => {
-    const db = openCliDatabase();
-
-    try {
-      const topicId = topic.toLowerCase().replace(/\s+/g, "-");
-
-      if (!topicExists(db, topicId)) {
-        error(`Topic "${topicId}" not found. Run ingestion first.`);
-        process.exitCode = 1;
-        return;
-      }
-
-      const config = loadConfig();
-      const llm = tryCreateLLM();
-
-      const result = await generateEnhancedPlan({
-        db,
-        topicId,
-        goal: opts.goal,
-        deadline: opts.deadline,
-        dailyMinutes: config.daily_minutes,
-        llmClient: llm,
-      });
-      updateTopic(db, topicId, {
-        goal: opts.goal,
-        deadline: opts.deadline ?? null,
-      });
-
-      const plan = result.plan;
-
-      header(`Learning Plan: ${plan.topic}`);
-      console.log(`Goal: ${plan.goal}`);
-      if (plan.deadline) {
-        console.log(`Deadline: ${plan.deadline}`);
-      }
-      console.log(`Sessions: ${plan.sessions.length}`);
-
-      if (result.rationale) {
-        console.log();
-        info(`Strategy: ${result.rationale}`);
-      }
-      if (result.focusAreas.length > 0) {
-        info(`Focus areas: ${result.focusAreas.join(", ")}`);
-      }
-      console.log();
-
-      for (const session of plan.sessions) {
-        const dateStr = session.targetDate ? session.targetDate : "flexible";
-        console.log(
-          chalk.bold(
-            `  Session ${session.sessionNumber}`.padEnd(18) +
-              `${session.mode}`.padEnd(14) +
-              `${session.estimatedMinutes}min`.padEnd(10) +
-              dateStr,
-          ),
-        );
-        console.log(chalk.dim(`    Concepts: ${session.conceptIds.join(", ")}`));
       }
     } catch (err) {
       error(err instanceof Error ? err.message : String(err));

@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { DeliveryContext } from '../db/types.js';
 
 // ---------------------------------------------------------------------------
 // ConceptFrontmatter — markdown frontmatter for a single concept file
@@ -91,30 +90,3 @@ export const ConceptMapSchema = z.object({
 });
 
 export type ConceptMap = z.infer<typeof ConceptMapSchema>;
-
-// ---------------------------------------------------------------------------
-// PlanSession — single planned study session
-// ---------------------------------------------------------------------------
-
-export const PlanSessionSchema = z.object({
-  sessionNumber: z.number().int().positive(),
-  conceptIds: z.array(z.string()),
-  estimatedMinutes: z.number().int().positive(),
-  targetDate: z.string().nullable().default(null),
-  mode: DeliveryContext,
-});
-
-export type PlanSession = z.infer<typeof PlanSessionSchema>;
-
-// ---------------------------------------------------------------------------
-// LearningPlan — full session schedule
-// ---------------------------------------------------------------------------
-
-export const LearningPlanSchema = z.object({
-  topic: z.string(),
-  goal: z.string(),
-  deadline: z.string().nullable().default(null),
-  sessions: z.array(PlanSessionSchema),
-});
-
-export type LearningPlan = z.infer<typeof LearningPlanSchema>;

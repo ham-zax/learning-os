@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import type {
   CatalogConcept,
   CatalogResolution,
@@ -62,7 +62,7 @@ function readTopicManifest(knowledgeRoot: string, manifestPath: string): Catalog
     throw new Error(`${manifestPath}: concepts must be an array`);
   }
 
-  const topicDir = join(knowledgeRoot, topicId);
+  const topicDir = dirname(manifestPath);
   const seen = new Set<string>();
   const concepts = (raw.concepts as RawManifestConcept[])
     .map((entry, index): CatalogConcept => {
@@ -107,6 +107,8 @@ function readTopicManifest(knowledgeRoot: string, manifestPath: string): Catalog
 /** Read-only snapshot of the repository knowledge catalog. No learner state is touched. */
 export function loadKnowledgeCatalog(knowledgeRoot: string): KnowledgeCatalog {
   const topics: CatalogTopic[] = [];
+  const seenTopicIds = new Map<string, string>();
+  const seenConceptIds = new Map<string, string>();
   const entries = readdirSync(knowledgeRoot, { withFileTypes: true }) as Array<{
     name: string;
     isDirectory(): boolean;
@@ -115,7 +117,24 @@ export function loadKnowledgeCatalog(knowledgeRoot: string): KnowledgeCatalog {
     if (!entry.isDirectory()) continue;
     const manifestPath = join(knowledgeRoot, entry.name, "manifest.json");
     if (!existsSync(manifestPath)) continue;
-    topics.push(readTopicManifest(knowledgeRoot, manifestPath));
+    const topic = readTopicManifest(knowledgeRoot, manifestPath);
+    const previousTopic = seenTopicIds.get(topic.topicId);
+    if (previousTopic) {
+      throw new Error(
+        `Duplicate catalog topic ID ${topic.topicId}: ${previousTopic} and ${topic.manifestPath}`,
+      );
+    }
+    seenTopicIds.set(topic.topicId, topic.manifestPath);
+    for (const concept of topic.concepts) {
+      const previousConcept = seenConceptIds.get(concept.conceptId);
+      if (previousConcept) {
+        throw new Error(
+          `Duplicate catalog concept ID ${concept.conceptId}: ${previousConcept} and ${topic.topicId}/${concept.conceptId}`,
+        );
+      }
+      seenConceptIds.set(concept.conceptId, `${topic.topicId}/${concept.conceptId}`);
+    }
+    topics.push(topic);
   }
   return { topics: topics.sort((left, right) => left.topicId.localeCompare(right.topicId)) };
 }

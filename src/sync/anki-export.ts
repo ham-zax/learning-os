@@ -1,9 +1,9 @@
 /**
  * Anki TSV export for tutor concepts.
  *
- * Exports concepts as tab-separated values compatible with Anki's import
- * feature. Each concept becomes a card with front (title) and back (summary).
- * SM-2 state is included as tags.
+ * Exports reusable concept metadata as tab-separated values compatible with
+ * Anki's import feature. Learner progress remains objective-level state in
+ * Learning OS and is intentionally not flattened into concept tags.
  */
 
 import type Database from "better-sqlite3";
@@ -23,7 +23,6 @@ export interface AnkiExportOptions {
   db: Database.Database;
   topicId: string;
   outputPath: string;
-  includeStatus?: boolean; // default true — add status as tag
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -33,18 +32,18 @@ export interface AnkiExportOptions {
  *
  * Format: front\tback\ttags (tab-separated)
  * - front: concept title
- * - back: summary + key points
- * - tags: topic + status + difficulty
+ * - back: source reference and prerequisites when available
+ * - tags: topic + difficulty + concept metadata tags
  *
  * @returns Number of cards exported
  */
 export async function exportToAnki(options: AnkiExportOptions): Promise<number> {
-  const { db, topicId, outputPath, includeStatus = true } = options;
+  const { db, topicId, outputPath } = options;
 
   const concepts = getConceptsByTopic(db, topicId);
   if (concepts.length === 0) return 0;
 
-  const cards: AnkiCard[] = concepts.map((c) => conceptToCard(c, topicId, includeStatus));
+  const cards: AnkiCard[] = concepts.map((c) => conceptToCard(c, topicId));
 
   const tsv = cards
     .map((card) => [
@@ -64,10 +63,9 @@ export async function exportToAnki(options: AnkiExportOptions): Promise<number> 
 export function exportToAnkiString(
   db: Database.Database,
   topicId: string,
-  includeStatus: boolean = true,
 ): string {
   const concepts = getConceptsByTopic(db, topicId);
-  const cards = concepts.map((c) => conceptToCard(c, topicId, includeStatus));
+  const cards = concepts.map((c) => conceptToCard(c, topicId));
 
   return cards
     .map((card) => [
@@ -80,14 +78,8 @@ export function exportToAnkiString(
 
 // ─── Internal ────────────────────────────────────────────────────────────────
 
-function conceptToCard(concept: Concept, topicId: string, includeStatus: boolean): AnkiCard {
-  const tags: string[] = [topicId];
-
-  if (includeStatus) {
-    tags.push(`status::${concept.status}`);
-  }
-
-  tags.push(`difficulty::${concept.difficulty}`);
+function conceptToCard(concept: Concept, topicId: string): AnkiCard {
+  const tags: string[] = [topicId, `difficulty::${concept.difficulty}`];
 
   // Parse JSON fields (DB stores as strings)
   const conceptTags: string[] = Array.isArray(concept.tags) ? concept.tags : safeJsonParse(concept.tags as unknown as string);
@@ -108,7 +100,6 @@ function conceptToCard(concept: Concept, topicId: string, includeStatus: boolean
   if (prerequisites.length > 0) {
     backParts.push(`Prerequisites: ${prerequisites.join(", ")}`);
   }
-  backParts.push(`EF: ${concept.ef.toFixed(2)} | Interval: ${concept.interval}d`);
 
   return {
     front: concept.title,
