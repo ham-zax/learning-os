@@ -307,21 +307,16 @@ async function materializeMissingConcepts(
     }
 
     const conceptId = coverage.suggestedConceptId ?? normalizeAreaKey(coverage.label);
-    const difficulty = await askPositiveInteger(
-      rl,
-      `Curriculum difficulty for ${coverage.label} [1 foundational - 5 advanced]: `,
-    );
-    if (difficulty > 5) throw new Error("Difficulty must be between 1 and 5.");
     const prerequisites = parseAreas(
-      await ask(rl, "Known prerequisite concept IDs (comma-separated, optional): "),
-    ).map((area) => area.conceptId ?? area.label);
+      await ask(rl, "Known prerequisite concepts (comma-separated, optional): "),
+    ).map((area) => area.conceptId ?? normalizeAreaKey(area.label));
     result.push({
       coverageKey: coverage.key,
       topicId,
       topicName,
       conceptId,
       title: coverage.label,
-      difficulty,
+      difficulty: 3,
       prerequisites,
       tags: [],
     });
