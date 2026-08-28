@@ -1,19 +1,20 @@
 /**
- * Coding test drill — timed coding practice with LLM grading.
+ * Coding test drill — timed coding practice with external verification and optional LLM feedback.
  *
- * Selects a coding problem (by id, concept, or random difficulty),
- * tracks elapsed time, submits the solution to the LLM grader, and
- * persists the attempt to the database.
+ * The coding surface never treats source inspection as executable correctness. A compatible
+ * agent may run a real verifier in the local workspace and return A2's VerificationOutput;
+ * legacy descriptive `test_cases` remain explicitly unverified.
  */
 
 import type { Database } from "better-sqlite3";
 import type { LLMClient } from "../llm/client.js";
-import type { GradingResult, CodingSubmission } from "../llm/grader.js";
-import { gradeCodingSolution } from "../llm/grader.js";
+import type { CodingQualitativeFeedback, CodingSubmission } from "../llm/grader.js";
+import { reviewCodingSolutionQualitatively } from "../llm/grader.js";
 import type { CodingProblem } from "./problems.js";
 import { getCodingProblems } from "./problems.js";
 import { getProblem, createLegacyAttempt } from "../db/database.js";
-import type { Problem } from "../db/types.js";
+import { VerificationOutputSchema } from "../db/types.js";
+import type { Problem, VerificationOutput } from "../db/types.js";
 
 /** Minimal row shape accepted by rowToCodingProblem (DB Problem type). */
 type ProblemRow = Problem;
@@ -41,21 +42,45 @@ export interface CodingDrillState {
   timeLimitMs: number;
 }
 
+export interface CodingVerificationRequest {
+  problemId: string;
+  artifact: {
+    language: string;
+    code: string;
+  };
+  verifier:
+    | { kind: "external"; reference: string }
+    | {
+        kind: "unavailable";
+        reason: "descriptive_test_cases" | "no_verification_spec";
+        summary: string;
+      };
+}
+
+export interface CodingVerificationEvidence {
+  /** Reference to the real local verifier/spec used by the execution worker. */
+  verifierReference: string;
+  /** Deterministic result returned by that worker, using A2's stable contract. */
+  output: VerificationOutput;
+}
+
+export interface CodingSubmissionOptions {
+  language?: string;
+  verification?: CodingVerificationEvidence;
+}
+
 export interface CodingDrillResult {
   problemId: string;
-  /** Overall score 0-100. */
-  score: number;
   /** Wall-clock seconds the candidate spent. */
   timeSpentSeconds: number;
   /** Whether the submission finished within the time limit. */
   withinTimeLimit: boolean;
-  breakdown: {
-    correctness: number;
-    efficiency: number;
-    codeQuality: number;
-  };
-  feedback: string;
-  optimalSolution: string;
+  /** Exact handoff an external/local execution worker can act on. */
+  verificationRequest: CodingVerificationRequest;
+  /** Null means executable correctness is not verified. */
+  verificationOutput: VerificationOutput | null;
+  /** Optional LLM commentary; never correctness authority. */
+  qualitativeFeedback: CodingQualitativeFeedback | null;
 }
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -65,7 +90,7 @@ const DEFAULT_LANGUAGE = "typescript";
 
 // ─── Internal helpers ──────────────────────────────────────────────────────
 
-function parseTestCases(raw: Record<string, unknown>[]): {
+function parseDescriptiveTestCases(raw: Record<string, unknown>[]): {
   input: string;
   expectedOutput: string;
 }[] {
@@ -89,7 +114,7 @@ function rowToCodingProblem(row: ProblemRow): CodingProblem {
     description: row.description,
     difficulty: row.difficulty,
     tags,
-    testCases: parseTestCases(testCasesRaw).map((tc, i) => ({
+    testCases: parseDescriptiveTestCases(testCasesRaw).map((tc, i) => ({
       ...tc,
       description: `Test case ${i + 1}`,
     })),
@@ -103,7 +128,74 @@ function pickRandom<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)];
 }
 
+function normalizeVerificationEvidence(
+  evidence: CodingVerificationEvidence | undefined,
+): VerificationOutput | null {
+  if (!evidence) return null;
+
+  const verifierReference = evidence.verifierReference.trim();
+  if (!verifierReference) {
+    throw new Error("Coding verification requires a real verifier reference");
+  }
+
+  const output = VerificationOutputSchema.parse(evidence.output);
+  if (/^(llm|language model|model inspection)\b/i.test(output.basis.trim())) {
+    throw new Error("LLM inspection is not a deterministic coding verification basis");
+  }
+
+  return VerificationOutputSchema.parse({
+    ...output,
+    details: {
+      ...output.details,
+      verifierReference,
+    },
+  });
+}
+
+function formatQualitativeFeedback(feedback: CodingQualitativeFeedback): string {
+  return [
+    `Complexity: ${feedback.complexityAnalysis}`,
+    `Code quality: ${feedback.codeQualityFeedback}`,
+    `Interview feedback: ${feedback.interviewFeedback}`,
+  ].join("\n");
+}
+
 // ─── Public API ────────────────────────────────────────────────────────────
+
+/**
+ * Build the coding-side handoff for a compatible local execution worker.
+ *
+ * `verifierReference` must identify a real executable verifier/spec already known by the
+ * caller (for example, a frozen private assessment reference). Legacy `test_cases` do not
+ * become executable merely because they contain input/output-shaped strings.
+ */
+export function createCodingVerificationRequest(
+  state: CodingDrillState,
+  code: string,
+  language: string = DEFAULT_LANGUAGE,
+  verifierReference?: string,
+): CodingVerificationRequest {
+  const reference = verifierReference?.trim();
+  const verifier: CodingVerificationRequest["verifier"] = reference
+    ? { kind: "external", reference }
+    : state.problem.testCases.length > 0
+      ? {
+          kind: "unavailable",
+          reason: "descriptive_test_cases",
+          summary: "Stored test_cases are descriptive examples, not an executable verifier specification.",
+        }
+      : {
+          kind: "unavailable",
+          reason: "no_verification_spec",
+          summary: "No executable verifier specification is available for this coding problem.",
+        };
+
+  return {
+    problemId: state.problem.id,
+    artifact: { language, code },
+    verifier,
+  };
+}
 
 /**
  * Start a coding drill session.
@@ -179,62 +271,61 @@ export function startCodingDrill(
 }
 
 /**
- * Submit a coding solution for grading.
+ * Submit a coding solution with optional deterministic verification and qualitative review.
  *
- * 1. Computes wall-clock time spent since `state.startedAt`.
- * 2. Sends the submission to the LLM grader.
- * 3. Persists the attempt in the DB.
- * 4. Returns the graded result.
+ * Verification must already have happened in the agent/local repository environment. This
+ * legacy interview path intentionally does not persist VerificationOutput as evidence; B2 will
+ * converge interview attempts onto the frozen challenge/assessment kernel contracts.
  */
 export async function submitCodingSolution(
-  client: LLMClient,
+  client: LLMClient | null,
   db: Database,
   state: CodingDrillState,
   code: string,
-  language?: string,
+  options?: CodingSubmissionOptions,
 ): Promise<CodingDrillResult> {
-  const lang = language ?? DEFAULT_LANGUAGE;
+  const lang = options?.language ?? DEFAULT_LANGUAGE;
   const elapsedMs = Date.now() - state.startedAt;
   const timeSpentSeconds = Math.round(elapsedMs / 1000);
   const withinTimeLimit = elapsedMs <= state.timeLimitMs;
+  const verificationOutput = normalizeVerificationEvidence(options?.verification);
+  const verificationRequest = createCodingVerificationRequest(
+    state,
+    code,
+    lang,
+    options?.verification?.verifierReference,
+  );
 
   const submission: CodingSubmission = {
     problem: {
       title: state.problem.title,
       description: state.problem.description,
-      testCases: state.problem.testCases.map((tc) => ({
-        input: tc.input,
-        expectedOutput: tc.expectedOutput,
-      })),
     },
     code,
     language: lang,
     timeSpentSeconds,
   };
 
-  const grading: GradingResult = await gradeCodingSolution(client, submission);
+  const qualitativeFeedback = client
+    ? await reviewCodingSolutionQualitatively(client, submission)
+    : null;
 
-  // Persist attempt
+  // Legacy persistence retained pending B2 interview convergence. A qualitative LLM review is
+  // stored only as feedback; it does not populate the legacy numeric score or evidence semantics.
   createLegacyAttempt(db, {
     problemId: state.problem.id,
     responseText: code,
-    score: grading.score,
-    feedback: grading.feedback,
+    feedback: qualitativeFeedback ? formatQualitativeFeedback(qualitativeFeedback) : undefined,
     timeSpentSeconds,
   });
 
   return {
     problemId: state.problem.id,
-    score: grading.score,
     timeSpentSeconds,
     withinTimeLimit,
-    breakdown: {
-      correctness: grading.breakdown.correctness,
-      efficiency: grading.breakdown.efficiency,
-      codeQuality: grading.breakdown.codeQuality,
-    },
-    feedback: grading.feedback,
-    optimalSolution: grading.optimalSolution ?? "",
+    verificationRequest,
+    verificationOutput,
+    qualitativeFeedback,
   };
 }
 
@@ -245,28 +336,32 @@ export function formatCodingResult(result: CodingDrillResult): string {
   const lines: string[] = [];
 
   lines.push(`=== Coding Drill Result ===`);
-  lines.push(`Problem:  ${result.problemId}`);
-  lines.push(`Score:    ${result.score}/100`);
+  lines.push(`Problem:      ${result.problemId}`);
   lines.push(
-    `Time:     ${result.timeSpentSeconds}s ${result.withinTimeLimit ? "(within limit)" : "(OVERTIME)"}`,
+    `Time:         ${result.timeSpentSeconds}s ${result.withinTimeLimit ? "(within limit)" : "(OVERTIME)"}`,
   );
-  lines.push("");
 
-  lines.push("--- Breakdown ---");
-  lines.push(`  Correctness:  ${result.breakdown.correctness}/100`);
-  lines.push(`  Efficiency:   ${result.breakdown.efficiency}/100`);
-  lines.push(`  Code Quality: ${result.breakdown.codeQuality}/100`);
-  lines.push("");
-
-  if (result.feedback) {
-    lines.push("--- Feedback ---");
-    lines.push(result.feedback);
-    lines.push("");
+  if (result.verificationOutput) {
+    lines.push(`Verification: ${result.verificationOutput.outcome.toUpperCase()}`);
+    lines.push(`Basis:        ${result.verificationOutput.basis}`);
+    lines.push(`Summary:      ${result.verificationOutput.summary}`);
+  } else {
+    lines.push("Verification: UNVERIFIED");
+    lines.push(`Reason:       ${result.verificationRequest.verifier.kind === "unavailable"
+      ? result.verificationRequest.verifier.summary
+      : "No deterministic verification output was supplied."}`);
   }
 
-  if (result.optimalSolution) {
-    lines.push("--- Optimal Solution ---");
-    lines.push(result.optimalSolution);
+  if (result.qualitativeFeedback) {
+    lines.push("");
+    lines.push("--- Qualitative LLM Feedback (not verification) ---");
+    lines.push(formatQualitativeFeedback(result.qualitativeFeedback));
+
+    if (result.qualitativeFeedback.optimalSolution) {
+      lines.push("");
+      lines.push("--- Suggested Approach ---");
+      lines.push(result.qualitativeFeedback.optimalSolution);
+    }
   }
 
   return lines.join("\n");

@@ -1,5 +1,5 @@
 /**
- * LLM-based grading for coding solutions and system design submissions.
+ * LLM-based qualitative review for coding solutions and grading for system design submissions.
  */
 
 import type { LLMClient } from "./client.js";
@@ -9,24 +9,30 @@ import type { LLMClient } from "./client.js";
 // ---------------------------------------------------------------------------
 
 export interface GradingResult {
-  score: number; // 0-100
+  score: number; // 0-100 (system design only)
   breakdown: {
-    correctness: number; // 0-100
-    efficiency: number; // 0-100
-    codeQuality: number; // 0-100 (coding only)
+    correctness: number;
+    efficiency: number;
+    codeQuality: number;
     clarity: number; // 0-100 (system design only)
     scalability: number; // 0-100 (system design only)
     tradeOffs: number; // 0-100 (system design only)
   };
-  feedback: string; // detailed feedback
-  optimalSolution?: string; // for coding: walkthrough of optimal approach
+  feedback: string;
+  optimalSolution?: string;
+}
+
+export interface CodingQualitativeFeedback {
+  complexityAnalysis: string;
+  codeQualityFeedback: string;
+  interviewFeedback: string;
+  optimalSolution?: string;
 }
 
 export interface CodingSubmission {
   problem: {
     title: string;
     description: string;
-    testCases: { input: string; expectedOutput: string }[];
   };
   code: string;
   language: string;
@@ -91,17 +97,6 @@ function parseGradingJSON(raw: string): GradingResult {
   };
 }
 
-function formatTestCases(
-  testCases: { input: string; expectedOutput: string }[]
-): string {
-  return testCases
-    .map(
-      (tc, i) =>
-        `Test case ${i + 1}:\n  Input:    ${tc.input}\n  Expected: ${tc.expectedOutput}`
-    )
-    .join("\n\n");
-}
-
 function formatRubric(rubric: Record<string, string[]>): string {
   return Object.entries(rubric)
     .map(
@@ -115,16 +110,27 @@ function formatRubric(rubric: Record<string, string[]>): string {
 // Coding grading
 // ---------------------------------------------------------------------------
 
+function parseCodingQualitativeJSON(raw: string): CodingQualitativeFeedback {
+  const cleaned = raw.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/, "");
+  const parsed = JSON.parse(cleaned);
+
+  return {
+    complexityAnalysis: String(parsed.complexityAnalysis ?? ""),
+    codeQualityFeedback: String(parsed.codeQualityFeedback ?? ""),
+    interviewFeedback: String(parsed.interviewFeedback ?? ""),
+    optimalSolution: parsed.optimalSolution
+      ? String(parsed.optimalSolution)
+      : undefined,
+  };
+}
+
 function buildCodingPrompt(submission: CodingSubmission): string {
-  return `Grade the following coding solution.
+  return `Review the following coding solution qualitatively.
 
 ## Problem
 Title: ${submission.problem.title}
 
 ${submission.problem.description}
-
-## Test Cases
-${formatTestCases(submission.problem.testCases)}
 
 ## Candidate's Solution (${submission.language})
 \`\`\`${submission.language}
@@ -133,43 +139,37 @@ ${submission.code}
 
 Time spent: ${submission.timeSpentSeconds} seconds
 
-## Grading Instructions
-1. Check correctness: does the code handle all test cases? Consider edge cases.
-2. Evaluate efficiency: what is the time and space complexity? Is it optimal?
-3. Assess code quality: readability, naming, structure, idiomatic usage of ${submission.language}.
-4. Provide a detailed feedback string covering strengths and weaknesses.
-5. Provide an optimalSolution: a concise walkthrough of the optimal approach (algorithm, complexity, key insight).
+## Review Instructions
+1. Do not decide whether executable behavior is correct and do not claim that tests passed or failed. No code execution result is available in this review.
+2. Analyze apparent time and space complexity, including trade-offs and assumptions.
+3. Review readability, naming, structure, and idiomatic use of ${submission.language}.
+4. Comment on reasoning/interview communication that can be inferred from the submitted code, while keeping the feedback explicitly qualitative.
+5. Provide an optimalSolution: a concise walkthrough of a strong approach (algorithm, complexity, key insight). This is guidance, not verification of the submitted implementation.
 
 Return ONLY a JSON object matching this TypeScript type (no markdown fences, no commentary):
 
 {
-  "score": number,           // overall 0-100
-  "breakdown": {
-    "correctness": number,   // 0-100
-    "efficiency": number,    // 0-100
-    "codeQuality": number,   // 0-100
-    "clarity": 0,
-    "scalability": 0,
-    "tradeOffs": 0
-  },
-  "feedback": string,
+  "complexityAnalysis": string,
+  "codeQualityFeedback": string,
+  "interviewFeedback": string,
   "optimalSolution": string
 }`;
 }
 
-export async function gradeCodingSolution(
+export async function reviewCodingSolutionQualitatively(
   client: LLMClient,
   submission: CodingSubmission
-): Promise<GradingResult> {
+): Promise<CodingQualitativeFeedback> {
   const prompt = buildCodingPrompt(submission);
 
   const raw = await client.complete(prompt, {
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt:
+      "You are a senior technical interviewer providing qualitative code review. Never represent source inspection as execution or verified correctness.",
     temperature: TEMPERATURE,
     maxTokens: 4096,
   });
 
-  return parseGradingJSON(raw);
+  return parseCodingQualitativeJSON(raw);
 }
 
 // ---------------------------------------------------------------------------

@@ -12,7 +12,10 @@ import type { ConceptFile } from "../knowledge/types.js";
 
 // ─── Exported types ────────────────────────────────────────────────────────
 
-export interface TestCase {
+/**
+ * Legacy input/output-shaped example. This is descriptive content, not an executable test spec.
+ */
+export interface DescriptiveTestCase {
   input: string;
   expectedOutput: string;
   description?: string;
@@ -24,7 +27,8 @@ export interface CodingProblem {
   description: string;
   difficulty: number;
   tags: string[];
-  testCases: TestCase[];
+  /** Legacy descriptive examples; never sufficient for deterministic verification by themselves. */
+  testCases: DescriptiveTestCase[];
   conceptId: string | null;
   source: string | null;
   externalId: string | null;
@@ -57,7 +61,7 @@ function isSystemDesignProblem(p: Problem): boolean {
   return p.type === "system-design";
 }
 
-function parseTestCases(raw: Record<string, unknown>[]): TestCase[] {
+function parseDescriptiveTestCases(raw: Record<string, unknown>[]): DescriptiveTestCase[] {
   return raw.map((tc) => ({
     input: String(tc.input ?? ""),
     expectedOutput: String(tc.expectedOutput ?? tc.expected_output ?? ""),
@@ -96,7 +100,7 @@ function rowToCodingProblem(row: Problem): CodingProblem {
     description: row.description,
     difficulty: row.difficulty,
     tags: parseTags(row.tags),
-    testCases: parseTestCases(row.test_cases as Record<string, unknown>[]),
+    testCases: parseDescriptiveTestCases(row.test_cases as Record<string, unknown>[]),
     conceptId: row.concept_id,
     source: row.source,
     externalId: row.external_id,
@@ -188,8 +192,8 @@ function slugify(text: string): string {
  * Generate a coding problem from a concept file.
  *
  * Derives the problem title and description from the concept summary and key
- * points.  Generates test cases from the concept's practice questions and key
- * points so the problem is grounded in the material.
+ * points. Generates descriptive input/output-shaped examples from practice questions
+ * and key points. These examples are not executable verification specifications.
  */
 export function generateCodingProblem(concept: ConceptFile): CodingProblem {
   const { frontmatter, summary, keyPoints, deepDive, practiceQuestions } = concept;
@@ -208,11 +212,11 @@ export function generateCodingProblem(concept: ConceptFile): CodingProblem {
     deepDive.slice(0, 500),
   ].join("\n");
 
-  // Build test cases from practice questions and key points
-  const testCases: TestCase[] = [];
+  // Build descriptive examples from practice questions and key points.
+  const descriptiveCases: DescriptiveTestCase[] = [];
 
   if (practiceQuestions.length > 0) {
-    testCases.push(
+    descriptiveCases.push(
       ...practiceQuestions.slice(0, 3).map((pq, i) => ({
         input: `scenario_${i + 1}`,
         expectedOutput: `(solution for: ${pq.slice(0, 80)})`,
@@ -221,15 +225,15 @@ export function generateCodingProblem(concept: ConceptFile): CodingProblem {
     );
   }
 
-  // Augment with key-point-derived test cases when practice questions are sparse
-  if (testCases.length < 3 && keyPoints.length > 0) {
-    const remaining = 3 - testCases.length;
+  // Augment with key-point-derived examples when practice questions are sparse.
+  if (descriptiveCases.length < 3 && keyPoints.length > 0) {
+    const remaining = 3 - descriptiveCases.length;
     const kpCases = keyPoints.slice(0, remaining).map((kp, i) => ({
-      input: `key_point_${testCases.length + i + 1}`,
+      input: `key_point_${descriptiveCases.length + i + 1}`,
       expectedOutput: `(demonstrate understanding of: ${kp.slice(0, 80)})`,
       description: `Implement a solution that demonstrates: ${kp}`,
     }));
-    testCases.push(...kpCases);
+    descriptiveCases.push(...kpCases);
   }
 
   return {
@@ -238,7 +242,7 @@ export function generateCodingProblem(concept: ConceptFile): CodingProblem {
     description,
     difficulty: frontmatter.difficulty,
     tags: [...frontmatter.tags],
-    testCases,
+    testCases: descriptiveCases,
     conceptId: frontmatter.id,
     source: "generated",
     externalId: null,
