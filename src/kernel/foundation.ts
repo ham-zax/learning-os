@@ -1019,3 +1019,27 @@ export function resumeSession(db: Database.Database, sessionId: number): Resumed
     unresolvedAssessmentAttempts: unresolved.assessment,
   };
 }
+
+export function listResumableSessions(
+  db: Database.Database,
+  topicId?: string,
+): ResumedSession[] {
+  const rows = topicId === undefined
+    ? db
+        .prepare(
+          `SELECT id FROM sessions
+           WHERE phase <> 'complete'
+           ORDER BY COALESCE(started_at, '') DESC, id DESC`,
+        )
+        .all()
+    : db
+        .prepare(
+          `SELECT id FROM sessions
+           WHERE topic_id = ? AND phase <> 'complete'
+           ORDER BY COALESCE(started_at, '') DESC, id DESC`,
+        )
+        .all(topicId);
+  return (rows as Array<{ id: number }>)
+    .map((row) => resumeSession(db, row.id))
+    .filter((session) => session.phase !== "complete");
+}

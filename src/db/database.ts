@@ -7,7 +7,12 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
-import { AttemptSchema, ReviewSchema, SessionSchema } from "./types.js";
+import {
+  AttemptSchema,
+  GoalObjectiveSchema,
+  ReviewSchema,
+  SessionSchema,
+} from "./types.js";
 import type {
   Topic,
   Concept,
@@ -18,9 +23,12 @@ import type {
   Problem,
   Attempt,
   DeliveryContext,
+  GoalObjective,
+  GoalImportance,
+  GoalTargetReadiness,
 } from "./types.js";
 
-const CURRENT_VERSION = 6;
+const CURRENT_VERSION = 7;
 
 // ─── Schema DDL ──────────────────────────────────────────────────────────────
 
@@ -1003,6 +1011,32 @@ const migrations: Migration[] = [
       })();
     },
   },
+  {
+    version: 7,
+    up: (db) => {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE goal_objectives (
+            goal_id            TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            objective_id       TEXT NOT NULL REFERENCES learning_objectives(id) ON DELETE CASCADE,
+            is_active          INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+            importance         TEXT NOT NULL CHECK (importance IN ('core', 'important', 'supporting')),
+            target_readiness   TEXT NOT NULL CHECK (target_readiness IN ('guided', 'independent')),
+            require_transfer   INTEGER NOT NULL DEFAULT 0 CHECK (require_transfer IN (0, 1)),
+            require_durability INTEGER NOT NULL DEFAULT 0 CHECK (require_durability IN (0, 1)),
+            created_at         TEXT NOT NULL,
+            updated_at         TEXT NOT NULL,
+            PRIMARY KEY(goal_id, objective_id)
+          );
+
+          CREATE INDEX idx_goal_objectives_active
+            ON goal_objectives(goal_id, is_active, importance, objective_id);
+          CREATE INDEX idx_goal_objectives_objective
+            ON goal_objectives(objective_id, goal_id);
+        `);
+      })();
+    },
+  },
 ];
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -1088,6 +1122,104 @@ export function updateTopic(
   if (entries.length === 0) return;
   const sets = entries.map(([k]) => `${k} = @${k}`).join(", ");
   db.prepare(`UPDATE topics SET ${sets} WHERE id = @id`).run({ id, ...Object.fromEntries(entries) });
+}
+
+// ─── CRUD: Goal objectives ─────────────────────────────────────────────────
+
+export interface SetGoalObjectiveInput {
+  goalId: string;
+  objectiveId: string;
+  isActive?: boolean;
+  importance?: GoalImportance;
+  targetReadiness?: GoalTargetReadiness;
+  requireTransfer?: boolean;
+  requireDurability?: boolean;
+}
+
+export function setGoalObjective(
+  db: Database.Database,
+  input: SetGoalObjectiveInput,
+): GoalObjective {
+  if (!getTopic(db, input.goalId)) {
+    throw new Error(`Goal topic not found: ${input.goalId}`);
+  }
+
+  const objectiveExists = db
+    .prepare(`SELECT 1 FROM learning_objectives WHERE id = ?`)
+    .get(input.objectiveId);
+  if (!objectiveExists) {
+    throw new Error(`Learning objective not found: ${input.objectiveId}`);
+  }
+
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO goal_objectives (
+       goal_id,
+       objective_id,
+       is_active,
+       importance,
+       target_readiness,
+       require_transfer,
+       require_durability,
+       created_at,
+       updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(goal_id, objective_id) DO UPDATE SET
+       is_active = excluded.is_active,
+       importance = excluded.importance,
+       target_readiness = excluded.target_readiness,
+       require_transfer = excluded.require_transfer,
+       require_durability = excluded.require_durability,
+       updated_at = excluded.updated_at`,
+  ).run(
+    input.goalId,
+    input.objectiveId,
+    input.isActive === false ? 0 : 1,
+    input.importance ?? "important",
+    input.targetReadiness ?? "independent",
+    input.requireTransfer ? 1 : 0,
+    input.requireDurability ? 1 : 0,
+    now,
+    now,
+  );
+
+  return getGoalObjective(db, input.goalId, input.objectiveId)!;
+}
+
+export function getGoalObjective(
+  db: Database.Database,
+  goalId: string,
+  objectiveId: string,
+): GoalObjective | undefined {
+  const row = db
+    .prepare(`SELECT * FROM goal_objectives WHERE goal_id = ? AND objective_id = ?`)
+    .get(goalId, objectiveId);
+  return row === undefined ? undefined : GoalObjectiveSchema.parse(row);
+}
+
+export function getGoalObjectives(
+  db: Database.Database,
+  goalId: string,
+  options: { includeInactive?: boolean } = {},
+): GoalObjective[] {
+  const rows = options.includeInactive
+    ? db
+        .prepare(
+          `SELECT * FROM goal_objectives
+           WHERE goal_id = ?
+           ORDER BY CASE importance WHEN 'core' THEN 0 WHEN 'important' THEN 1 ELSE 2 END,
+                    objective_id`,
+        )
+        .all(goalId)
+    : db
+        .prepare(
+          `SELECT * FROM goal_objectives
+           WHERE goal_id = ? AND is_active = 1
+           ORDER BY CASE importance WHEN 'core' THEN 0 WHEN 'important' THEN 1 ELSE 2 END,
+                    objective_id`,
+        )
+        .all(goalId);
+  return GoalObjectiveSchema.array().parse(rows);
 }
 
 // ─── CRUD: Concepts ───────────────────────────────────────────────────────

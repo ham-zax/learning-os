@@ -9,6 +9,8 @@
  *   tutor init <topic> <file>  Initialize a topic from a manifest JSON
  *   tutor gaps                 Show skill gaps from job-hunter
  *   tutor interview <topic>    Start interview drill
+ *   tutor goal <topic>         Configure/list active goal objectives
+ *   tutor today <topic>        Build today's evidence-driven mission
  *   tutor due                  Show due concepts
  *   tutor stats                Show topic summary
  *   tutor plan <topic>         Generate learning plan
@@ -42,6 +44,7 @@ import {
 } from "./ingest/orchestrator.js";
 import { generateLearningPlan } from "./plan/planner.js";
 import { generateEnhancedPlan } from "./plan/nexus-planner.js";
+import { getTodayMission } from "./plan/today.js";
 import { searchConcepts, findRelatedConcepts } from "./knowledge/search.js";
 import { exportToAnki } from "./sync/anki-export.js";
 import { syncToObsidian } from "./sync/obsidian-sync.js";
@@ -60,6 +63,9 @@ import {
   getConceptsByTopic,
   createTopic,
   listTopics,
+  updateTopic,
+  getGoalObjectives,
+  setGoalObjective,
 } from "./db/database.js";
 import {
   completeSessionFeedback,
@@ -79,7 +85,7 @@ import { generateTeachBackSession } from "./session/modes/teach-back.js";
 import { generateQuizBatch } from "./session/modes/quiz.js";
 
 import type { ConceptMap, ConceptProposal, ConceptFile } from "./knowledge/types.js";
-import type { DeliveryContext } from "./db/types.js";
+import { DeliveryContext, GoalImportance, GoalTargetReadiness } from "./db/types.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -901,6 +907,221 @@ program
     }
   });
 
+// tutor goal <topic> [objective]
+program
+  .command("goal")
+  .description("Configure or list objective requirements for a topic-backed goal")
+  .argument("<topic>", "Goal/topic ID")
+  .argument("[objective]", "Learning objective ID to configure")
+  .option("--importance <level>", "Importance: core, important, supporting")
+  .option("--target <readiness>", "Target readiness: guided or independent")
+  .option("--transfer", "Require demonstrated transfer")
+  .option("--durability", "Require demonstrated delayed retrieval")
+  .option("--inactive", "Keep the objective configured but inactive")
+  .action(
+    async (
+      topic: string,
+      objective: string | undefined,
+      opts: {
+        importance?: string;
+        target?: string;
+        transfer?: boolean;
+        durability?: boolean;
+        inactive?: boolean;
+      },
+    ) => {
+      const db = createDatabase(DB_PATH);
+      try {
+        const goalId = topic.toLowerCase().replace(/\s+/g, "-");
+        const topicRow = getTopic(db, goalId);
+        if (!topicRow) {
+          throw new Error(`Goal topic not found: ${goalId}`);
+        }
+
+        if (objective) {
+          const importance = opts.importance === undefined
+            ? undefined
+            : GoalImportance.parse(opts.importance);
+          const targetReadiness = opts.target === undefined
+            ? undefined
+            : GoalTargetReadiness.parse(opts.target);
+          const configured = setGoalObjective(db, {
+            goalId,
+            objectiveId: objective,
+            isActive: !opts.inactive,
+            importance,
+            targetReadiness,
+            requireTransfer: opts.transfer === true,
+            requireDurability: opts.durability === true,
+          });
+          success(
+            `${configured.objective_id} → ${configured.importance}, target ${configured.target_readiness}` +
+              `${configured.require_transfer ? ", transfer" : ""}` +
+              `${configured.require_durability ? ", durability" : ""}` +
+              `${configured.is_active ? "" : ", inactive"}`,
+          );
+          return;
+        }
+
+        header(`Goal: ${topicRow.name}`);
+        console.log(`  Goal ID:  ${topicRow.id}`);
+        console.log(`  Goal:     ${topicRow.goal ?? "(not set)"}`);
+        console.log(`  Deadline: ${topicRow.deadline ?? "(none)"}`);
+
+        const configured = getGoalObjectives(db, goalId, { includeInactive: true });
+        if (configured.length > 0) {
+          console.log();
+          console.log(chalk.bold("  Configured objectives:"));
+          for (const item of configured) {
+            console.log(
+              `  ${item.objective_id}  ${item.importance}/${item.target_readiness}` +
+                `${item.require_transfer ? " transfer" : ""}` +
+                `${item.require_durability ? " durability" : ""}` +
+                `${item.is_active ? "" : " inactive"}`,
+            );
+          }
+        } else {
+          warn("\n  No goal objectives configured yet.");
+        }
+
+        const available = db
+          .prepare(
+            `SELECT objective.id, objective.capability_id, concept.title
+             FROM learning_objectives objective
+             JOIN concepts concept ON concept.id = objective.concept_id
+             WHERE concept.topic_id = ?
+             ORDER BY concept.title, objective.capability_id`,
+          )
+          .all(goalId) as Array<{ id: string; capability_id: string; title: string }>;
+        if (available.length > 0) {
+          console.log();
+          console.log(chalk.bold("  Topic-local objectives:"));
+          for (const item of available) {
+            console.log(`  ${item.id}  ${item.capability_id}  ${item.title}`);
+          }
+        } else {
+          warn("\n  No learning objectives exist yet; run learning/interview work first.");
+        }
+      } catch (err) {
+        error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      } finally {
+        db.close();
+      }
+    },
+  );
+
+// tutor today <topic>
+program
+  .command("today")
+  .description("Build today's bounded evidence-driven mission for a topic-backed goal")
+  .argument("<topic>", "Goal/topic ID")
+  .option("-m, --minutes <n>", "Available minutes")
+  .option("--context <context>", "Override the main delivery context")
+  .option("--transfer-context <context>", "Override the transfer delivery context")
+  .option(
+    "--retest <weakness-key>",
+    "Make a resolved weakness eligible for retest today (repeatable)",
+    (value: string, previous: string[]) => [...previous, value],
+    [] as string[],
+  )
+  .action(
+    async (
+      topic: string,
+      opts: {
+        minutes?: string;
+        context?: string;
+        transferContext?: string;
+        retest: string[];
+      },
+    ) => {
+      const db = createDatabase(DB_PATH);
+      try {
+        const goalId = topic.toLowerCase().replace(/\s+/g, "-");
+        const topicRow = getTopic(db, goalId);
+        if (!topicRow) {
+          throw new Error(`Goal topic not found: ${goalId}`);
+        }
+        const configuredMinutes = opts.minutes
+          ? Number.parseInt(opts.minutes, 10)
+          : loadConfig().daily_minutes;
+        if (!Number.isInteger(configuredMinutes) || configuredMinutes <= 0) {
+          throw new Error("Available minutes must be a positive integer");
+        }
+        const mainContext = opts.context === undefined
+          ? undefined
+          : DeliveryContext.parse(opts.context);
+        const transferContext = opts.transferContext === undefined
+          ? undefined
+          : DeliveryContext.parse(opts.transferContext);
+        const mission = getTodayMission(db, {
+          goalId,
+          availableMinutes: configuredMinutes,
+          now: new Date().toISOString(),
+          mainDeliveryContext: mainContext,
+          transferDeliveryContext: transferContext,
+          retestEligibleWeaknessKeys: opts.retest,
+        });
+
+        header(`Today: ${topicRow.name}`);
+        if (mission.goal) console.log(`  Goal: ${mission.goal}`);
+        if (mission.deadlineAt) console.log(`  Deadline: ${mission.deadlineAt}`);
+        console.log(
+          `  Planned: ${mission.plannedMinutes}/${mission.availableMinutes} min` +
+            (mission.unallocatedMinutes > 0
+              ? ` (${mission.unallocatedMinutes} min intentionally unallocated)`
+              : ""),
+        );
+
+        if (mission.items.length === 0) {
+          const active = getGoalObjectives(db, goalId);
+          if (active.length === 0) {
+            warn(
+              "\n  No active goal objectives. Configure one with `tutor goal <topic> <objective>`.",
+            );
+          } else if (mission.blocked.length > 0) {
+            warn("\n  No eligible mission item; active objectives are prerequisite-blocked.");
+          } else {
+            success("\n  No actionable goal work is due or currently below target.");
+          }
+        } else {
+          console.log();
+          mission.items.forEach((item, index) => {
+            const label = item.kind.toUpperCase().padEnd(9);
+            console.log(
+              chalk.bold(
+                `  ${index + 1}. ${label} ${String(item.minutes).padStart(2)}m  ${item.objectiveId}`,
+              ),
+            );
+            console.log(
+              chalk.dim(
+                `     ${item.intent.capabilityId} / ${item.intent.taskForm} / ` +
+                  `${item.intent.deliveryContext} / ${item.intent.novelty}`,
+              ),
+            );
+            console.log(`     ${item.reason}`);
+            if (item.intent.requiresChangedSurface) {
+              console.log(chalk.dim("     Requires a materially changed surface before freezing."));
+            }
+          });
+        }
+
+        if (mission.blocked.length > 0) {
+          console.log();
+          console.log(chalk.bold("  Blocked candidates:"));
+          for (const item of mission.blocked) {
+            console.log(`  ${item.objectiveId}: ${item.blockers.join("; ")}`);
+          }
+        }
+      } catch (err) {
+        error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      } finally {
+        db.close();
+      }
+    },
+  );
+
 // tutor due
 program
   .command("due")
@@ -1037,6 +1258,10 @@ program
         deadline: opts.deadline,
         dailyMinutes: config.daily_minutes,
         llmClient: llm,
+      });
+      updateTopic(db, topicId, {
+        goal: opts.goal,
+        deadline: opts.deadline ?? null,
       });
 
       const plan = result.plan;

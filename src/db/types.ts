@@ -98,6 +98,12 @@ export type ExposureType = z.infer<typeof ExposureType>;
 export const Readiness = z.enum(["unknown", "exposed", "guided", "independent"]);
 export type Readiness = z.infer<typeof Readiness>;
 
+export const GoalImportance = z.enum(["core", "important", "supporting"]);
+export type GoalImportance = z.infer<typeof GoalImportance>;
+
+export const GoalTargetReadiness = z.enum(["guided", "independent"]);
+export type GoalTargetReadiness = z.infer<typeof GoalTargetReadiness>;
+
 export const TransferState = z.enum([
   "untested",
   "not_demonstrated",
@@ -333,6 +339,19 @@ export const LearningObjectiveSchema = z.object({
   updated_at: z.string(),
 });
 export type LearningObjective = z.infer<typeof LearningObjectiveSchema>;
+
+export const GoalObjectiveSchema = z.object({
+  goal_id: z.string(),
+  objective_id: z.string(),
+  is_active: sqliteBoolean,
+  importance: GoalImportance,
+  target_readiness: GoalTargetReadiness,
+  require_transfer: sqliteBoolean,
+  require_durability: sqliteBoolean,
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export type GoalObjective = z.infer<typeof GoalObjectiveSchema>;
 
 export const ObjectiveProjectionSchema = z.object({
   objective_id: z.string(),
@@ -636,6 +655,7 @@ export const schemas = {
   concepts: ConceptSchema,
   capabilities: CapabilitySchema,
   learning_objectives: LearningObjectiveSchema,
+  goal_objectives: GoalObjectiveSchema,
   objective_projections: ObjectiveProjectionSchema,
   sessions: SessionSchema,
   reviews: ReviewSchema,

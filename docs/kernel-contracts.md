@@ -69,7 +69,7 @@ Do not persist authoritative learner state or goal-specific priority on this tab
 
 ### `goal_objectives`
 
-Goal-specific requirements and priority for an objective. The physical `goal_id` owner must be selected before `goal_objectives` is implemented; it is not a prerequisite to Phase 0 upstream integration. Existing topic goal/deadline fields may remain legacy planning inputs until that ownership decision is made.
+Goal-specific requirements and priority for an objective. In V1, `goal_id` is `topics.id`: the topic already owns the goal description, deadline, and session container, so a second goals table would duplicate ownership. `goal_objectives.goal_id` therefore references `topics(id)`. The association does not require the objective's concept to belong to that same topic; one objective may serve multiple topic-backed goals.
 
 | Column | Type | Rule |
 | --- | --- | --- |
@@ -741,6 +741,8 @@ Every selected item must have an explainable reason traceable to durable state.
 The protocol is transport- and provider-neutral. ChatGPT is the preferred V1 interactive teacher, but the kernel must not depend on ChatGPT-specific conversation state, memory, tool transcripts, or identifiers. Codex, OpenCode, AGY, or another compatible agent may replace the teacher by using the same operations and durable state.
 
 Use one active teacher/orchestrator at a time in V1. Do not introduce a network service, plugin framework, or multi-agent router solely for portability; the stable kernel contract is the portability boundary.
+
+`src/teacher.ts::createTeacherKernel(db)` is the V1 in-process adapter. It binds the provider-neutral operations below to one database handle without storing provider conversation state. `listResumableSessions(topicId?)` lets a replacement teacher discover unfinished sessions before calling `resumeSession(sessionId)`; discovery does not depend on remembered chat identifiers.
 
 Optional agent/model provenance may be recorded for audit, but it cannot alter evidence interpretation, projection rules, scheduler semantics, or resume correctness.
 

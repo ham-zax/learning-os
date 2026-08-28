@@ -521,6 +521,7 @@ Do not add UI/product layers until repeated real sessions expose a concrete need
 ## Resolved design decisions
 
 - Use a small extensible capability registry and instantiate objectives sparsely.
+- Use `topics.id` as the V1 `goal_id` owner; `goal_objectives` stores goal-specific objective activation and requirements without introducing a second goals subsystem, and an objective may be linked to more than one topic-backed goal.
 - Treat append-only evidence as authoritative; persisted proficiency/weakness summaries are rebuildable projection data.
 - Keep explicit misconception records because they carry semantic meaning that broad weakness labels do not.
 - Insert `ReviewRatingMapper` between pedagogical evidence and FSRS.
