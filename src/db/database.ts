@@ -1081,7 +1081,18 @@ export function createDatabase(dbPath: string): Database.Database {
     mkdirSync(dirname(dbPath), { recursive: true });
   }
 
-  const db = new Database(dbPath);
+  let db: Database.Database;
+  try {
+    db = new Database(dbPath);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("Could not locate the bindings file") || message.includes("better_sqlite3.node")) {
+      throw new Error(
+        "Learning OS could not load the better-sqlite3 native binding. Reinstall dependencies with lifecycle scripts enabled (run `npm ci` from the repository root).",
+      );
+    }
+    throw err;
+  }
 
   // Performance pragmas
   db.pragma("journal_mode = WAL");

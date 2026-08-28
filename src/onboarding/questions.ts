@@ -25,7 +25,6 @@ function materialRequirementAreas(intake: NormalizedOnboardingIntake): IntakeAre
     ...intake.stack,
     ...intake.mustCover,
     ...intake.weakAreas,
-    ...intake.strengths,
     ...required,
   ];
 }
@@ -115,14 +114,22 @@ export function planInformationNeeds(
   if (
     !intake.availability ||
     (intake.availability.minutesPerDay === undefined &&
-      intake.availability.minutesPerWeek === undefined)
+      intake.availability.minutesPerWeek === undefined) ||
+    (intake.availability.minutesPerDay !== undefined &&
+      intake.availability.minutesPerWeek === undefined &&
+      intake.availability.daysPerWeek === undefined)
   ) {
     addNeed(needs, {
       code: "time_budget",
       subject: null,
       blocking: true,
       changes: ["schedule", "coverage"],
-      reason: "Available study time is required to decide what can fit before the target date.",
+      reason:
+        intake.availability?.minutesPerDay !== undefined &&
+        intake.availability.minutesPerWeek === undefined &&
+        intake.availability.daysPerWeek === undefined
+          ? "Study days per week are required to turn the daily budget into weekly capacity without assuming seven days."
+          : "Available study time is required to decide what can fit before the target date.",
     });
   }
 
@@ -156,7 +163,9 @@ export function planInformationNeeds(
         reason:
           resolution.kind === "topic"
             ? `The existing ${resolution.topic.topicName} library is broader than one objective; the relevant concepts must be identified.`
-            : "The area maps to multiple existing concepts and needs an explicit concept choice.",
+            : resolution.concepts.length === 1
+              ? `A likely existing concept (${resolution.concepts[0].title}) matches this wording; confirm whether it is the intended scope.`
+              : "The area maps to multiple existing concepts and needs an explicit concept choice.",
       });
     }
   }
@@ -178,9 +187,20 @@ export function planInformationNeeds(
     [...intake.mustCover, ...jdRequirements.filter((claim) => claim.importance !== "supporting").map((claim) => claim.area)]
       .map((area) => resolutionKey(catalog, area)),
   );
+  const strategyRelevantKeys = new Set(
+    [
+      ...intake.stack,
+      ...intake.mustCover,
+      ...intake.currentStudyPlan,
+      ...intake.sourceClaims
+        .filter((claim) => claim.kind === "requirement" || claim.kind === "coverage")
+        .map((claim) => claim.area),
+    ].map((area) => resolutionKey(catalog, area)),
+  );
   for (const area of intake.existingExperience) {
     if (area.depth) continue;
     const key = resolutionKey(catalog, area);
+    if (!strategyRelevantKeys.has(key)) continue;
     addNeed(needs, {
       code: "experience_depth",
       subject: area.label,
@@ -192,6 +212,7 @@ export function planInformationNeeds(
   for (const claim of intake.sourceClaims) {
     if (claim.source !== "resume" || claim.kind !== "experience" || claim.experienceDepth) continue;
     const key = resolutionKey(catalog, claim.area);
+    if (!strategyRelevantKeys.has(key)) continue;
     addNeed(needs, {
       code: "experience_depth",
       subject: claim.area.label,

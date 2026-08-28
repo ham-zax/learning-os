@@ -126,6 +126,26 @@ function candidateFor(
   return candidate;
 }
 
+function annotateCandidate(
+  target: Map<string, Candidate>,
+  catalog: KnowledgeCatalog,
+  area: IntakeArea,
+  signal: Extract<CandidateSignal, "strength" | "experience">,
+  provenance: string,
+  rationale: string,
+  experienceDepth?: ExperienceDepth,
+): Candidate | null {
+  const resolution = resolveCatalogArea(catalog, area);
+  const candidate = target.get(resolutionKey(resolution, area));
+  if (!candidate) return null;
+  candidate.signals.add(signal);
+  for (const capability of area.capabilities ?? []) candidate.capabilities.add(capability);
+  if (experienceDepth) candidate.experienceDepths.add(experienceDepth);
+  candidate.provenance.add(provenance);
+  candidate.rationale.add(rationale);
+  return candidate;
+}
+
 function collectCandidates(
   intake: NormalizedOnboardingIntake,
   catalog: KnowledgeCatalog,
@@ -140,46 +160,22 @@ function collectCandidates(
   for (const area of intake.weakAreas) {
     candidateFor(candidates, catalog, area, "weakness", "important", "user:weakness", "Learner reports weakness here.");
   }
-  for (const area of intake.strengths) {
-    candidateFor(candidates, catalog, area, "strength", "important", "user:strength", "Learner reports existing strength.");
-  }
-  for (const area of intake.existingExperience) {
-    const candidate = candidateFor(
-      candidates,
-      catalog,
-      area,
-      "experience",
-      "supporting",
-      "user:experience",
-      "Learner reports prior experience; this is exposure context, not mastery evidence.",
-      area.depth,
-    );
-    if (area.years !== undefined) candidate.provenance.add(`user:experience-years:${area.years}`);
-  }
   for (const area of intake.currentStudyPlan) {
     candidateFor(candidates, catalog, area, "study_plan", "supporting", "study-plan:coverage", "Already present in the learner's study plan.");
   }
 
   for (const claim of intake.sourceClaims) {
+    if (["exclusion", "strength", "experience"].includes(claim.kind)) continue;
     const importance: ProposalImportance =
-      claim.kind === "requirement"
+      claim.kind === "requirement" || claim.kind === "coverage"
         ? claim.importance ?? "important"
-        : claim.kind === "coverage"
-          ? claim.importance ?? "important"
-          : claim.kind === "weakness" || claim.kind === "strength"
-            ? "important"
-            : "supporting";
-    if (claim.kind === "exclusion") continue;
+        : "important";
     const signal: CandidateSignal =
       claim.kind === "requirement"
         ? "requirement"
         : claim.kind === "coverage"
           ? "coverage"
-          : claim.kind === "weakness"
-            ? "weakness"
-            : claim.kind === "strength"
-              ? "strength"
-              : "experience";
+          : "weakness";
     candidateFor(
       candidates,
       catalog,
@@ -189,9 +185,44 @@ function collectCandidates(
       `${claim.source}:${claim.kind}`,
       claim.kind === "requirement"
         ? "Required by target material; this changes coverage/importance but says nothing about learner competence."
-        : claim.kind === "experience"
-          ? "Source reports prior exposure; no readiness, transfer, or durability is inferred."
-          : `Structured ${claim.kind} claim from ${claim.source.replace(/_/g, " ")}.`,
+        : `Structured ${claim.kind} claim from ${claim.source.replace(/_/g, " ")}.`,
+      claim.experienceDepth,
+    );
+  }
+
+  for (const area of intake.strengths) {
+    annotateCandidate(
+      candidates,
+      catalog,
+      area,
+      "strength",
+      "user:strength",
+      "Learner reports existing strength; use this only to choose starting strategy for already relevant coverage.",
+    );
+  }
+  for (const area of intake.existingExperience) {
+    const candidate = annotateCandidate(
+      candidates,
+      catalog,
+      area,
+      "experience",
+      "user:experience",
+      "Learner reports prior experience; this is exposure context for already relevant coverage, not mastery evidence.",
+      area.depth,
+    );
+    if (candidate && area.years !== undefined) candidate.provenance.add(`user:experience-years:${area.years}`);
+  }
+  for (const claim of intake.sourceClaims) {
+    if (claim.kind !== "strength" && claim.kind !== "experience") continue;
+    annotateCandidate(
+      candidates,
+      catalog,
+      claim.area,
+      claim.kind,
+      `${claim.source}:${claim.kind}`,
+      claim.kind === "experience"
+        ? "Source reports prior exposure for already relevant coverage; no readiness, transfer, or durability is inferred."
+        : `Structured strength claim from ${claim.source.replace(/_/g, " ")} informs starting strategy only when the area is already in scope.`,
       claim.experienceDepth,
     );
   }
@@ -262,8 +293,11 @@ function weeklyMinutes(intake: NormalizedOnboardingIntake): number {
   if (intake.availability.minutesPerWeek !== undefined) {
     return intake.availability.minutesPerWeek;
   }
-  if (intake.availability.minutesPerDay !== undefined) {
-    return intake.availability.minutesPerDay * (intake.availability.daysPerWeek ?? 7);
+  if (
+    intake.availability.minutesPerDay !== undefined &&
+    intake.availability.daysPerWeek !== undefined
+  ) {
+    return intake.availability.minutesPerDay * intake.availability.daysPerWeek;
   }
   return 0;
 }
@@ -490,16 +524,25 @@ function applyTimeBudget(
   return result;
 }
 
-function diagnosticKind(objective: ObjectiveProposal): DiagnosticKind {
+function diagnosticKind(
+  objective: ObjectiveProposal,
+  coverage: CurriculumCoverageProposal | undefined,
+): DiagnosticKind {
   if (objective.strategy === "transfer_practice") return "transfer_check";
   if (objective.strategy === "refresh") return "refresh_check";
   if (objective.strategy === "diagnose_first") {
     return objective.competenceAssumption === "exposure_claimed" ? "strength_check" : "baseline";
   }
-  return objective.competenceAssumption === "weakness_claimed" ? "prerequisite_check" : "baseline";
+  return objective.competenceAssumption === "weakness_claimed" && (coverage?.prerequisites.length ?? 0) > 0
+    ? "prerequisite_check"
+    : "baseline";
 }
 
-function diagnosticsFor(objectives: ObjectiveProposal[]): DiagnosticProposal[] {
+function diagnosticsFor(
+  objectives: ObjectiveProposal[],
+  coverage: readonly CurriculumCoverageProposal[],
+): DiagnosticProposal[] {
+  const coverageByKey = new Map(coverage.map((item) => [item.key, item] as const));
   return objectives
     .filter(
       (objective) =>
@@ -508,15 +551,20 @@ function diagnosticsFor(objectives: ObjectiveProposal[]): DiagnosticProposal[] {
         objective.strategy === "refresh" ||
         objective.strategy === "transfer_practice",
     )
-    .map((objective) => ({
-      objectiveKey: objective.key,
-      kind: diagnosticKind(objective),
-      evidenceRequired: true as const,
-      reason:
-        objective.strategy === "learn"
-          ? "Confirm the prerequisite/foundation gap before spending acquisition time."
-          : "Self-report, resume, and requirement claims are planning signals only; use an evidence-producing diagnostic before strong starting assumptions.",
-    }))
+    .map((objective) => {
+      const kind = diagnosticKind(objective, coverageByKey.get(objective.conceptKey));
+      return {
+        objectiveKey: objective.key,
+        kind,
+        evidenceRequired: true as const,
+        reason:
+          kind === "prerequisite_check"
+            ? "Confirm the known prerequisite/foundation gap before spending acquisition time."
+            : objective.strategy === "learn"
+              ? "Establish a baseline before acquisition work; self-reported weakness is not itself evidence."
+              : "Self-report, resume, and requirement claims are planning signals only; use an evidence-producing diagnostic before strong starting assumptions.",
+      };
+    })
     .sort((left, right) => left.objectiveKey.localeCompare(right.objectiveKey));
 }
 
@@ -645,7 +693,7 @@ export function buildOnboardingProposal(input: BuildOnboardingProposalInput): On
     timeBudget,
     coverage,
     objectives,
-    diagnostics: diagnosticsFor(objectives),
+    diagnostics: diagnosticsFor(objectives, coverage),
     assumptions: assumptionsFor(intake),
     unresolvedQuestions,
   };

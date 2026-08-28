@@ -124,6 +124,41 @@ export function allCatalogConcepts(catalog: KnowledgeCatalog): CatalogConcept[] 
   return catalog.topics.flatMap((topic) => topic.concepts);
 }
 
+const SUGGESTION_STOP_WORDS = new Set(["a", "an", "and", "for", "of", "or", "the", "to", "vs", "with"]);
+
+function suggestionTokens(value: string): Set<string> {
+  return new Set(
+    normalizeAreaKey(value)
+      .split("-")
+      .filter((token) => token.length >= 3 && !SUGGESTION_STOP_WORDS.has(token)),
+  );
+}
+
+function suggestedCatalogConcepts(concepts: readonly CatalogConcept[], label: string): CatalogConcept[] {
+  const normalized = normalizeAreaKey(label);
+  const inputTokens = suggestionTokens(label);
+  if (!normalized || inputTokens.size === 0) return [];
+
+  return concepts
+    .filter((concept) => {
+      const conceptId = normalizeAreaKey(concept.conceptId);
+      const title = normalizeAreaKey(concept.title);
+      const candidateTokens = new Set([
+        ...suggestionTokens(concept.conceptId),
+        ...suggestionTokens(concept.title),
+      ]);
+      const containment = normalized.includes(conceptId) || normalized.includes(title);
+      const candidateFullyNamed =
+        candidateTokens.size > 0 && [...candidateTokens].every((token) => inputTokens.has(token));
+      return containment || candidateFullyNamed;
+    })
+    .sort(
+      (left, right) =>
+        left.topicId.localeCompare(right.topicId) || left.conceptId.localeCompare(right.conceptId),
+    )
+    .slice(0, 5);
+}
+
 export function resolveCatalogArea(catalog: KnowledgeCatalog, area: IntakeArea): CatalogResolution {
   const concepts = allCatalogConcepts(catalog);
 
@@ -155,6 +190,9 @@ export function resolveCatalogArea(catalog: KnowledgeCatalog, area: IntakeArea):
       normalizeAreaKey(topic.topicId) === normalized || normalizeAreaKey(topic.topicName) === normalized,
   );
   if (topicMatches.length === 1) return { kind: "topic", topic: topicMatches[0] };
+
+  const suggestions = suggestedCatalogConcepts(concepts, area.label);
+  if (suggestions.length > 0) return { kind: "ambiguous", concepts: suggestions };
 
   return { kind: "missing", suggestedConceptId: normalized || "unnamed-concept" };
 }

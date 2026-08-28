@@ -51,6 +51,14 @@ function parseAreas(value: string): IntakeArea[] {
     .map(parseArea);
 }
 
+function humanizeId(value: string): string {
+  return value
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function replaceArea(intake: OnboardingIntake, subject: string, replacement: IntakeArea): void {
   const target = normalizeAreaKey(subject);
   const replace = (areas: IntakeArea[] | undefined): IntakeArea[] | undefined =>
@@ -146,12 +154,27 @@ async function answerInformationNeed(
     case "deadline":
       intake.deadlineAt = await askDeadline(rl);
       return;
-    case "time_budget":
+    case "time_budget": {
+      const existing = intake.availability ?? {};
+      if (
+        existing.minutesPerDay !== undefined &&
+        existing.minutesPerWeek === undefined &&
+        existing.daysPerWeek === undefined
+      ) {
+        intake.availability = {
+          ...existing,
+          daysPerWeek: await askDaysPerWeek(rl),
+        };
+        return;
+      }
+      const minutesPerDay = await askPositiveInteger(rl, "Normal study minutes per day: ");
       intake.availability = {
-        ...(intake.availability ?? {}),
-        minutesPerDay: await askPositiveInteger(rl, "Normal study minutes per day: "),
+        ...existing,
+        minutesPerDay,
+        daysPerWeek: existing.daysPerWeek ?? await askDaysPerWeek(rl),
       };
       return;
+    }
     case "target_scope": {
       const areas = parseAreas(
         await requireAnswer(
@@ -260,37 +283,47 @@ function displayProposal(proposal: OnboardingProposal): void {
 async function materializeMissingConcepts(
   rl: Interface,
   proposal: OnboardingProposal,
+  catalog: KnowledgeCatalog,
 ): Promise<MissingConceptMaterialization[]> {
   const missing = proposal.coverage.filter(
     (coverage) => coverage.disposition === "include" && coverage.action === "create_missing",
   );
   const result: MissingConceptMaterialization[] = [];
   for (const coverage of missing) {
-    console.log(`\nMissing curriculum metadata required for: ${coverage.label}`);
-    const topicId = coverage.topicId ?? await requireAnswer(rl, "Topic ID: ");
-    const topicName = await requireAnswer(rl, `Topic name for ${topicId}: `);
-    const suggested = coverage.suggestedConceptId ?? normalizeAreaKey(coverage.label);
-    const conceptAnswer = await ask(rl, `Concept ID [${suggested}]: `);
-    const conceptId = conceptAnswer || suggested;
-    const titleAnswer = await ask(rl, `Concept title [${coverage.label}]: `);
-    const title = titleAnswer || coverage.label;
-    const difficulty = await askPositiveInteger(rl, "Difficulty 1-5: ");
+    console.log(`\nNo reusable catalog concept matched: ${coverage.label}`);
+    console.log("The concept ID/title will be derived automatically; only learning-relevant metadata is needed.");
+
+    let topicId = coverage.topicId;
+    let topicName: string;
+    if (topicId) {
+      topicName = catalog.topics.find((topic) => topic.topicId === topicId)?.topicName ?? humanizeId(topicId);
+    } else {
+      const topicAnswer = await requireAnswer(
+        rl,
+        `Topic/group for ${coverage.label} (for example: postgres): `,
+      );
+      topicId = normalizeAreaKey(topicAnswer);
+      topicName = catalog.topics.find((topic) => topic.topicId === topicId)?.topicName ?? topicAnswer;
+    }
+
+    const conceptId = coverage.suggestedConceptId ?? normalizeAreaKey(coverage.label);
+    const difficulty = await askPositiveInteger(
+      rl,
+      `Curriculum difficulty for ${coverage.label} [1 foundational - 5 advanced]: `,
+    );
     if (difficulty > 5) throw new Error("Difficulty must be between 1 and 5.");
-    const prerequisites = parseAreas(await ask(rl, "Prerequisite concept IDs (comma-separated, optional): "))
-      .map((area) => area.conceptId ?? area.label);
-    const tags = (await ask(rl, "Tags (comma-separated, optional): "))
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
+    const prerequisites = parseAreas(
+      await ask(rl, "Known prerequisite concept IDs (comma-separated, optional): "),
+    ).map((area) => area.conceptId ?? area.label);
     result.push({
       coverageKey: coverage.key,
       topicId,
       topicName,
       conceptId,
-      title,
+      title: coverage.label,
       difficulty,
       prerequisites,
-      tags,
+      tags: [],
     });
   }
   return result;
@@ -361,7 +394,7 @@ export async function runOfflineOnboarding(options: OfflineOnboardingOptions): P
       );
     }
 
-    const missingConcepts = await materializeMissingConcepts(rl, proposal);
+    const missingConcepts = await materializeMissingConcepts(rl, proposal, catalog);
     displayProposal(proposal);
 
     const confirmation = (await ask(rl, "\nApply this plan and create a NEW learner profile? [y/N]: ")).toLowerCase();
