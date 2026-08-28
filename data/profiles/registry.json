@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "activeProfileId": "backend-systems",
+  "profiles": [
+    {
+      "id": "backend-systems",
+      "displayName": "Backend Systems",
+      "createdAt": "2026-08-28T10:38:32.880Z",
+      "description": "Systems-first backend interview sprint with durable stable concepts and evidence-first diagnostics."
+    }
+  ]
+}

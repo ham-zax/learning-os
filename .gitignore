@@ -5,10 +5,6 @@ CLAUDE.local.md
 .claude/settings.local.json
 # User config overrides (personal, not shared)
 ~/.claude/config/
-# Data (SQLite databases)
-data/
-!data/.gitkeep
-
 # TypeScript
 node_modules/
 dist/
