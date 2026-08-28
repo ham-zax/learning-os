@@ -92,7 +92,7 @@ Rules:
 - Treat resume/JD/self-report claims as planning signals only.
 - Do not create a profile before explicit confirmation.
 - If intake changes after a proposal is shown, rebuild it. Never silently apply a different proposal.
-- Do not resolve `clarify_scope` by guessing. Use `catalogCandidates` from the information need or `workspace.resolveCatalogArea(...)`, then get explicit learner confirmation.
+- Do not resolve `clarify_scope` by guessing. Use `catalogCandidates` or `workspace.resolveCatalogArea(...)`. Treat fuzzy `suggested` matches as optional: confirm one explicitly or mark the learner area `custom: true`.
 - For missing curriculum, collect learner-relevant topic/group and prerequisite information and call `workspace.deriveMissingConceptMaterialization(...)`; do not invent IDs, difficulty, or tags yourself.
 - After confirmation, continue with diagnostics/evidence rather than assuming onboarding established mastery.
 

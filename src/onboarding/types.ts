@@ -27,6 +27,8 @@ export interface IntakeArea {
   label: string;
   topicId?: string;
   conceptId?: string;
+  /** Explicitly keep this learner area as custom curriculum instead of catalog-matching it. */
+  custom?: boolean;
   capabilities?: OnboardingCapability[];
 }
 
@@ -113,6 +115,7 @@ export type CatalogResolution =
   | { kind: "concept"; concept: CatalogConcept }
   | { kind: "topic"; topic: CatalogTopic }
   | { kind: "ambiguous"; concepts: CatalogConcept[] }
+  | { kind: "suggested"; concepts: CatalogConcept[] }
   | { kind: "missing"; suggestedConceptId: string };
 
 export type InformationNeedCode =
@@ -273,17 +276,29 @@ function normalizeArea(area: IntakeArea): IntakeArea {
   if (!label) throw new Error("Onboarding area label must not be empty");
   const topicId = cleanText(area.topicId) ?? undefined;
   const conceptId = cleanText(area.conceptId) ?? undefined;
+  if (area.custom !== undefined && typeof area.custom !== "boolean") {
+    throw new Error(`custom must be boolean for ${label}`);
+  }
+  if (area.custom && (topicId || conceptId)) {
+    throw new Error(`Custom onboarding area ${label} must not also name a catalog topic/concept`);
+  }
   const capabilities = validateCapabilities(area.capabilities);
   return {
     label,
     ...(topicId ? { topicId } : {}),
     ...(conceptId ? { conceptId } : {}),
+    ...(area.custom ? { custom: true } : {}),
     ...(capabilities.length > 0 ? { capabilities } : {}),
   };
 }
 
 function areaSortKey(area: IntakeArea): string {
-  return [area.topicId ?? "", area.conceptId ?? "", normalizeAreaKey(area.label)].join("/");
+  return [
+    area.custom ? "custom" : "catalog",
+    area.topicId ?? "",
+    area.conceptId ?? "",
+    normalizeAreaKey(area.label),
+  ].join("/");
 }
 
 function normalizeAreas(areas: readonly IntakeArea[] | undefined): IntakeArea[] {

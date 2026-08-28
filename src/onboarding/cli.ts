@@ -63,6 +63,14 @@ function replaceArea(intake: OnboardingIntake, subject: string, replacement: Int
   intake.currentStudyPlan = replace(intake.currentStudyPlan);
   intake.exclusions = replace(intake.exclusions);
   intake.depriorities = replace(intake.depriorities);
+  intake.existingExperience = intake.existingExperience?.map((area) =>
+    normalizeAreaKey(area.label) === target
+      ? { ...replacement, depth: area.depth, years: area.years }
+      : area,
+  );
+  intake.sourceClaims = intake.sourceClaims?.map((claim) =>
+    normalizeAreaKey(claim.area.label) === target ? { ...claim, area: replacement } : claim,
+  );
 }
 
 function findArea(intake: OnboardingIntake, subject: string): IntakeArea {
@@ -165,16 +173,27 @@ async function answerInformationNeed(
       const subject = need.subject ?? "this area";
       const options = need.catalogCandidates ?? [];
       if (options.length > 0) {
-        console.log("Available catalog concepts:");
+        console.log("Catalog options:");
         for (const option of options) {
           console.log(`  ${option.topicId}/${option.conceptId} — ${option.title}`);
         }
       }
-      const exact = parseArea(
-        await requireAnswer(rl, `Choose exact topic/concept for ${subject}: `),
+      const answer = await requireAnswer(
+        rl,
+        `Choose topic/concept for ${subject}, or type custom to keep it distinct: `,
       );
+      if (answer.toLowerCase() === "custom") {
+        const current = findArea(intake, subject);
+        replaceArea(intake, subject, {
+          label: current.label,
+          custom: true,
+          ...(current.capabilities ? { capabilities: current.capabilities } : {}),
+        });
+        return;
+      }
+      const exact = parseArea(answer);
       if (!exact.topicId || !exact.conceptId) {
-        throw new Error("Concept clarification requires topic/concept syntax.");
+        throw new Error("Concept clarification requires topic/concept syntax or custom.");
       }
       replaceArea(intake, subject, exact);
       return;

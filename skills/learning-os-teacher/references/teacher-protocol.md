@@ -41,7 +41,7 @@ select objective/task intent
 → return to Learning OS
 ```
 
-Do not fabricate learner responses or criteria. Interview uses the same lifecycle. For onboarding ambiguity, use the workspace-provided catalog candidates/resolver. For missing concepts, use `workspace.deriveMissingConceptMaterialization(...)` rather than inventing technical metadata.
+Do not fabricate learner responses or criteria. Interview uses the same lifecycle. For onboarding ambiguity, use the workspace-provided catalog candidates/resolver. Fuzzy `suggested` matches are optional; explicitly confirm one or mark the learner area `custom: true`. For missing concepts, use `workspace.deriveMissingConceptMaterialization(...)` rather than inventing technical metadata.
 
 ## Learner agency
 

@@ -170,7 +170,7 @@ Confirmed onboarding prints the new goal ID. Use it with:
 npm run tutor -- today <goal-id>
 ```
 
-If onboarding recorded `minutesPerDay`, that becomes the default daily budget for the goal. If an integration also supplies `minutesPerWeek`, it must agree with `minutesPerDay × daysPerWeek`; conflicting availability remains a blocking onboarding question.
+If onboarding recorded `minutesPerDay`, that becomes the default daily budget for the goal. When `minutesPerDay` and `daysPerWeek` are confirmed, Learning OS also persists their effective weekly capacity. If an integration supplies its own `minutesPerWeek`, it must agree with that product; conflicting availability remains a blocking onboarding question.
 
 Override it for one run:
 

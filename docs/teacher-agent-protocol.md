@@ -143,7 +143,7 @@ Rules:
 - Resume/JD/self-report claims are planning signals only.
 - Before confirmation: no learner profile, goal, objective, evidence, or learner-DB mutation.
 - If intake changes after the proposal is shown, rebuild it. Do not silently apply another proposal.
-- Never guess through `clarify_scope`. Use `InformationNeed.catalogCandidates` or `workspace.resolveCatalogArea(...)` and get explicit learner confirmation.
+- Never guess through `clarify_scope`. Use `InformationNeed.catalogCandidates` or `workspace.resolveCatalogArea(...)`. Fuzzy related matches are `suggested`, not exact ambiguity: let the learner confirm one or mark the area `custom: true` to keep it distinct.
 - For `create_missing` coverage, collect learner-relevant topic/group and prerequisite information, then call `workspace.deriveMissingConceptMaterialization(...)`. Do not invent IDs, numeric difficulty, or tags outside that adapter.
 - After confirmation, begin from ordinary unknown/untested projections and use diagnostics/evidence to establish actual competence.
 

@@ -27,6 +27,10 @@ export { LEGACY_PROFILE_ID } from "./types.js";
 const REGISTRY_VERSION = 1;
 const PROFILE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_PROFILE_ID_LENGTH = 64;
+const REGISTRY_LOCK_RETRY_MS = 10;
+const REGISTRY_LOCK_TIMEOUT_MS = 5_000;
+const REGISTRY_LOCK_STALE_MS = 30_000;
+const REGISTRY_LOCK_WAIT = new Int32Array(new SharedArrayBuffer(4));
 
 interface RegistryProfile {
   id: string;
@@ -166,6 +170,44 @@ function saveRegistry(paths: ProfilePaths, registry: ProfileRegistry): void {
   renameSync(tempPath, paths.registryPath);
 }
 
+function withRegistryLock<T>(paths: ProfilePaths, operation: () => T): T {
+  mkdirSync(paths.profilesDir, { recursive: true, mode: 0o700 });
+  const lockPath = `${paths.registryPath}.lock`;
+  const deadline = Date.now() + REGISTRY_LOCK_TIMEOUT_MS;
+
+  while (true) {
+    try {
+      mkdirSync(lockPath, { mode: 0o700 });
+      break;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST") throw error;
+
+      try {
+        const stats = statSync(lockPath);
+        if (Date.now() - stats.mtimeMs > REGISTRY_LOCK_STALE_MS) {
+          rmSync(lockPath, { recursive: true, force: true });
+          continue;
+        }
+      } catch (statError) {
+        if ((statError as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw statError;
+      }
+
+      if (Date.now() >= deadline) {
+        throw new Error("Timed out waiting for learner profile registry lock.");
+      }
+      Atomics.wait(REGISTRY_LOCK_WAIT, 0, 0, REGISTRY_LOCK_RETRY_MS);
+    }
+  }
+
+  try {
+    return operation();
+  } finally {
+    rmSync(lockPath, { recursive: true, force: true });
+  }
+}
+
 function toManagedProfile(profile: RegistryProfile): LearnerProfile {
   return { ...profile, source: "managed" };
 }
@@ -226,38 +268,40 @@ export function createProfile(
   const description = input.description?.trim() || null;
   const id = input.id === undefined ? deriveProfileId(displayName) : assertProfileId(input.id);
   const paths = profilePaths(options);
-  const registry = loadRegistry(paths);
 
-  if (registry.profiles.some((profile) => profile.id === id)) {
-    throw new Error(`Profile already exists: ${id}`);
-  }
+  return withRegistryLock(paths, () => {
+    const registry = loadRegistry(paths);
+    if (registry.profiles.some((profile) => profile.id === id)) {
+      throw new Error(`Profile already exists: ${id}`);
+    }
 
-  const profileDir = managedProfileDirectory(paths, id);
-  if (existsSync(profileDir)) {
-    throw new Error(
-      `Profile directory already exists without a registry entry; refusing to adopt or overwrite it: ${id}`,
-    );
-  }
+    const profileDir = managedProfileDirectory(paths, id);
+    if (existsSync(profileDir)) {
+      throw new Error(
+        `Profile directory already exists without a registry entry; refusing to adopt or overwrite it: ${id}`,
+      );
+    }
 
-  mkdirSync(profileDir, { recursive: true, mode: 0o700 });
-  try {
-    const db = createDatabase(managedDatabasePath(paths, id));
-    db.close();
+    mkdirSync(profileDir, { recursive: true, mode: 0o700 });
+    try {
+      const db = createDatabase(managedDatabasePath(paths, id));
+      db.close();
 
-    const profile: RegistryProfile = {
-      id,
-      displayName,
-      createdAt: new Date().toISOString(),
-      description,
-    };
-    registry.profiles.push(profile);
-    registry.profiles.sort((left, right) => left.id.localeCompare(right.id));
-    saveRegistry(paths, registry);
-    return toManagedProfile(profile);
-  } catch (error) {
-    rmSync(profileDir, { recursive: true, force: true });
-    throw error;
-  }
+      const profile: RegistryProfile = {
+        id,
+        displayName,
+        createdAt: new Date().toISOString(),
+        description,
+      };
+      registry.profiles.push(profile);
+      registry.profiles.sort((left, right) => left.id.localeCompare(right.id));
+      saveRegistry(paths, registry);
+      return toManagedProfile(profile);
+    } catch (error) {
+      rmSync(profileDir, { recursive: true, force: true });
+      throw error;
+    }
+  });
 }
 
 /**
@@ -273,31 +317,33 @@ export function discardCreatedProfile(
     throw new Error("Legacy profiles cannot be discarded by provisioning recovery.");
   }
   const paths = profilePaths(options);
-  const registry = loadRegistry(paths);
-  if (registry.activeProfileId === profile.id) {
-    throw new Error(`Cannot discard selected profile: ${profile.id}`);
-  }
-  const registered = registry.profiles.find((candidate) => candidate.id === profile.id);
-  if (!registered || registered.createdAt !== profile.createdAt) {
-    throw new Error(`Provisioning profile identity no longer matches: ${profile.id}`);
-  }
-  const profileDir = managedProfileDirectory(paths, profile.id);
-  if (!existsSync(profileDir)) {
-    throw new Error(`Provisioning profile directory is missing: ${profile.id}`);
-  }
+  withRegistryLock(paths, () => {
+    const registry = loadRegistry(paths);
+    if (registry.activeProfileId === profile.id) {
+      throw new Error(`Cannot discard selected profile: ${profile.id}`);
+    }
+    const registered = registry.profiles.find((candidate) => candidate.id === profile.id);
+    if (!registered || registered.createdAt !== profile.createdAt) {
+      throw new Error(`Provisioning profile identity no longer matches: ${profile.id}`);
+    }
+    const profileDir = managedProfileDirectory(paths, profile.id);
+    if (!existsSync(profileDir)) {
+      throw new Error(`Provisioning profile directory is missing: ${profile.id}`);
+    }
 
-  const quarantine = `${profileDir}.discard-${process.pid}`;
-  renameSync(profileDir, quarantine);
-  try {
-    saveRegistry(paths, {
-      ...registry,
-      profiles: registry.profiles.filter((candidate) => candidate.id !== profile.id),
-    });
-  } catch (error) {
-    renameSync(quarantine, profileDir);
-    throw error;
-  }
-  rmSync(quarantine, { recursive: true, force: true });
+    const quarantine = `${profileDir}.discard-${process.pid}`;
+    renameSync(profileDir, quarantine);
+    try {
+      saveRegistry(paths, {
+        ...registry,
+        profiles: registry.profiles.filter((candidate) => candidate.id !== profile.id),
+      });
+    } catch (error) {
+      renameSync(quarantine, profileDir);
+      throw error;
+    }
+    rmSync(quarantine, { recursive: true, force: true });
+  });
 }
 
 export function selectProfile(
@@ -305,12 +351,14 @@ export function selectProfile(
   options: ProfileStoreOptions = {},
 ): LearnerProfile {
   const paths = profilePaths(options);
-  const profile = getProfile(profileId, options);
-  if (!profile) throw new Error(`Profile not found: ${profileId}`);
-  const registry = loadRegistry(paths);
-  registry.activeProfileId = profile.id;
-  saveRegistry(paths, registry);
-  return profile;
+  return withRegistryLock(paths, () => {
+    const profile = getProfile(profileId, options);
+    if (!profile) throw new Error(`Profile not found: ${profileId}`);
+    const registry = loadRegistry(paths);
+    registry.activeProfileId = profile.id;
+    saveRegistry(paths, registry);
+    return profile;
+  });
 }
 
 export function getActiveProfile(

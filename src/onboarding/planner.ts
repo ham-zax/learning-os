@@ -85,6 +85,7 @@ function resolutionKey(resolution: CatalogResolution, area: IntakeArea): string 
   }
   if (resolution.kind === "topic") return `topic:${resolution.topic.topicId}`;
   if (resolution.kind === "ambiguous") return `ambiguous:${normalizeAreaKey(area.label)}`;
+  if (resolution.kind === "suggested") return `suggested:${normalizeAreaKey(area.label)}`;
   return `missing:${resolution.suggestedConceptId}`;
 }
 
@@ -631,7 +632,9 @@ export function buildOnboardingProposal(input: BuildOnboardingProposalInput): On
     )
     .map((candidate) => {
       const objectives =
-        candidate.resolution.kind === "topic" || candidate.resolution.kind === "ambiguous"
+        candidate.resolution.kind === "topic" ||
+        candidate.resolution.kind === "ambiguous" ||
+        candidate.resolution.kind === "suggested"
           ? []
           : objectiveProposals(candidate, intake.purpose, time.horizon);
       allObjectiveMap.set(candidate.key, objectives);

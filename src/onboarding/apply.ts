@@ -662,6 +662,11 @@ export function getDurablePreparationContext(
       durabilityState: projection.durability_state,
     } satisfies DurablePreparationObjective;
   });
+  const effectiveMinutesPerWeek =
+    preparation.minutes_per_week ??
+    (preparation.minutes_per_day !== null && preparation.days_per_week !== null
+      ? preparation.minutes_per_day * preparation.days_per_week
+      : null);
   return {
     goalId,
     goalName: goal.name,
@@ -673,7 +678,7 @@ export function getDurablePreparationContext(
     availability: {
       minutesPerDay: preparation.minutes_per_day,
       daysPerWeek: preparation.days_per_week,
-      minutesPerWeek: preparation.minutes_per_week,
+      minutesPerWeek: effectiveMinutesPerWeek,
     },
     confirmedAt: preparation.confirmed_at,
     objectives,
@@ -738,7 +743,7 @@ export function applyConfirmedOnboarding(
         targetOutcome: proposal.interpretedTarget.outcome,
         minutesPerDay: normalizedIntake.availability?.minutesPerDay ?? null,
         daysPerWeek: normalizedIntake.availability?.daysPerWeek ?? null,
-        minutesPerWeek: normalizedIntake.availability?.minutesPerWeek ?? null,
+        minutesPerWeek: proposal.timeBudget.minutesPerWeek,
         confirmedAt: input.confirmedAt,
       });
 

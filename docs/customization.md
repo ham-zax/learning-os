@@ -273,7 +273,8 @@ let intake = {
 
 const needs = workspace.planOnboardingInformationNeeds(intake, catalog);
 // concept_scope needs include concrete `catalogCandidates` when available.
-// You can also call workspace.resolveCatalogArea({ label: "database fundamentals" }, catalog).
+// `resolveCatalogArea(...)` returns `suggested` for fuzzy related matches rather than exact ambiguity.
+// Confirm one candidate explicitly, or set the learner area to `{ label: "...", custom: true }`.
 // Ask the learner only the material questions represented by `needs`.
 
 const proposal = workspace.buildOnboardingProposal({
@@ -318,7 +319,7 @@ const requested = kernel.resolveRequestedChallenge({
 opened.close();
 ```
 
-A fresh compatible teacher can recover goal purpose, time budget, objective strategies, pending diagnostics, prerequisite gaps, and actual evidence state without access to the previous conversation.
+A fresh compatible teacher can recover goal purpose, time budget, objective strategies, pending diagnostics, prerequisite gaps, and actual evidence state without access to the previous conversation. When onboarding supplied `minutesPerDay × daysPerWeek`, confirmed preparation stores and returns the effective `minutesPerWeek` as well.
 
 ## 8. Put learner data somewhere else
 
@@ -331,7 +332,7 @@ const workspace = createTeacherWorkspace({
 });
 ```
 
-Each managed profile still gets its own database below that data directory.
+Each managed profile still gets its own database below that data directory. Registry mutations are serialized so concurrent creation of different learner profiles does not lose entries.
 
 Do not point multiple independent writers at the same learner profile. The current product assumes one active teacher/orchestrator at a time.
 

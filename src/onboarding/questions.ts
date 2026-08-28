@@ -16,6 +16,7 @@ function resolutionKey(catalog: KnowledgeCatalog, area: IntakeArea): string {
   }
   if (resolution.kind === "topic") return `topic:${resolution.topic.topicId}`;
   if (resolution.kind === "ambiguous") return `ambiguous:${normalizeAreaKey(area.label)}`;
+  if (resolution.kind === "suggested") return `suggested:${normalizeAreaKey(area.label)}`;
   return `missing:${normalizeAreaKey(area.label)}`;
 }
 
@@ -67,7 +68,7 @@ function isBroadTarget(value: string | null): boolean {
 
 function catalogCandidates(resolution: CatalogResolution): CatalogConceptCandidate[] | undefined {
   const concepts =
-    resolution.kind === "ambiguous"
+    resolution.kind === "ambiguous" || resolution.kind === "suggested"
       ? resolution.concepts
       : resolution.kind === "topic"
         ? resolution.topic.concepts
@@ -192,7 +193,11 @@ export function planInformationNeeds(
 
   for (const area of materialRequirementAreas(intake)) {
     const resolution = resolveCatalogArea(catalog, area);
-    if (resolution.kind === "topic" || resolution.kind === "ambiguous") {
+    if (
+      resolution.kind === "topic" ||
+      resolution.kind === "ambiguous" ||
+      resolution.kind === "suggested"
+    ) {
       addNeed(needs, {
         code: "concept_scope",
         subject: area.label,
@@ -201,8 +206,10 @@ export function planInformationNeeds(
         reason:
           resolution.kind === "topic"
             ? `The existing ${resolution.topic.topicName} library is broader than one objective; the relevant concepts must be identified.`
-            : resolution.concepts.length === 1
-              ? `A likely existing concept (${resolution.concepts[0].title}) matches this wording; confirm whether it is the intended scope.`
+            : resolution.kind === "suggested"
+              ? resolution.concepts.length === 1
+                ? `A likely existing concept (${resolution.concepts[0].title}) is related to this wording; confirm it or keep the learner's area as custom curriculum.`
+                : "Related catalog concepts are available, but none is an exact match; choose one explicitly or keep the learner's area as custom curriculum."
               : "The area maps to multiple existing concepts and needs an explicit concept choice.",
         catalogCandidates: catalogCandidates(resolution),
       });

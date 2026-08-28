@@ -1007,23 +1007,23 @@ program
     }
   });
 
-// tutor interview <topic>
+// tutor interview <concept-id>
 program
   .command("interview")
   .description("Start an interview drill")
-  .argument("<topic>", "Concept ID to interview")
+  .argument("<concept-id>", "Concept ID to interview")
   .option("-t, --type <type>", "Interview type: coding or system-design", "coding")
   .option("-d, --difficulty <n>", "Difficulty level (1-5)")
-  .action(async (topic: string, opts: { type: string; difficulty?: string }) => {
+  .action(async (conceptId: string, opts: { type: string; difficulty?: string }) => {
     const db = openCliDatabase();
 
     try {
       const difficulty = opts.difficulty ? parseInt(opts.difficulty, 10) : undefined;
 
       if (opts.type === "system-design") {
-        await runDesignDrill(db, topic, difficulty);
+        await runDesignDrill(db, conceptId, difficulty);
       } else {
-        await runCodingDrill(db, topic, difficulty);
+        await runCodingDrill(db, conceptId, difficulty);
       }
     } catch (err) {
       error(err instanceof Error ? err.message : String(err));

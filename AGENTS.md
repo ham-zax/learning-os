@@ -33,7 +33,7 @@ learn | practice | review | interview | mock
 
 - Global reusable curriculum lives under `knowledge/`.
 - Managed learner profiles live under `data/profiles/<profile-id>/tutor.db`.
-- `data/profiles/registry.json` stores profile metadata and the active profile only.
+- `data/profiles/registry.json` stores profile metadata and the active profile only; registry writes are serialized across concurrent processes.
 - `data/tutor.db` is supported only as the preserved legacy compatibility profile.
 - Learner evidence, goals, review cards, weaknesses, sessions, and resumable state are profile-local.
 - Raw resumes, job descriptions, chat transcripts, provider IDs, and API keys are not learner-state persistence.

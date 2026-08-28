@@ -144,45 +144,94 @@ export function allCatalogConcepts(catalog: KnowledgeCatalog): CatalogConcept[] 
 }
 
 const SUGGESTION_STOP_WORDS = new Set(["a", "an", "and", "for", "of", "or", "the", "to", "vs", "with"]);
+const SUGGESTION_GENERIC_TOKENS = new Set([
+  "backend",
+  "database",
+  "design",
+  "foundation",
+  "fundamental",
+  "system",
+]);
+const SUGGESTION_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  transaction: ["acid"],
+  isolation: ["acid"],
+};
+
+function normalizeSuggestionToken(token: string): string {
+  if (token.length > 4 && token.endsWith("s") && !token.endsWith("ss")) {
+    return token.slice(0, -1);
+  }
+  return token;
+}
 
 function suggestionTokens(value: string): Set<string> {
   return new Set(
     normalizeAreaKey(value)
       .split("-")
+      .map(normalizeSuggestionToken)
       .filter((token) => token.length >= 3 && !SUGGESTION_STOP_WORDS.has(token)),
   );
 }
 
+function suggestionInputTokens(value: string): Set<string> {
+  const tokens = suggestionTokens(value);
+  for (const token of [...tokens]) {
+    for (const alias of SUGGESTION_ALIASES[token] ?? []) tokens.add(alias);
+  }
+  if (tokens.has("database") && tokens.has("fundamental")) tokens.add("sql");
+  return tokens;
+}
+
+function suggestionScore(concept: CatalogConcept, label: string, inputTokens: ReadonlySet<string>): number {
+  const normalized = normalizeAreaKey(label);
+  const conceptId = normalizeAreaKey(concept.conceptId);
+  const title = normalizeAreaKey(concept.title);
+  if (normalized.includes(conceptId) || normalized.includes(title)) return 100;
+
+  const identityTokens = new Set([
+    ...suggestionTokens(concept.conceptId),
+    ...suggestionTokens(concept.title),
+  ]);
+  const candidateTokens = new Set([
+    ...identityTokens,
+    ...concept.tags.flatMap((tag) => [...suggestionTokens(tag)]),
+  ]);
+
+  let score = 0;
+  for (const token of candidateTokens) {
+    if (!inputTokens.has(token)) continue;
+    score += SUGGESTION_GENERIC_TOKENS.has(token) ? 1 : 4;
+  }
+  if (identityTokens.size > 0 && [...identityTokens].every((token) => inputTokens.has(token))) {
+    score += 20;
+  }
+  return score;
+}
+
 function suggestedCatalogConcepts(concepts: readonly CatalogConcept[], label: string): CatalogConcept[] {
   const normalized = normalizeAreaKey(label);
-  const inputTokens = suggestionTokens(label);
+  const inputTokens = suggestionInputTokens(label);
   if (!normalized || inputTokens.size === 0) return [];
 
   return concepts
-    .filter((concept) => {
-      const conceptId = normalizeAreaKey(concept.conceptId);
-      const title = normalizeAreaKey(concept.title);
-      const candidateTokens = new Set([
-        ...suggestionTokens(concept.conceptId),
-        ...suggestionTokens(concept.title),
-      ]);
-      const containment = normalized.includes(conceptId) || normalized.includes(title);
-      const candidateFullyNamed =
-        candidateTokens.size > 0 && [...candidateTokens].every((token) => inputTokens.has(token));
-      const sharedTokenCount = [...candidateTokens].filter((token) => inputTokens.has(token)).length;
-      const partialOverlap =
-        sharedTokenCount > 0 && inputTokens.size >= 2 && candidateTokens.size >= 2;
-      return containment || candidateFullyNamed || partialOverlap;
-    })
+    .map((concept) => ({ concept, score: suggestionScore(concept, label, inputTokens) }))
+    .filter((candidate) => candidate.score >= 4)
     .sort(
       (left, right) =>
-        left.topicId.localeCompare(right.topicId) || left.conceptId.localeCompare(right.conceptId),
+        right.score - left.score ||
+        left.concept.topicId.localeCompare(right.concept.topicId) ||
+        left.concept.conceptId.localeCompare(right.concept.conceptId),
     )
-    .slice(0, 5);
+    .slice(0, 5)
+    .map((candidate) => candidate.concept);
 }
 
 export function resolveCatalogArea(catalog: KnowledgeCatalog, area: IntakeArea): CatalogResolution {
   const concepts = allCatalogConcepts(catalog);
+
+  if (area.custom) {
+    return { kind: "missing", suggestedConceptId: normalizeAreaKey(area.label) || "unnamed-concept" };
+  }
 
   if (area.topicId && area.conceptId) {
     const concept = concepts.find(
@@ -214,7 +263,7 @@ export function resolveCatalogArea(catalog: KnowledgeCatalog, area: IntakeArea):
   if (topicMatches.length === 1) return { kind: "topic", topic: topicMatches[0] };
 
   const suggestions = suggestedCatalogConcepts(concepts, area.label);
-  if (suggestions.length > 0) return { kind: "ambiguous", concepts: suggestions };
+  if (suggestions.length > 0) return { kind: "suggested", concepts: suggestions };
 
   return { kind: "missing", suggestedConceptId: normalized || "unnamed-concept" };
 }
