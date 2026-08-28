@@ -1,126 +1,253 @@
 # Learning OS
 
-Learning OS is an evidence-driven programming learning system built around one rule: **a learner should advance because they demonstrated a capability, not because content was shown or they reported confidence.**
+**A local-first learning system that turns your goal, time, strengths, and weak spots into an evidence-driven study plan.**
 
-Learning OS now has a working TypeScript/SQLite evidence kernel, isolated learner profiles, adaptive confirmed onboarding, objective-specific projections, FSRS scheduling, challenge selection, resumable sessions, interview workflows, and a provider-neutral teacher API. It preserves useful Generic Tutor shell/history, but legacy scalar mastery and SM-2 fields are compatibility data rather than learner truth.
+Learning OS is built for programming learning, interview preparation, codebase onboarding, and other technical goals where "I read it" is not the same as "I can do it." It keeps planning separate from proof: your resume, experience, and self-reported strengths can shape the plan, but only actual attempts and assessments change learner state.
 
-## Current system
+The project is currently a **developer preview**. It runs locally with Node.js and SQLite, includes an offline CLI, and exposes provider-neutral APIs that a compatible ChatGPT/agent workflow can use as the conversational teacher.
 
-Learning OS evolved from `alienz-dev/generic-tutor` and selectively incorporated ideas from other learning systems while replacing the original scalar learning-state core. The implemented system uses:
+## What it does
 
-- `open-spaced-repetition/ts-fsrs`: scheduling engine.
-- `Nar101/learn-anything`: evidence integrity, hint-aware assessment semantics, transfer, and delayed-retrieval rules.
-- `mordor-forge/study-skill`: restart-safe workspace behavior and short due-review warm-ups.
-- `kartikth40/interview-sim`: interview state-machine ideas and weakness lifecycle.
-- `ChenChenyaqi/learn-anything`: coding-exercise workflow patterns.
+Give Learning OS a target such as:
 
-These sources informed specific contracts; Learning OS keeps one coherent local kernel rather than merging their runtimes.
+> I have backend interviews in six weeks. I build Node APIs comfortably, but I want to get stronger at transactions, concurrency, connection pools, caching, and load balancing. I can study 45 minutes a day.
 
-## Core model
+Learning OS can turn that into:
 
-The central unit is a **learning objective**, not a scalar concept score.
+1. focused clarification questions instead of a giant questionnaire;
+2. a preparation proposal you can review before anything is saved;
+3. a new isolated learner profile after explicit confirmation;
+4. only the curriculum and `concept × capability` objectives relevant to the goal;
+5. initial diagnostic work where your actual level is uncertain;
+6. daily missions driven by evidence, prerequisite readiness, weaknesses, deadlines, and FSRS review timing;
+7. durable state that a fresh compatible teacher can resume without the old chat history.
 
-A learning objective is approximately:
+Different objectives can start differently. One topic may need `learn`, another `refresh`, another `diagnose_first`, and another `transfer_practice`. Learning OS does not classify the whole learner as a beginner or refresher.
+
+## Why Learning OS is different
+
+- **Planning is not mastery.** Resume/JD/self-report information can change priority and starting strategy, but it does not create readiness, transfer, durability, evidence, or review cards.
+- **Capabilities are tracked separately.** Being able to explain transactions does not imply you can debug a race condition or design a safe retry path.
+- **Each learner is isolated.** Managed profiles use separate SQLite databases under ignored local `data/`.
+- **Curriculum is reusable.** Markdown and topic manifests under `knowledge/` are shared source material, not duplicated into every learner profile.
+- **Scheduling and teaching have different owners.** FSRS decides when retrieval is useful; Learning OS decides what objective and task form should come next.
+- **The teacher is replaceable.** ChatGPT can be the conversational layer, but learner truth lives in the local kernel rather than provider memory.
+
+## Quick start
+
+### Requirements
+
+- Node.js 22 or newer
+- npm
+
+Clone the repository and install dependencies:
+
+```bash
+git clone https://github.com/ham-zax/learning-os.git
+cd learning-os
+npm ci
+```
+
+If you are working from a different fork, use that repository URL instead.
+
+### Option A: onboard from the terminal
+
+Run the structured offline onboarding flow:
+
+```bash
+npm run tutor -- onboard
+```
+
+The CLI will collect the minimum structured information it needs, show the proposed preparation plan, and ask for explicit confirmation. **Declining confirmation creates no learner profile.**
+
+After confirmation it prints the new profile ID, goal ID, number of activated objectives, and the next action.
+
+Then ask what to do today:
+
+```bash
+npm run tutor -- today <goal-id>
+```
+
+If onboarding recorded a normal daily study budget, `today` uses it by default. Override it for one session with:
+
+```bash
+npm run tutor -- today <goal-id> --minutes 20
+```
+
+### Option B: use a compatible AI teacher
+
+The deterministic Learning OS kernel does not parse resumes or job descriptions with an embedded model. A conversational teacher can do that semantic extraction, then call the provider-neutral workspace API:
+
+```text
+conversation / resume / JD
+        ↓
+structured OnboardingIntake
+        ↓
+createTeacherWorkspace()
+        ↓
+information needs → proposal → explicit confirmation
+        ↓
+new learner profile + goal + objectives
+        ↓
+createTeacherKernel(db)
+```
+
+This keeps model/provider behavior outside durable learner semantics. See [Getting started](docs/getting-started.md) for the full flow.
+
+## Profiles
+
+Every managed profile owns its own learner database:
+
+```text
+data/
+└── profiles/
+    ├── registry.json
+    ├── alice/
+    │   └── tutor.db
+    └── interview-prep/
+        └── tutor.db
+```
+
+`data/` is ignored by Git. There is no automatic shared default learner. The registry contains profile metadata and the selected profile; mastery, goals, sessions, evidence, weaknesses, review cards, and resumable state remain inside that profile's SQLite database.
+
+Useful commands:
+
+```bash
+npm run tutor -- profile create "Alice"
+npm run tutor -- profile list
+npm run tutor -- profile show
+npm run tutor -- profile use alice
+npm run tutor -- --profile alice today <goal-id>
+```
+
+An existing pre-profile `data/tutor.db` is preserved as a legacy profile instead of being copied into new learners.
+
+## Daily learning loop
+
+The central unit is a sparse learning objective:
 
 ```text
 concept × capability
 ```
 
-For example, a transactions topic may instantiate only the capabilities that matter to the learner's goal:
+The built-in capability vocabulary is:
+
+```text
+explain
+predict
+implement
+debug
+design
+```
+
+A learner might therefore have:
 
 ```text
 transactions:explain
-transactions:predict
-transactions:implement
 transactions:debug
+connection-pooling:design
 ```
 
-Do not generate the full concept/capability Cartesian product automatically.
+without creating every possible capability for every concept.
 
-Each objective accumulates append-only observable evidence. That evidence is authoritative. Current readiness, historical-highest readiness, transfer/durability state, blockers, and broad weakness signals are rebuildable projections over the evidence history.
+Actual learner work flows through one evidence model:
 
 ```text
+frozen challenge
+      ↓
 attempt
-  ↓
+      ↓
 assessment
-  ↓
+      ↓
 evidence event
-  ↓
-proficiency / misconception / weakness projections
-  ↓
+      ↓
+readiness / misconceptions / weaknesses
+      ↓
 ReviewRatingMapper
-  ↓
-FSRS
+      ↓
+FSRS review timing
 ```
 
-FSRS answers **when** another valid retrieval is useful. The Learning OS decides **what kind of encounter** should happen next.
+This is the same state used by ordinary practice, review, interview work, weakness retesting, resumable sessions, and `tutor today`.
 
-## Teacher portability
+## Customize it for yourself
 
-ChatGPT is the preferred V1 interactive teacher, but it is not part of the kernel's durable semantics. The teacher is a replaceable client of the Learning OS contract. Codex, OpenCode, AGY, or another compatible agent may replace ChatGPT later without migrating learner state.
+Learning OS is designed to be forked and adapted rather than tied to one fixed curriculum.
 
-Use one active teacher/orchestrator at a time in V1. Durable objectives, challenges, attempts, evidence, projections, scheduling, and resumable session state belong to the kernel rather than to a provider's conversation history or private memory.
+You can customize four main layers:
 
-## Running Learning OS
+| Layer | What you change |
+| --- | --- |
+| Personal defaults | Daily study minutes and knowledge path in local `config.json` |
+| Curriculum | Topic manifests and Markdown under `knowledge/` |
+| Goals | Onboarding intake, priorities, deadline, readiness/transfer/durability targets |
+| Teacher experience | A compatible conversational client built on `createTeacherWorkspace()` and `createTeacherKernel(db)` |
 
-Requires Node.js >=22 and npm. Install dependencies once, then create or onboard a learner profile:
+The onboarding catalog automatically discovers topic directories containing `manifest.json`, so adding a curated topic does not require changing the learning kernel.
 
-```bash
-npm ci
-npm run tutor -- profile create "My Profile"
-npm run tutor -- onboard
-npm run tutor -- profile list
-npm run tutor -- today <goal-id>
-```
+Start with [Customizing Learning OS](docs/customization.md). It includes a minimal topic manifest, concept Markdown structure, local config, profile storage options, and the workspace API boundary.
 
-Managed profiles keep separate SQLite learner state under `data/profiles/`; reusable Markdown curriculum stays shared under `knowledge/`. ChatGPT or another compatible teacher can use `createTeacherWorkspace()` for pre-profile onboarding and `createTeacherKernel(db)` after a profile is open. The sibling `../job-hunter` and `../ai-feeds` integrations remain optional.
+## Included curriculum
+
+The repository currently includes reusable material/catalogs for areas such as:
+
+- coding interviews;
+- system design;
+- Kubernetes;
+- LLM engineering;
+- Spring Framework;
+- codebase-specific learning examples.
+
+These are examples and starter material, not a mandatory universal curriculum. Add, remove, or replace topics for your own use.
+
+## Useful CLI commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run tutor -- onboard` | Build and confirm a structured preparation plan |
+| `npm run tutor -- profile list` | List local learner profiles |
+| `npm run tutor -- profile use <id>` | Select a learner profile |
+| `npm run tutor -- today <goal-id>` | Build today's bounded evidence-driven mission |
+| `npm run tutor -- goal <goal-id>` | Inspect/configure goal objective requirements |
+| `npm run tutor -- interview <topic>` | Start an interview drill |
+| `npm run tutor -- due` | Show due review concepts |
+| `npm run tutor -- stats` | Show topic statistics |
+| `npm run tutor -- init <topic> <manifest.json>` | Materialize a topic manifest into the selected profile |
+| `npm run tutor -- search <query> --topic <topic>` | Search profile concepts |
+
+Run `npm run tutor -- --help` for the current command surface.
+
+## Privacy and local data
+
+Learning OS is local-first. Managed learner databases and profile metadata live under ignored `data/`.
+
+Confirmed onboarding persists structured planning information needed for future operation, such as target, deadline, time budget, objective strategy, and diagnostic intent. It does **not** persist raw resumes, raw job descriptions, chat transcripts, provider message IDs, or API keys as learner state.
+
+The global `knowledge/` directory is repository content and should contain reusable curriculum, not private learner history.
 
 ## Documentation
 
-- [`docs/architecture.md`](docs/architecture.md) — system boundaries and runtime flow.
-- [`docs/evidence-model.md`](docs/evidence-model.md) — objective, evidence, proficiency, weakness, and scheduling semantics.
-- [`docs/kernel-contracts.md`](docs/kernel-contracts.md) — V1 logical schema, projection rules, challenge/assessment envelopes, scheduler policy, `tutor today`, and teacher-agent↔kernel protocol.
-- [`docs/implementation-plan.md`](docs/implementation-plan.md) — staged fork plan.
-- [`docs/research/source-comparison.md`](docs/research/source-comparison.md) — what we intend to reuse from existing projects.
-- [`docs/decisions/0001-fork-generic-tutor.md`](docs/decisions/0001-fork-generic-tutor.md) — fork and composition decision.
-- [`docs/decisions/0002-evidence-is-authoritative.md`](docs/decisions/0002-evidence-is-authoritative.md) — evidence/projection boundary.
-- [`docs/decisions/0003-scheduler-input-policy.md`](docs/decisions/0003-scheduler-input-policy.md) — versioned evidence→FSRS mapping and legacy scheduler migration policy.
-- [`docs/decisions/0004-teacher-agent-portability.md`](docs/decisions/0004-teacher-agent-portability.md) — ChatGPT-first V1 teacher experience with agent-agnostic durable state and protocol.
+Start here:
 
-### Document authority
+- [Documentation index](docs/README.md)
+- [Getting started](docs/getting-started.md)
+- [Customizing Learning OS](docs/customization.md)
 
-If documents drift, use this order:
+For contributors and integrators:
 
-```text
-accepted ADRs
-  ↓
-docs/kernel-contracts.md
-  ↓
-docs/architecture.md + docs/evidence-model.md
-  ↓
-docs/implementation-plan.md
-  ↓
-docs/research/*
-```
+- [Architecture](docs/architecture.md)
+- [Evidence model](docs/evidence-model.md)
+- [Kernel contracts](docs/kernel-contracts.md)
+- [Implementation plan](docs/implementation-plan.md)
+- [Design decisions](docs/decisions/)
+- [Source comparison](docs/research/source-comparison.md)
 
-Research notes describe source material; they do not override Learning OS decisions. When implementation discovers a contradiction, update the governing ADR/contract first and then bring the explanatory/plan docs back into sync.
+## Project status
 
-## Non-goals for the first usable version
+The core local product loop is implemented: profile isolation, confirmed adaptive onboarding, sparse objectives, evidence/projections, objective-level FSRS scheduling, challenge selection, interview evidence, resumable sessions, and daily orchestration.
 
-Do not build these until the evidence loop works in real use:
+This is still a developer preview rather than a polished hosted application. The CLI is the concrete offline surface today; AI-teacher integrations are intentionally provider-neutral and are expected to run in an environment that can call the workspace/kernel APIs.
 
-- a dashboard rewrite;
-- voice interaction;
-- Monaco/Judge0-style interview UI;
-- Bayesian Knowledge Tracing;
-- multi-agent orchestration;
-- broad academic course-authoring infrastructure;
-- a new spaced-repetition algorithm.
+## Provenance
 
-The first milestone should be capable of learning, practicing, debugging, retrieving, and interviewing against the same durable evidence model.
-
-## Repository strategy and provenance
-
-`/home/hamza/repo/learning-os` is the product working tree. Its Git graph preserves both the Learning OS design lineage and the complete reachable ancestry of `alienz-dev/generic-tutor` at pinned upstream commit `2fffb72201aba055a4c270e2fddb29352edf2efb` from `https://github.com/alienz-dev/generic-tutor.git`.
-
-The repository preserves the pinned upstream ancestry and its declared MIT package metadata while publishing the current Learning OS implementation as its own Git history.
+Learning OS evolved from `alienz-dev/generic-tutor` while replacing its scalar learner-state core. The Git graph preserves the upstream lineage. The current architecture also incorporates selected ideas from FSRS and several open-source learning/interview projects; see [source comparison](docs/research/source-comparison.md) and the ADRs for the exact decisions and boundaries.
