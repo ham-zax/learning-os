@@ -88,7 +88,9 @@ export function createTeacherWorkspace(options: TeacherWorkspaceOptions = {}) {
           listDurablePreparationContexts(db),
         getPreparationContext: (goalId: string) =>
           getDurablePreparationContext(db, goalId),
-        close: () => db.close(),
+        close: (): void => {
+          db.close();
+        },
       };
     },
   };

@@ -602,7 +602,10 @@ export function getDurablePreparationContext(
       strategy: config.preparation_strategy,
       initialDiagnosticKind: config.initial_diagnostic_kind,
       diagnosticPending:
-        config.initial_diagnostic_kind !== null && projection.last_qualifying_evidence_at === null,
+        config.initial_diagnostic_kind !== null &&
+        (config.initial_diagnostic_kind === "transfer_check"
+          ? projection.transfer_state === "untested"
+          : projection.last_qualifying_evidence_at === null),
       readiness: projection.readiness,
       transferState: projection.transfer_state,
       durabilityState: projection.durability_state,

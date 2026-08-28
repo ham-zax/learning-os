@@ -96,6 +96,14 @@ async function askPositiveInteger(rl: Interface, prompt: string): Promise<number
   }
 }
 
+async function askDaysPerWeek(rl: Interface): Promise<number> {
+  while (true) {
+    const value = await askPositiveInteger(rl, "Study days per week [1-7]: ");
+    if (value <= 7) return value;
+    console.log("Enter a whole number from 1 to 7.");
+  }
+}
+
 async function askDeadline(rl: Interface): Promise<string | null> {
   while (true) {
     const value = await ask(rl, "Deadline ISO date/time, or 'none': ");
@@ -300,8 +308,9 @@ export async function runOfflineOnboarding(options: OfflineOnboardingOptions): P
     );
     const targetOutcome = await requireAnswer(rl, "What are you preparing for? ");
     const purpose = await askPurpose(rl);
-    const deadlineAt = purpose === "interview" ? await askDeadline(rl) : null;
+    const deadlineAt = await askDeadline(rl);
     const minutesPerDay = await askPositiveInteger(rl, "Normal study minutes per day: ");
+    const daysPerWeek = await askDaysPerWeek(rl);
     const coverage = parseAreas(
       await requireAnswer(
         rl,
@@ -315,7 +324,7 @@ export async function runOfflineOnboarding(options: OfflineOnboardingOptions): P
       targetOutcome,
       purpose,
       deadlineAt,
-      availability: { minutesPerDay },
+      availability: { minutesPerDay, daysPerWeek },
       mustCover: coverage,
       strengths,
       weakAreas: weaknesses,
