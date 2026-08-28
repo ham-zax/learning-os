@@ -1,5 +1,7 @@
 # Learning OS Teacher Pedagogy Implementation Plan
 
+**Status:** Tasks 1–12 are complete and dogfooded. Tasks 13–16 remain conditional and should not be implemented without new evidence.
+
 **Goal:** Turn authoritative Learning OS state and `ChallengeIntent` into consistently strong, evidence-safe learning interactions that build, test, repair, and transfer learner mental models while keeping the learner-facing flow low-friction.
 
 **Architecture:** Implement the first wave at the teacher boundary: the normative teacher protocol defines the pedagogical contract, the `learning-os-teacher` skill provides compact execution guidance, and the design document owns rationale and examples. Reuse existing kernel APIs and learner-state projections. Add teacher-side helper code only if dogfooding shows that replaceable teachers cannot apply the protocol consistently without it.

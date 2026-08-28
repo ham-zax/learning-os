@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft design for the next teacher-experience iteration. This document does not change learner-state authority, evidence semantics, scheduler behavior, or curriculum ownership.
+First teacher-pedagogy wave implemented and dogfooded. Tasks 13–16 remain conditional on observed need. This design does not change learner-state authority, evidence semantics, scheduler behavior, or curriculum ownership.
 
 ## Problem
 
