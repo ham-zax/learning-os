@@ -104,6 +104,21 @@ export type GoalImportance = z.infer<typeof GoalImportance>;
 export const GoalTargetReadiness = z.enum(["guided", "independent"]);
 export type GoalTargetReadiness = z.infer<typeof GoalTargetReadiness>;
 
+export const PreparationPurpose = z.enum(["interview", "role_readiness", "long_term_mastery"]);
+export type PreparationPurpose = z.infer<typeof PreparationPurpose>;
+
+export const PreparationStrategy = z.enum(["learn", "refresh", "diagnose_first", "transfer_practice"]);
+export type PreparationStrategy = z.infer<typeof PreparationStrategy>;
+
+export const InitialDiagnosticKind = z.enum([
+  "baseline",
+  "refresh_check",
+  "strength_check",
+  "prerequisite_check",
+  "transfer_check",
+]);
+export type InitialDiagnosticKind = z.infer<typeof InitialDiagnosticKind>;
+
 export const TransferState = z.enum([
   "untested",
   "not_demonstrated",
@@ -348,10 +363,26 @@ export const GoalObjectiveSchema = z.object({
   target_readiness: GoalTargetReadiness,
   require_transfer: sqliteBoolean,
   require_durability: sqliteBoolean,
+  preparation_strategy: PreparationStrategy.nullable().default(null),
+  initial_diagnostic_kind: InitialDiagnosticKind.nullable().default(null),
   created_at: z.string(),
   updated_at: z.string(),
 });
 export type GoalObjective = z.infer<typeof GoalObjectiveSchema>;
+
+export const GoalPreparationSchema = z.object({
+  goal_id: z.string(),
+  purpose: PreparationPurpose,
+  target_role: z.string().nullable().default(null),
+  target_outcome: z.string().nullable().default(null),
+  minutes_per_day: z.number().int().positive().nullable().default(null),
+  days_per_week: z.number().int().min(1).max(7).nullable().default(null),
+  minutes_per_week: z.number().int().positive().nullable().default(null),
+  confirmed_at: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export type GoalPreparation = z.infer<typeof GoalPreparationSchema>;
 
 export const ObjectiveProjectionSchema = z.object({
   objective_id: z.string(),
@@ -656,6 +687,7 @@ export const schemas = {
   capabilities: CapabilitySchema,
   learning_objectives: LearningObjectiveSchema,
   goal_objectives: GoalObjectiveSchema,
+  goal_preparation: GoalPreparationSchema,
   objective_projections: ObjectiveProjectionSchema,
   sessions: SessionSchema,
   reviews: ReviewSchema,

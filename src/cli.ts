@@ -11,6 +11,7 @@
  *   tutor interview <topic>    Start interview drill
  *   tutor goal <topic>         Configure/list active goal objectives
  *   tutor today <topic>        Build today's evidence-driven mission
+ *   tutor onboard              Structured offline onboarding fallback
  *   tutor profile <command>    Create/list/select learner profiles
  *   tutor due                  Show due concepts
  *   tutor stats                Show topic summary
@@ -53,7 +54,7 @@ import {
 } from "./ingest/orchestrator.js";
 import { generateLearningPlan } from "./plan/planner.js";
 import { generateEnhancedPlan } from "./plan/nexus-planner.js";
-import { getTodayMission } from "./plan/today.js";
+import { getTodayMission, resolveTodayAvailableMinutes } from "./plan/today.js";
 import { searchConcepts, findRelatedConcepts } from "./knowledge/search.js";
 import { exportToAnki } from "./sync/anki-export.js";
 import { syncToObsidian } from "./sync/obsidian-sync.js";
@@ -95,6 +96,7 @@ import { generateQuizBatch } from "./session/modes/quiz.js";
 
 import type { ConceptMap, ConceptProposal, ConceptFile } from "./knowledge/types.js";
 import { DeliveryContext, GoalImportance, GoalTargetReadiness } from "./db/types.js";
+import { runOfflineOnboarding } from "./onboarding/cli.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -845,6 +847,21 @@ profileCommand
     }
   });
 
+program
+  .command("onboard")
+  .description("Run structured offline onboarding and create a profile only after confirmation")
+  .action(async () => {
+    try {
+      await runOfflineOnboarding({
+        dataDir: PROFILE_DATA_DIR,
+        knowledgeRoot: KNOWLEDGE_DIR,
+      });
+    } catch (err) {
+      error(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+    }
+  });
+
 // tutor <topic> — auto-detect mode
 program
   .argument("<topic>", "Topic to study (auto-detects session vs ingestion)")
@@ -1152,12 +1169,15 @@ program
         if (!topicRow) {
           throw new Error(`Goal topic not found: ${goalId}`);
         }
-        const configuredMinutes = opts.minutes
+        const explicitMinutes = opts.minutes
           ? Number.parseInt(opts.minutes, 10)
-          : loadConfig().daily_minutes;
-        if (!Number.isInteger(configuredMinutes) || configuredMinutes <= 0) {
-          throw new Error("Available minutes must be a positive integer");
-        }
+          : undefined;
+        const configuredMinutes = resolveTodayAvailableMinutes(
+          db,
+          goalId,
+          explicitMinutes,
+          loadConfig().daily_minutes,
+        );
         const mainContext = opts.context === undefined
           ? undefined
           : DeliveryContext.parse(opts.context);

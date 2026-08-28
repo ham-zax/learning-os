@@ -38,6 +38,10 @@ import type { AssessmentResultInput } from "./db/types.js";
 import { getTodayMission } from "./plan/today.js";
 import type { TodayMissionInput } from "./plan/today.js";
 import type { SetGoalObjectiveInput } from "./db/database.js";
+import {
+  getDurablePreparationContext,
+  listDurablePreparationContexts,
+} from "./onboarding/apply.js";
 
 /**
  * Bind the provider-neutral Learning OS kernel to one database handle.
@@ -49,6 +53,8 @@ import type { SetGoalObjectiveInput } from "./db/database.js";
 export function createTeacherKernel(db: Database.Database) {
   return {
     getTodayMission: (input: TodayMissionInput) => getTodayMission(db, input),
+    listPreparationContexts: () => listDurablePreparationContexts(db),
+    getPreparationContext: (goalId: string) => getDurablePreparationContext(db, goalId),
     setGoalObjective: (input: SetGoalObjectiveInput) => setGoalObjective(db, input),
     getGoalObjectives: (goalId: string, includeInactive = false) =>
       getGoalObjectives(db, goalId, { includeInactive }),

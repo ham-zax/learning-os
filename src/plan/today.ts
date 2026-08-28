@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { getGoalObjectives, getTopic } from "../db/database.js";
+import { getGoalObjectives, getGoalPreparation, getTopic } from "../db/database.js";
 import type {
   DeliveryContext,
   GoalObjective,
@@ -294,6 +294,19 @@ function addBlocked(
 function missionId(goalId: string, now: string, availableMinutes: number): string {
   const safeGoal = goalId.replace(/[^A-Za-z0-9_-]+/g, "_");
   return `today_${safeGoal}_${now.slice(0, 10)}_${availableMinutes}`;
+}
+
+export function resolveTodayAvailableMinutes(
+  db: Database.Database,
+  goalId: string,
+  explicitMinutes: number | undefined,
+  fallbackMinutes: number,
+): number {
+  const value = explicitMinutes ?? getGoalPreparation(db, goalId)?.minutes_per_day ?? fallbackMinutes;
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error("Available minutes must be a positive integer");
+  }
+  return value;
 }
 
 export function getTodayMission(

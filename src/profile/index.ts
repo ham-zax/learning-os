@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -239,19 +240,64 @@ export function createProfile(
   }
 
   mkdirSync(profileDir, { recursive: true, mode: 0o700 });
-  const db = createDatabase(managedDatabasePath(paths, id));
-  db.close();
+  try {
+    const db = createDatabase(managedDatabasePath(paths, id));
+    db.close();
 
-  const profile: RegistryProfile = {
-    id,
-    displayName,
-    createdAt: new Date().toISOString(),
-    description,
-  };
-  registry.profiles.push(profile);
-  registry.profiles.sort((left, right) => left.id.localeCompare(right.id));
-  saveRegistry(paths, registry);
-  return toManagedProfile(profile);
+    const profile: RegistryProfile = {
+      id,
+      displayName,
+      createdAt: new Date().toISOString(),
+      description,
+    };
+    registry.profiles.push(profile);
+    registry.profiles.sort((left, right) => left.id.localeCompare(right.id));
+    saveRegistry(paths, registry);
+    return toManagedProfile(profile);
+  } catch (error) {
+    rmSync(profileDir, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+/**
+ * Recovery hook for a profile created by the current provisioning attempt.
+ * The exact creation timestamp and unselected state must still match, so this
+ * cannot silently reset an older learner profile with the same ID.
+ */
+export function discardCreatedProfile(
+  profile: LearnerProfile,
+  options: ProfileStoreOptions = {},
+): void {
+  if (profile.source !== "managed") {
+    throw new Error("Legacy profiles cannot be discarded by provisioning recovery.");
+  }
+  const paths = profilePaths(options);
+  const registry = loadRegistry(paths);
+  if (registry.activeProfileId === profile.id) {
+    throw new Error(`Cannot discard selected profile: ${profile.id}`);
+  }
+  const registered = registry.profiles.find((candidate) => candidate.id === profile.id);
+  if (!registered || registered.createdAt !== profile.createdAt) {
+    throw new Error(`Provisioning profile identity no longer matches: ${profile.id}`);
+  }
+  const profileDir = managedProfileDirectory(paths, profile.id);
+  if (!existsSync(profileDir)) {
+    throw new Error(`Provisioning profile directory is missing: ${profile.id}`);
+  }
+
+  const quarantine = `${profileDir}.discard-${process.pid}`;
+  renameSync(profileDir, quarantine);
+  try {
+    saveRegistry(paths, {
+      ...registry,
+      profiles: registry.profiles.filter((candidate) => candidate.id !== profile.id),
+    });
+  } catch (error) {
+    renameSync(quarantine, profileDir);
+    throw error;
+  }
+  rmSync(quarantine, { recursive: true, force: true });
 }
 
 export function selectProfile(

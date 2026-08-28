@@ -10,6 +10,7 @@ import Database from "better-sqlite3";
 import {
   AttemptSchema,
   GoalObjectiveSchema,
+  GoalPreparationSchema,
   ReviewSchema,
   SessionSchema,
 } from "./types.js";
@@ -26,9 +27,13 @@ import type {
   GoalObjective,
   GoalImportance,
   GoalTargetReadiness,
+  GoalPreparation,
+  PreparationPurpose,
+  PreparationStrategy,
+  InitialDiagnosticKind,
 } from "./types.js";
 
-const CURRENT_VERSION = 7;
+const CURRENT_VERSION = 8;
 
 // ─── Schema DDL ──────────────────────────────────────────────────────────────
 
@@ -1037,6 +1042,32 @@ const migrations: Migration[] = [
       })();
     },
   },
+  {
+    version: 8,
+    up: (db) => {
+      db.transaction(() => {
+        db.exec(`
+          ALTER TABLE goal_objectives ADD COLUMN preparation_strategy TEXT
+            CHECK (preparation_strategy IS NULL OR preparation_strategy IN ('learn', 'refresh', 'diagnose_first', 'transfer_practice'));
+          ALTER TABLE goal_objectives ADD COLUMN initial_diagnostic_kind TEXT
+            CHECK (initial_diagnostic_kind IS NULL OR initial_diagnostic_kind IN ('baseline', 'refresh_check', 'strength_check', 'prerequisite_check', 'transfer_check'));
+
+          CREATE TABLE goal_preparation (
+            goal_id           TEXT PRIMARY KEY REFERENCES topics(id) ON DELETE CASCADE,
+            purpose           TEXT NOT NULL CHECK (purpose IN ('interview', 'role_readiness', 'long_term_mastery')),
+            target_role       TEXT,
+            target_outcome    TEXT,
+            minutes_per_day   INTEGER CHECK (minutes_per_day IS NULL OR minutes_per_day > 0),
+            days_per_week     INTEGER CHECK (days_per_week IS NULL OR (days_per_week BETWEEN 1 AND 7)),
+            minutes_per_week  INTEGER CHECK (minutes_per_week IS NULL OR minutes_per_week > 0),
+            confirmed_at      TEXT NOT NULL,
+            created_at        TEXT NOT NULL,
+            updated_at        TEXT NOT NULL
+          );
+        `);
+      })();
+    },
+  },
 ];
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -1134,6 +1165,8 @@ export interface SetGoalObjectiveInput {
   targetReadiness?: GoalTargetReadiness;
   requireTransfer?: boolean;
   requireDurability?: boolean;
+  preparationStrategy?: PreparationStrategy;
+  initialDiagnosticKind?: InitialDiagnosticKind;
 }
 
 export function setGoalObjective(
@@ -1161,15 +1194,19 @@ export function setGoalObjective(
        target_readiness,
        require_transfer,
        require_durability,
+       preparation_strategy,
+       initial_diagnostic_kind,
        created_at,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(goal_id, objective_id) DO UPDATE SET
        is_active = excluded.is_active,
        importance = excluded.importance,
        target_readiness = excluded.target_readiness,
        require_transfer = excluded.require_transfer,
        require_durability = excluded.require_durability,
+       preparation_strategy = COALESCE(excluded.preparation_strategy, goal_objectives.preparation_strategy),
+       initial_diagnostic_kind = COALESCE(excluded.initial_diagnostic_kind, goal_objectives.initial_diagnostic_kind),
        updated_at = excluded.updated_at`,
   ).run(
     input.goalId,
@@ -1179,6 +1216,8 @@ export function setGoalObjective(
     input.targetReadiness ?? "independent",
     input.requireTransfer ? 1 : 0,
     input.requireDurability ? 1 : 0,
+    input.preparationStrategy ?? null,
+    input.initialDiagnosticKind ?? null,
     now,
     now,
   );
@@ -1220,6 +1259,89 @@ export function getGoalObjectives(
         )
         .all(goalId);
   return GoalObjectiveSchema.array().parse(rows);
+}
+
+export interface SetGoalPreparationInput {
+  goalId: string;
+  purpose: PreparationPurpose;
+  targetRole?: string | null;
+  targetOutcome?: string | null;
+  minutesPerDay?: number | null;
+  daysPerWeek?: number | null;
+  minutesPerWeek?: number | null;
+  confirmedAt: string;
+}
+
+export function setGoalPreparation(
+  db: Database.Database,
+  input: SetGoalPreparationInput,
+): GoalPreparation {
+  if (!getTopic(db, input.goalId)) {
+    throw new Error(`Goal topic not found: ${input.goalId}`);
+  }
+  const confirmedAt = new Date(input.confirmedAt);
+  if (Number.isNaN(confirmedAt.getTime())) {
+    throw new Error(`Invalid onboarding confirmation time: ${input.confirmedAt}`);
+  }
+  for (const [label, value] of [
+    ["minutesPerDay", input.minutesPerDay],
+    ["minutesPerWeek", input.minutesPerWeek],
+  ] as const) {
+    if (value !== undefined && value !== null && (!Number.isInteger(value) || value <= 0)) {
+      throw new Error(`${label} must be a positive integer when provided`);
+    }
+  }
+  if (
+    input.daysPerWeek !== undefined &&
+    input.daysPerWeek !== null &&
+    (!Number.isInteger(input.daysPerWeek) || input.daysPerWeek < 1 || input.daysPerWeek > 7)
+  ) {
+    throw new Error("daysPerWeek must be an integer from 1 to 7 when provided");
+  }
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO goal_preparation (
+       goal_id,
+       purpose,
+       target_role,
+       target_outcome,
+       minutes_per_day,
+       days_per_week,
+       minutes_per_week,
+       confirmed_at,
+       created_at,
+       updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(goal_id) DO UPDATE SET
+       purpose = excluded.purpose,
+       target_role = excluded.target_role,
+       target_outcome = excluded.target_outcome,
+       minutes_per_day = excluded.minutes_per_day,
+       days_per_week = excluded.days_per_week,
+       minutes_per_week = excluded.minutes_per_week,
+       confirmed_at = excluded.confirmed_at,
+       updated_at = excluded.updated_at`,
+  ).run(
+    input.goalId,
+    input.purpose,
+    input.targetRole ?? null,
+    input.targetOutcome ?? null,
+    input.minutesPerDay ?? null,
+    input.daysPerWeek ?? null,
+    input.minutesPerWeek ?? null,
+    confirmedAt.toISOString(),
+    now,
+    now,
+  );
+  return getGoalPreparation(db, input.goalId)!;
+}
+
+export function getGoalPreparation(
+  db: Database.Database,
+  goalId: string,
+): GoalPreparation | undefined {
+  const row = db.prepare(`SELECT * FROM goal_preparation WHERE goal_id = ?`).get(goalId);
+  return row === undefined ? undefined : GoalPreparationSchema.parse(row);
 }
 
 // ─── CRUD: Concepts ───────────────────────────────────────────────────────

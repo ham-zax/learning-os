@@ -48,6 +48,14 @@ The system must keep those questions separate. Grading, task selection, and spac
                  Next due objective
 ```
 
+## Learner profile and onboarding boundary
+
+Managed learners use one SQLite database per profile under ignored local `data/`; the repository `knowledge/` tree remains one shared curriculum library. The profile resolver chooses which learner database the kernel receives, so goals, imported concept metadata, objectives, sessions, attempts, evidence, weaknesses, scheduling, and resumable state cannot mix across learners.
+
+Onboarding begins outside every learner database. Structured intake and the deterministic proposal are draft planning input until the learner explicitly confirms the exact proposal. Confirmed application then provisions a new unselected profile, materializes only the included curriculum metadata plus required prerequisite closure, creates the dedicated topic-backed goal, activates sparse objective requirements, and persists purpose/time/initial-strategy/diagnostic planning metadata. Only after that configuration succeeds is the profile selected.
+
+Resume/JD/self-report claims never initialize proficiency. Newly activated objectives retain ordinary `unknown` readiness with untested transfer/durability and no review card until learner attempts and assessments produce evidence. A replacement teacher reconstructs the confirmed preparation purpose, time defaults, initial strategies, pending diagnostic intent, and actual current evidence state from the profile database; raw documents or prior chat history are not required.
+
 ## Durable entities
 
 ### Topic

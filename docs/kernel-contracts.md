@@ -80,6 +80,8 @@ Goal-specific requirements and priority for an objective. In V1, `goal_id` is `t
 | `target_readiness` | enum/text | `guided` or `independent`. |
 | `require_transfer` | bool | Goal requires demonstrated transfer. |
 | `require_durability` | bool | Goal requires demonstrated delayed retrieval. |
+| `preparation_strategy` | enum/text/null | Initial orchestration policy: `learn`, `refresh`, `diagnose_first`, or `transfer_practice`. Planning metadata only; never proficiency. |
+| `initial_diagnostic_kind` | enum/text/null | Evidence-producing diagnostic intent established at confirmed onboarding; remains planning metadata until an actual attempt is assessed. |
 | `created_at` | timestamp | Association creation time. |
 | `updated_at` | timestamp | Goal-metadata update time. |
 
@@ -89,7 +91,26 @@ Constraint:
 PRIMARY KEY(goal_id, objective_id)
 ```
 
-The same objective may therefore be core for one goal and supporting or inactive for another without duplicating learner evidence.
+The same objective may therefore be core for one goal and supporting or inactive for another without duplicating learner evidence. Onboarding preparation strategy may influence which challenge the teacher tries first, but later evidence/projections remain authoritative and the strategy cannot grant readiness, transfer, durability, or scheduler state.
+
+### `goal_preparation`
+
+Confirmed goal-level preparation context that must survive replacement of the conversational teacher. This is orchestration state, not learner evidence.
+
+| Column | Type | Rule |
+| --- | --- | --- |
+| `goal_id` | PK/FK | References the existing topic-backed goal owner. |
+| `purpose` | enum/text | `interview`, `role_readiness`, or `long_term_mastery`. |
+| `target_role` | text/null | Structured learner-facing role, when supplied. |
+| `target_outcome` | text/null | Structured preparation outcome, when supplied. |
+| `minutes_per_day` | integer/null | Normal per-day orchestration budget; does not affect FSRS. |
+| `days_per_week` | integer/null | Optional availability context, 1–7. |
+| `minutes_per_week` | integer/null | Optional weekly orchestration budget. |
+| `confirmed_at` | timestamp | Explicit learner-confirmation time. |
+| `created_at` | timestamp | Persistence creation time. |
+| `updated_at` | timestamp | Planning-metadata update time. |
+
+Do not persist raw resumes, job descriptions, chat transcripts, provider identifiers, or the full draft proposal here. Resume/JD/self-report claims may shape this confirmed plan but cannot create evidence, review events/cards, misconceptions, or non-unknown objective projections.
 
 ### `objective_projections`
 
