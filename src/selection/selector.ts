@@ -404,6 +404,9 @@ function compareEvaluations(
     return right.state.blockingMisconceptionCount - left.state.blockingMisconceptionCount;
   }
 
+  const preference = Number(Boolean(right.candidate.preferred)) - Number(Boolean(left.candidate.preferred));
+  if (preference !== 0) return preference;
+
   const readiness =
     READINESS_RANK[left.state.readiness] - READINESS_RANK[right.state.readiness];
   if (readiness !== 0) return readiness;

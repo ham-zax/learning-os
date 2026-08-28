@@ -732,10 +732,10 @@ need for task-form/surface diversity
 - Ordinary review warm-up: maximum 3 items and maximum 5 minutes.
 - Review debt cannot consume the full mission.
 - Pending initial diagnostics run before ordinary transfer/durability work. A non-transfer diagnostic suppresses transfer pressure for that objective until qualifying evidence resolves the diagnostic.
-- When several initial diagnostics are immediately eligible, the mission may schedule several of them and leave the remaining budget unallocated; regenerate the mission after their evidence changes learner state.
+- An ordinary mission schedules at most one pending initial diagnostic. Close that episode, persist its evidence, then regenerate from current state instead of precomputing a diagnostic sweep.
 - If initial diagnostics are prerequisite-blocked, select useful prerequisite/foundation work rather than bypassing the blocker with transfer work.
-- If `available_minutes >= 20` and a useful forward-progress objective exists, include at least one non-review main challenge.
-- If `available_minutes >= 30` and an active deadline/interview goal makes transfer pressure useful, include one transfer/interview challenge only after pending initial-diagnostic requirements permit it.
+- If `available_minutes >= 20` and a useful forward-progress objective exists, include at least one non-review main challenge unless an explicit `maxItems` bound has already been satisfied.
+- If `available_minutes >= 30` and an active deadline/interview goal makes transfer pressure useful, include one transfer/interview challenge only after pending initial-diagnostic requirements permit it and the explicit `maxItems` bound leaves room.
 - Do not hard-code fixed percentages for every session.
 
 ### Output
@@ -770,12 +770,23 @@ Use one active teacher/orchestrator at a time in V1. Do not introduce a network 
 
 Optional agent/model provenance may be recorded for audit, but it cannot alter evidence interpretation, projection rules, scheduler semantics, or resume correctness.
 
-### 1. Request daily mission
+### 1. Request daily mission / next bounded move
 
 ```text
-getTodayMission(goalId, availableMinutes)
+getTodayMission({
+  goalId,
+  availableMinutes,
+  maxItems?,
+  focusObjectiveIds?
+})
 → DailyMission
 ```
+
+`availableMinutes` is the outer daily budget on the first call and the current remaining session budget on later episode-boundary replans. A compatible episode-by-episode teacher should pass `maxItems: 1`, execute and close that selected episode, persist resulting evidence, then call again with the new remaining budget so selection sees current projections rather than a stale full-session script.
+
+`focusObjectiveIds` is an optional non-persistent soft preference over active goal objectives. It is only a tie-breaker after higher-authority selection policy such as prerequisite blocking, recurring/retest weakness, due retrieval, importance/urgency, recent contradictory evidence, and blocking misconceptions. It never changes evidence, readiness, transfer, durability, review cards, prerequisites, or goal-objective activation.
+
+Long `design` and `implementation` episodes require at least 10 remaining minutes before the planner will start them; if they do not fit, the planner may select a shorter eligible objective or leave the remaining budget intentionally unallocated. These are session-budget guards, not FSRS semantics.
 
 ### 2. Register/freeze a challenge
 

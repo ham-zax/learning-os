@@ -338,7 +338,7 @@ Interview is only a delivery context. Do not run a separate generic ChatGPT inte
 
 ## Learner-facing next action
 
-After the current interaction episode has reached cognitive closure, use Learning OS to obtain the authoritative next move. Obtaining that recommendation is allowed before learner confirmation; opening another attempt is not. When a move is returned:
+After the current interaction episode has reached cognitive closure, use Learning OS to obtain the authoritative next move. For ordinary study orchestration, call `getTodayMission(...)` with the **current remaining session minutes** and `maxItems: 1`; if the learner or confirmed curriculum has an active soft focus, pass its active goal-objective IDs as `focusObjectiveIds`. Recompute this after every closed episode so the just-recorded evidence can change selection. A soft focus is request context only: never persist it as mastery/readiness, and never override a true prerequisite, due retrieval, recurring/retest weakness, or other higher-authority selector reason. Obtaining that recommendation is allowed before learner confirmation; opening another attempt is not. When a move is returned:
 
 1. state the important result briefly;
 2. express the selected move as one clear recommendation;

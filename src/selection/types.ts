@@ -29,6 +29,8 @@ export interface ObjectiveSelectionCandidate {
   transfer: TransferSelectionPolicy;
   /** Resolved weakness keys the caller has explicitly made eligible for retest now. */
   retestEligibleWeaknessKeys?: readonly string[];
+  /** Non-evidence soft preference used only after higher-authority selection policy. */
+  preferred?: boolean;
   /** Real task forms the caller/teacher knows can assess this objective. */
   availableTaskForms?: readonly TaskForm[];
 }
