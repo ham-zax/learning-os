@@ -65,6 +65,9 @@ export type EvaluatorType = z.infer<typeof EvaluatorType>;
 export const EvidenceRevisionAction = z.enum(["invalidate", "restore"]);
 export type EvidenceRevisionAction = z.infer<typeof EvidenceRevisionAction>;
 
+export const ReviewRating = z.enum(["Again", "Hard", "Good"]);
+export type ReviewRating = z.infer<typeof ReviewRating>;
+
 export const MisconceptionDisposition = z.enum(["observed", "cleared"]);
 export type MisconceptionDisposition = z.infer<typeof MisconceptionDisposition>;
 
@@ -576,6 +579,31 @@ export const WeaknessProjectionSchema = z.object({
 });
 export type WeaknessProjection = z.infer<typeof WeaknessProjectionSchema>;
 
+// ─── objective scheduler state ──────────────────────────────────────────────
+
+export const ReviewEventSchema = z.object({
+  seq: z.number().int().positive(),
+  objective_id: z.string(),
+  evidence_event_id: z.string(),
+  rating: ReviewRating,
+  mapper_version: z.string(),
+  reviewed_at: z.string(),
+  scheduler_version: z.string(),
+  parameters_json: jsonRecord,
+});
+export type ReviewEvent = z.infer<typeof ReviewEventSchema>;
+
+export const ReviewCardSchema = z.object({
+  objective_id: z.string(),
+  due_at: z.string(),
+  card_json: jsonRecord,
+  last_rating: ReviewRating.nullable().default(null),
+  source_review_seq: z.number().int().positive(),
+  scheduler_version: z.string(),
+  updated_at: z.string(),
+});
+export type ReviewCard = z.infer<typeof ReviewCardSchema>;
+
 // ─── Schema registry (convenient for generic helpers) ───────────────────────
 
 export const schemas = {
@@ -600,6 +628,8 @@ export const schemas = {
   misconceptions: MisconceptionSchema,
   misconception_observations: MisconceptionObservationSchema,
   weakness_projections: WeaknessProjectionSchema,
+  review_events: ReviewEventSchema,
+  review_cards: ReviewCardSchema,
 } as const;
 
 export type TableName = keyof typeof schemas;

@@ -25,6 +25,7 @@ import {
   getLearningObjective,
   registerChallenge,
 } from "../kernel/foundation.js";
+import { getDueObjectives } from "../scheduler/index.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -78,13 +79,7 @@ function defaultMaxConcepts(dailyMinutes: number, mode: DeliveryContext): number
 
 // ─── Concept Selection ──────────────────────────────────────────────────────
 
-/**
- * Select concepts for an ordinary session based on delivery context.
- *
- * - **learn**: use the existing explore strategy for unseen concepts
- * - **review**: use the existing quiz strategy for due/interleaved concepts
- * - **practice**: use the existing teach-back strategy for reviewed concepts
- */
+/** Select ordinary concepts from objective projections and objective review cards. */
 export function selectConcepts(
   db: Database.Database,
   topicId: string,
@@ -92,14 +87,18 @@ export function selectConcepts(
   maxConcepts: number,
 ): Concept[] {
   const allConcepts = getConceptsByTopic(db, topicId);
+  const byId = new Map(allConcepts.map((concept) => [concept.id, concept]));
 
   switch (mode) {
     case "learn":
-      return selectExplore(allConcepts, maxConcepts);
-    case "review":
-      return selectQuiz(db, topicId, allConcepts, maxConcepts);
+      return selectForLearning(db, topicId, allConcepts, maxConcepts);
     case "practice":
-      return selectTeachBack(allConcepts, maxConcepts);
+      return selectForPractice(db, topicId, allConcepts, maxConcepts);
+    case "review":
+      return getDueObjectives(db, { topicId, capabilityId: "explain" })
+        .map((due) => byId.get(due.conceptId))
+        .filter((concept): concept is Concept => concept !== undefined)
+        .slice(0, maxConcepts);
     case "interview":
     case "mock":
       throw new Error(`Delivery context ${mode} is not supported by ordinary sessions.`);
@@ -108,128 +107,73 @@ export function selectConcepts(
   }
 }
 
-/**
- * Explore mode: pick unseen concepts, respecting prerequisite order.
- * A concept's prerequisites must all be in reviewing/mastered status
- * (or absent from the topic) before it is eligible.
- */
-function selectExplore(
-  allConcepts: Concept[],
-  maxConcepts: number,
-): Concept[] {
-  const byId = new Map(allConcepts.map((c) => [c.id, c]));
-  const mastered = new Set(
-    allConcepts
-      .filter((c) => c.status === "reviewing" || c.status === "mastered")
-      .map((c) => c.id),
-  );
-
-  // Filter to unseen concepts whose prerequisites are satisfied
-  const eligible = allConcepts.filter((c) => {
-    if (c.status !== "unseen") return false;
-    return c.prerequisites.every(
-      (pre) => !byId.has(pre) || mastered.has(pre),
-    );
-  });
-
-  // Sort by difficulty, then by number of prerequisites (fewer first)
-  eligible.sort((a, b) => {
-    if (a.difficulty !== b.difficulty) return a.difficulty - b.difficulty;
-    return a.prerequisites.length - b.prerequisites.length;
-  });
-
-  return eligible.slice(0, maxConcepts);
+function getExplainReadinessByConcept(
+  db: Database.Database,
+  topicId: string,
+): Map<string, "unknown" | "exposed" | "guided" | "independent"> {
+  const rows = db
+    .prepare(
+      `SELECT objective.concept_id, projection.readiness
+       FROM learning_objectives objective
+       JOIN objective_projections projection ON projection.objective_id = objective.id
+       JOIN concepts concept ON concept.id = objective.concept_id
+       WHERE concept.topic_id = ?
+         AND objective.capability_id = 'explain'`,
+    )
+    .all(topicId) as Array<{
+    concept_id: string;
+    readiness: "unknown" | "exposed" | "guided" | "independent";
+  }>;
+  return new Map(rows.map((row) => [row.concept_id, row.readiness]));
 }
 
-/**
- * Quiz mode: pick due concepts (next_review <= today or NULL) and
- * interleave 2-3 older reviewed concepts for reinforcement.
- */
-function selectQuiz(
+function selectForLearning(
   db: Database.Database,
   topicId: string,
   allConcepts: Concept[],
   maxConcepts: number,
 ): Concept[] {
-  const today = new Date().toISOString().slice(0, 10);
+  const readiness = getExplainReadinessByConcept(db, topicId);
+  const rank = new Map<string | undefined, number>([
+    [undefined, 0],
+    ["unknown", 1],
+    ["exposed", 2],
+  ]);
 
-  // Due concepts: next_review <= today OR next_review IS NULL
-  const due = allConcepts
-    .filter((c) => c.next_review === null || c.next_review <= today)
+  return allConcepts
+    .filter((concept) => {
+      const state = readiness.get(concept.id);
+      return state === undefined || state === "unknown" || state === "exposed";
+    })
     .sort((a, b) => {
-      // NULLs first (never reviewed), then by next_review ascending
-      if (a.next_review === null && b.next_review !== null) return -1;
-      if (a.next_review !== null && b.next_review === null) return 1;
-      return (a.next_review ?? "").localeCompare(b.next_review ?? "");
-    });
-
-  // Older reviewed concepts: not due, status is reviewing/mastered
-  const olderReviewed = allConcepts
-    .filter(
-      (c) =>
-        c.next_review !== null &&
-        c.next_review > today &&
-        (c.status === "reviewing" || c.status === "mastered"),
-    )
-    .sort(() => Math.random() - 0.5); // shuffle for variety
-
-  // Interleave: take all due, then fill remaining slots with older reviewed
-  const result: Concept[] = [];
-  const seen = new Set<string>();
-
-  for (const c of due) {
-    if (result.length >= maxConcepts) break;
-    result.push(c);
-    seen.add(c.id);
-  }
-
-  const interleavedCount = Math.min(
-    3,
-    maxConcepts - result.length,
-    olderReviewed.length,
-  );
-  for (let i = 0; i < interleavedCount; i++) {
-    if (!seen.has(olderReviewed[i].id)) {
-      result.push(olderReviewed[i]);
-    }
-  }
-
-  return result.slice(0, maxConcepts);
+      const readinessDelta = (rank.get(readiness.get(a.id)) ?? 3) - (rank.get(readiness.get(b.id)) ?? 3);
+      if (readinessDelta !== 0) return readinessDelta;
+      if (a.difficulty !== b.difficulty) return a.difficulty - b.difficulty;
+      return a.prerequisites.length - b.prerequisites.length;
+    })
+    .slice(0, maxConcepts);
 }
 
-/**
- * Teach-back mode: pick concepts in "reviewing" status (reviewed at least
- * once but not yet mastered). These are concepts the learner has some
- * familiarity with and should be able to explain.
- */
-function selectTeachBack(
+function selectForPractice(
+  db: Database.Database,
+  topicId: string,
   allConcepts: Concept[],
   maxConcepts: number,
 ): Concept[] {
-  const reviewing = allConcepts
-    .filter((c) => c.status === "reviewing")
+  const readiness = getExplainReadinessByConcept(db, topicId);
+  return allConcepts
+    .filter((concept) => {
+      const state = readiness.get(concept.id);
+      return state === "guided" || state === "independent";
+    })
     .sort((a, b) => {
-      // Prioritize those with lower easiness factor (harder for the learner)
-      if (a.ef !== b.ef) return a.ef - b.ef;
-      // Then by most overdue
-      return (a.next_review ?? "").localeCompare(b.next_review ?? "");
-    });
-
-  // If not enough reviewing concepts, supplement with learning concepts
-  if (reviewing.length < maxConcepts) {
-    const learning = allConcepts
-      .filter((c) => c.status === "learning")
-      .sort((a, b) => a.ef - b.ef);
-
-    const result = [...reviewing];
-    for (const c of learning) {
-      if (result.length >= maxConcepts) break;
-      result.push(c);
-    }
-    return result.slice(0, maxConcepts);
-  }
-
-  return reviewing.slice(0, maxConcepts);
+      const aState = readiness.get(a.id);
+      const bState = readiness.get(b.id);
+      if (aState !== bState) return aState === "guided" ? -1 : 1;
+      if (a.difficulty !== b.difficulty) return a.difficulty - b.difficulty;
+      return a.id.localeCompare(b.id);
+    })
+    .slice(0, maxConcepts);
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────

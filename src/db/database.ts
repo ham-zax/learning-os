@@ -20,7 +20,7 @@ import type {
   DeliveryContext,
 } from "./types.js";
 
-const CURRENT_VERSION = 4;
+const CURRENT_VERSION = 5;
 
 // ─── Schema DDL ──────────────────────────────────────────────────────────────
 
@@ -802,6 +802,67 @@ const migrations: Migration[] = [
       })();
     },
   },
+  {
+    version: 5,
+    up: (db) => {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE review_events (
+            seq               INTEGER PRIMARY KEY AUTOINCREMENT,
+            objective_id      TEXT NOT NULL REFERENCES learning_objectives(id) ON DELETE RESTRICT,
+            evidence_event_id TEXT NOT NULL UNIQUE REFERENCES evidence_events(id) ON DELETE RESTRICT,
+            rating            TEXT NOT NULL CHECK (rating IN ('Again', 'Hard', 'Good')),
+            mapper_version    TEXT NOT NULL,
+            reviewed_at       TEXT NOT NULL,
+            scheduler_version TEXT NOT NULL,
+            parameters_json   TEXT NOT NULL
+          );
+
+          CREATE TABLE review_cards (
+            objective_id      TEXT PRIMARY KEY REFERENCES learning_objectives(id) ON DELETE CASCADE,
+            due_at            TEXT NOT NULL,
+            card_json         TEXT NOT NULL,
+            last_rating       TEXT CHECK (last_rating IS NULL OR last_rating IN ('Again', 'Hard', 'Good')),
+            source_review_seq INTEGER NOT NULL CHECK (source_review_seq > 0),
+            scheduler_version TEXT NOT NULL,
+            updated_at        TEXT NOT NULL
+          );
+
+          CREATE INDEX idx_review_events_objective_time
+            ON review_events(objective_id, reviewed_at, seq);
+          CREATE INDEX idx_review_cards_due
+            ON review_cards(due_at, objective_id);
+
+          CREATE TRIGGER review_events_no_update
+          BEFORE UPDATE ON review_events
+          BEGIN
+            SELECT RAISE(ABORT, 'review events are append-only');
+          END;
+
+          CREATE TRIGGER review_events_no_delete
+          BEFORE DELETE ON review_events
+          BEGIN
+            SELECT RAISE(ABORT, 'review events are append-only');
+          END;
+
+          CREATE TRIGGER review_events_match_source_evidence
+          BEFORE INSERT ON review_events
+          WHEN NOT EXISTS (
+            SELECT 1
+            FROM evidence_events evidence
+            WHERE evidence.id = NEW.evidence_event_id
+              AND evidence.objective_id = NEW.objective_id
+              AND evidence.performed_at = NEW.reviewed_at
+              AND evidence.retrieval_valid = 1
+              AND evidence.result <> 'ungradable'
+          )
+          BEGIN
+            SELECT RAISE(ABORT, 'review event must match qualifying source evidence');
+          END;
+        `);
+      })();
+    },
+  },
 ];
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -950,33 +1011,6 @@ export function getConceptsByTopic(
   const rows = db
     .prepare(`SELECT * FROM concepts WHERE topic_id = ? ORDER BY created_at`)
     .all(topicId);
-  return rows.map(parseConcept) as Concept[];
-}
-
-export function getDueConcepts(
-  db: Database.Database,
-  topicId?: string,
-  today?: string,
-): Concept[] {
-  const now = today ?? new Date().toISOString().slice(0, 10);
-  if (topicId) {
-    const rows = db
-      .prepare(
-        `SELECT * FROM concepts
-         WHERE topic_id = ?
-           AND (next_review <= ? OR next_review IS NULL)
-         ORDER BY next_review ASC`,
-      )
-      .all(topicId, now);
-    return rows.map(parseConcept) as Concept[];
-  }
-  const rows = db
-    .prepare(
-      `SELECT * FROM concepts
-       WHERE (next_review <= ? OR next_review IS NULL)
-       ORDER BY next_review ASC`,
-    )
-    .all(now);
   return rows.map(parseConcept) as Concept[];
 }
 

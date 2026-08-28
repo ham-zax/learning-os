@@ -1,11 +1,12 @@
 /**
- * Adaptive pacing based on SM-2 session history.
+ * Adaptive pacing over preserved session history.
  *
- * Analyzes recent sessions to determine the learner's pace, recommends
- * session scope (concept count + duration), and detects trends.
+ * Legacy review grades remain pace-analysis provenance here; objective/card
+ * state owns current learning-vs-review availability and due timing.
  */
 
 import type Database from "better-sqlite3";
+import { getDueObjectives } from "../scheduler/index.js";
 
 // ─── Exported types ──────────────────────────────────────────────────────────
 
@@ -14,7 +15,7 @@ export interface PacingData {
   averageReviewTime: number;
   /** Fraction of reviews graded >= 3 (0-1). */
   successRate: number;
-  /** Mean SM-2 grade across recent reviews (0-5). */
+  /** Mean preserved legacy review grade across recent reviews (0-5). */
   averageGrade: number;
   /** Recommended number of concepts for the next session. */
   conceptsPerSession: number;
@@ -281,42 +282,39 @@ export function getNextSessionRecommendation(
 ): { concepts: number; minutes: number; focus: "new" | "review" | "mixed" } {
   const pacing = analyzePacing(db, topicId);
 
-  // Count due concepts (next_review <= today or NULL)
-  const now = new Date().toISOString().slice(0, 10);
-  const dueRow = db
-    .prepare(
-      `SELECT COUNT(*) AS cnt
-       FROM concepts
-       WHERE topic_id = ?
-         AND (next_review <= ? OR next_review IS NULL)
-         AND status != 'unseen'`,
-    )
-    .get(topicId, now) as { cnt: number };
-  const dueCount = dueRow.cnt;
+  const dueCount = getDueObjectives(db, {
+    topicId,
+    capabilityId: "explain",
+  }).length;
 
-  // Count unseen concepts
-  const unseenRow = db
+  const learningRow = db
     .prepare(
       `SELECT COUNT(*) AS cnt
-       FROM concepts
-       WHERE topic_id = ?
-         AND status = 'unseen'`,
+       FROM concepts concept
+       LEFT JOIN learning_objectives objective
+         ON objective.concept_id = concept.id
+        AND objective.capability_id = 'explain'
+       LEFT JOIN objective_projections projection
+         ON projection.objective_id = objective.id
+       WHERE concept.topic_id = ?
+         AND (
+           objective.id IS NULL OR
+           projection.readiness IN ('unknown', 'exposed')
+         )`,
     )
     .get(topicId) as { cnt: number };
-  const unseenCount = unseenRow.cnt;
+  const learningCount = learningRow.cnt;
 
-  // Determine focus
   let focus: "new" | "review" | "mixed";
-  if (dueCount === 0 && unseenCount > 0) {
+  if (dueCount === 0 && learningCount > 0) {
     focus = "new";
-  } else if (unseenCount === 0 && dueCount > 0) {
+  } else if (learningCount === 0 && dueCount > 0) {
     focus = "review";
   } else {
     focus = "mixed";
   }
 
-  // Use pacing-recommended concepts as the baseline, capped by what's available
-  const totalAvailable = dueCount + unseenCount;
+  const totalAvailable = dueCount + learningCount;
   const baseConcepts = pacing.conceptsPerSession;
   const concepts = clamp(
     Math.min(baseConcepts, totalAvailable),

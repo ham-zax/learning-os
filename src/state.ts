@@ -1,9 +1,8 @@
 /**
- * Concept state management with SM-2 integration.
+ * Topic/concept state helpers.
  *
- * Bridges the SM-2 spaced-repetition algorithm with the persistence layer,
- * providing higher-level operations for reviewing concepts, querying due
- * items, generating topic summaries, and bootstrapping topics from manifests.
+ * Legacy concept scheduling columns remain readable provenance, while active
+ * due queries use objective-level review cards.
  */
 
 import { readFileSync } from "node:fs";
@@ -11,13 +10,12 @@ import Database from "better-sqlite3";
 import {
   getConcept,
   getConceptsByTopic,
-  getDueConcepts as dbGetDueConcepts,
-  updateConcept,
   createConcept,
   createTopic,
   getTopic,
 } from "./db/database.js";
 import type { Concept, Topic } from "./db/types.js";
+import { getDueObjectives } from "./scheduler/index.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -50,23 +48,9 @@ interface Manifest {
   concepts: ManifestEntry[];
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-/**
- * Retrieve a concept by ID with its SM-2 state parsed from the DB row.
- *
- * The Concept type from the DB already contains ef, interval, repetitions,
- * next_review, last_grade, and status as properly typed fields (the Zod
- * schemas in types.ts handle JSON-to-array coercion).  This function simply
- * wraps getConcept and throws if the concept is missing so callers can rely
- * on a non-null result.
- */
+/** Retrieve concept metadata, including preserved legacy scheduling fields. */
 export function getConceptState(
   db: Database.Database,
   conceptId: string,
@@ -78,39 +62,14 @@ export function getConceptState(
   return concept;
 }
 
-/**
- * Get all concepts that are due for review: next_review is today or earlier,
- * or next_review has never been set (unseen / brand-new concepts).
- *
- * Ordered so that overdue items (NULL next_review) come first, then by
- * next_review ascending.
- */
+/** Get concepts whose explain objective has an effective due review card. */
 export function getDueConcepts(
   db: Database.Database,
   topicId?: string,
 ): Concept[] {
-  const today = todayISO();
-  if (topicId) {
-    return db
-      .prepare(
-        `SELECT * FROM concepts
-         WHERE topic_id = @topicId
-           AND (next_review <= @today OR next_review IS NULL)
-         ORDER BY
-           CASE WHEN next_review IS NULL THEN 0 ELSE 1 END,
-           next_review ASC`,
-      )
-      .all({ topicId, today }) as Concept[];
-  }
-  return db
-    .prepare(
-      `SELECT * FROM concepts
-       WHERE (next_review <= @today OR next_review IS NULL)
-       ORDER BY
-         CASE WHEN next_review IS NULL THEN 0 ELSE 1 END,
-         next_review ASC`,
-    )
-    .all({ today }) as Concept[];
+  return getDueObjectives(db, { topicId, capabilityId: "explain" })
+    .map((due) => getConcept(db, due.conceptId))
+    .filter((concept): concept is Concept => concept !== undefined);
 }
 
 /**
@@ -127,7 +86,7 @@ export function getTopicSummary(
   }
 
   const concepts = getConceptsByTopic(db, topicId);
-  const today = todayISO();
+  const now = new Date().toISOString();
 
   // Count by status
   let unseen = 0;
@@ -152,19 +111,13 @@ export function getTopicSummary(
     }
   }
 
-  // Due = next_review <= today OR next_review IS NULL
-  // Overdue = next_review IS NULL (never reviewed) OR next_review < today
-  let dueCount = 0;
-  let overdueCount = 0;
-
-  for (const c of concepts) {
-    if (c.next_review === null || c.next_review <= today) {
-      dueCount++;
-    }
-    if (c.next_review === null || c.next_review < today) {
-      overdueCount++;
-    }
-  }
+  const dueObjectives = getDueObjectives(db, {
+    topicId,
+    capabilityId: "explain",
+    asOf: now,
+  });
+  const dueCount = dueObjectives.length;
+  const overdueCount = dueObjectives.filter((due) => due.dueAt < now).length;
 
   const total = concepts.length;
 
@@ -192,7 +145,7 @@ export function getTopicSummary(
  *
  * Creates the topic record (skips if already exists) and creates concept
  * records for each manifest entry that does not yet exist in the DB.
- * New concepts start as "unseen" with ef 2.5, interval 0, repetitions 0.
+ * Legacy concept scheduling columns retain their database defaults for provenance.
  */
 export function initializeTopic(
   db: Database.Database,
@@ -227,13 +180,5 @@ export function initializeTopic(
       sourceId: entry.sourceId,
     });
 
-    // Set SM-2 defaults explicitly (createConcept already uses DB defaults,
-    // but we set them here for clarity and in case defaults change).
-    updateConcept(db, entry.id, {
-      status: "unseen",
-      ef: 2.5,
-      interval: 0,
-      repetitions: 0,
-    });
   }
 }

@@ -27,6 +27,10 @@ import type {
   WeaknessProjection,
 } from "../db/types.js";
 import {
+  appendReviewEventForEvidence,
+  rebuildObjectiveReviewCard,
+} from "../scheduler/index.js";
+import {
   getAttempt,
   getChallenge,
   getHintObservationsForAttempt,
@@ -1083,6 +1087,13 @@ export function recordAssessment(
       weaknesses.push(...rebuilt.weaknesses);
     }
 
+    for (const evidence of evidenceEvents) {
+      const reviewEvent = appendReviewEventForEvidence(db, evidence);
+      if (reviewEvent) {
+        rebuildObjectiveReviewCard(db, evidence.objective_id);
+      }
+    }
+
     return { evidenceEvents, projections, weaknesses };
   })();
 }
@@ -1205,6 +1216,11 @@ export function reviseEvidence(
     }
 
     const rebuilt = rebuildObjectiveStateInternal(db, evidence.objective_id);
+    if (replacementEvent) {
+      appendReviewEventForEvidence(db, replacementEvent);
+    }
+    rebuildObjectiveReviewCard(db, evidence.objective_id);
+
     return {
       revision,
       replacementEvent,
