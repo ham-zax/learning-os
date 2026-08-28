@@ -240,6 +240,8 @@ Those strategies are orchestration metadata. They never initialize mastery.
 
 Learning OS deliberately does not embed an onboarding LLM. A compatible teacher owns natural conversation and semantic extraction, then calls the deterministic workspace API.
 
+Do not rely on the model's default tutoring behavior. The repository includes [the teacher-agent protocol](teacher-agent-protocol.md), a portable Skill source at `skills/learning-os-teacher/`, and a Claude-compatible local wrapper at `.claude/skills/learning-os-teacher/SKILL.md`. They all use the same semi-strict policy: harmless factual help can be direct, but next-action, challenge, evidence, hint/exposure, progress, and scheduling decisions stay under Learning OS ownership.
+
 The pre-profile entry point is:
 
 ```ts

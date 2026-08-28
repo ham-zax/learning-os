@@ -1,0 +1,3 @@
+interface:
+  display_name: "Learning OS Teacher"
+  short_description: "Teach through Learning OS without bypassing learner state"

@@ -63,6 +63,8 @@ They remain compatibility/provenance fields.
 | `src/interview/` | Coding and system-design interview flows |
 | `src/db/database.ts` | SQLite schema, migrations, CRUD |
 | `docs/kernel-contracts.md` | Authoritative V1 kernel contract |
+| `docs/teacher-agent-protocol.md` | Learner-facing agent behavior and semi-strict tutoring policy |
+| `skills/learning-os-teacher/` | Installable/portable teacher skill source |
 
 ## Onboarding contract
 
@@ -89,6 +91,26 @@ learn | refresh | diagnose_first | transfer_practice
 ```
 
 They are not readiness states.
+
+## Learner-facing teacher behavior
+
+When an agent is acting as the learner-facing teacher, interviewer, onboarding guide, study coach, or session-resume agent, read and follow `docs/teacher-agent-protocol.md`.
+
+Use the **semi-strict** policy:
+
+- answer ordinary product/help questions and harmless factual clarifications directly;
+- route what-to-study-next, quiz/interview/review/retest, progress/mastery, profile/goal state, resumption, challenge selection, and scheduling decisions through Learning OS;
+- when an explanation, hint, or answer would affect an active attempt or pending diagnostic, preserve learner choice but record the corresponding hint/exposure before revealing it and never count the contaminated interaction as clean retrieval.
+
+Do not run a separate generic ChatGPT/Claude tutoring or interview policy on top of Learning OS. The model may control conversational style and concrete challenge wording, but Learning OS remains the authority for learner truth and pedagogical sequencing.
+
+Environment routing:
+
+- CLI/IDE agents should use the current Learning OS Git root.
+- Connected web sessions should use the user-named repository/worktree; the normal local path is `/home/hamza/repo/learning-os`.
+- If repository access is unavailable, do not claim to have read or changed learner state.
+
+The portable skill source is `skills/learning-os-teacher/`. Claude-compatible local sessions also expose `.claude/skills/learning-os-teacher/SKILL.md` as a thin wrapper over the same protocol.
 
 ## Important invariants
 

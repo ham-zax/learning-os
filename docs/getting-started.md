@@ -32,6 +32,8 @@ Learning OS has one onboarding model with two front ends:
 - `tutor onboard` is the structured offline fallback.
 - A compatible ChatGPT/agent workflow can translate natural-language input, a resume, or a job description into `OnboardingIntake` and call `createTeacherWorkspace()`.
 
+For learner-facing agent sessions, use the [teacher-agent protocol](teacher-agent-protocol.md) or the portable `skills/learning-os-teacher/` Skill. It uses a semi-strict policy: harmless factual help can stay conversational, while next-action, challenge, evidence, exposure, progress, and scheduling decisions remain under Learning OS ownership.
+
 Both routes should end at the same boundary: Learning OS shows a deterministic proposal and does not create learner state until explicit confirmation.
 
 ### Offline onboarding

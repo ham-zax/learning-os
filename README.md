@@ -92,7 +92,7 @@ new learner profile + goal + objectives
 createTeacherKernel(db)
 ```
 
-This keeps model/provider behavior outside durable learner semantics. See [Getting started](docs/getting-started.md) for the full flow.
+This keeps model/provider behavior outside durable learner semantics. Compatible teachers should follow the [teacher-agent protocol](docs/teacher-agent-protocol.md). The portable `learning-os-teacher` Skill source lives under [`skills/learning-os-teacher/`](skills/learning-os-teacher/) for ChatGPT/web packaging and local-agent reuse. See [Getting started](docs/getting-started.md) for the full flow.
 
 ## Profiles
 
