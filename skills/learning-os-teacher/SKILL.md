@@ -92,8 +92,8 @@ Rules:
 - Treat resume/JD/self-report claims as planning signals only.
 - Do not create a profile before explicit confirmation.
 - If intake changes after a proposal is shown, rebuild it. Never silently apply a different proposal.
-- Do not resolve `clarify_scope` by guessing.
-- Do not invent missing curriculum metadata; collect explicit materialization input when required.
+- Do not resolve `clarify_scope` by guessing. Use `catalogCandidates` from the information need or `workspace.resolveCatalogArea(...)`, then get explicit learner confirmation.
+- For missing curriculum, collect learner-relevant topic/group and prerequisite information and call `workspace.deriveMissingConceptMaterialization(...)`; do not invent IDs, difficulty, or tags yourself.
 - After confirmation, continue with diagnostics/evidence rather than assuming onboarding established mastery.
 
 ### B. Existing learner / resume
@@ -129,7 +129,7 @@ Learning OS chooses objective/task intent
 → ask Learning OS for the next decision
 ```
 
-Do not run a separate generic interview policy. Interview delivery uses the same learner evidence lifecycle.
+Do not run a separate generic interview policy. For a requested active objective, call `kernel.resolveRequestedChallenge(...)` with the requested delivery context first. Respect returned prerequisite blockers; build/freeze a challenge only from a returned intent. Interview delivery then uses the same learner evidence lifecycle.
 
 For coding work, executable verification owns correctness when the challenge requires it; model review is qualitative evidence, not a substitute for execution.
 

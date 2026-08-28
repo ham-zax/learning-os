@@ -7,22 +7,25 @@ import {
   resolveProfile,
 } from "./profile/index.js";
 import type { ProfileStoreOptions } from "./profile/types.js";
-import { loadKnowledgeCatalog } from "./onboarding/catalog.js";
+import { loadKnowledgeCatalog, resolveCatalogArea } from "./onboarding/catalog.js";
 import { planInformationNeeds } from "./onboarding/questions.js";
 import { buildOnboardingProposal } from "./onboarding/planner.js";
 import { normalizeOnboardingIntake } from "./onboarding/types.js";
 import type {
+  IntakeArea,
   KnowledgeCatalog,
   OnboardingIntake,
   OnboardingProposal,
 } from "./onboarding/types.js";
 import {
   applyConfirmedOnboarding,
+  deriveMissingConceptMaterialization,
   getDurablePreparationContext,
   listDurablePreparationContexts,
 } from "./onboarding/apply.js";
 import type {
   ApplyConfirmedOnboardingInput,
+  DeriveMissingConceptMaterializationInput,
   DurablePreparationContext,
 } from "./onboarding/apply.js";
 import { createTeacherKernel } from "./teacher.js";
@@ -62,6 +65,10 @@ export function createTeacherWorkspace(options: TeacherWorkspaceOptions = {}) {
     getProfile: (profileId: string) => getProfile(profileId, profileStore),
     getActiveProfile: () => getActiveProfile(profileStore),
     loadKnowledgeCatalog: catalog,
+    resolveCatalogArea: (
+      area: IntakeArea,
+      knowledgeCatalog: KnowledgeCatalog = catalog(),
+    ) => resolveCatalogArea(knowledgeCatalog, area),
     planOnboardingInformationNeeds: (
       intake: OnboardingIntake,
       knowledgeCatalog: KnowledgeCatalog = catalog(),
@@ -72,6 +79,9 @@ export function createTeacherWorkspace(options: TeacherWorkspaceOptions = {}) {
         catalog: input.catalog ?? catalog(),
         now: input.now,
       }),
+    deriveMissingConceptMaterialization: (
+      input: Omit<DeriveMissingConceptMaterializationInput, "catalog"> & { catalog?: KnowledgeCatalog },
+    ) => deriveMissingConceptMaterialization({ ...input, catalog: input.catalog ?? catalog() }),
     applyConfirmedOnboarding: (input: WorkspaceApplyConfirmedInput) =>
       applyConfirmedOnboarding({
         ...input,

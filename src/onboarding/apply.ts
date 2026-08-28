@@ -48,7 +48,7 @@ import type {
   PreparationPurpose,
   PreparationStrategy,
 } from "./types.js";
-import { normalizeOnboardingIntake } from "./types.js";
+import { normalizeAreaKey, normalizeOnboardingIntake } from "./types.js";
 
 const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -62,6 +62,16 @@ export interface MissingConceptMaterialization {
   /** Required because the current durable concept contract does not represent unknown difficulty. */
   difficulty: number;
   tags?: readonly string[];
+}
+
+export interface DeriveMissingConceptMaterializationInput {
+  proposal: OnboardingProposal;
+  catalog: KnowledgeCatalog;
+  coverageKey: string;
+  /** Learner-facing topic/group label. Required only when coverage has no topic identity yet. */
+  topic?: string;
+  /** Learner-facing prerequisite labels or IDs; normalized to concept IDs. */
+  prerequisites?: readonly string[];
 }
 
 export interface ApplyConfirmedOnboardingInput {
@@ -209,6 +219,47 @@ function fromCatalog(concept: CatalogConcept): MaterializedConcept {
     source: "knowledge_catalog",
     sourceId: `${concept.topicId}/${concept.conceptId}`,
   };
+}
+
+function humanizeId(value: string): string {
+  return value
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export function deriveMissingConceptMaterialization(
+  input: DeriveMissingConceptMaterializationInput,
+): MissingConceptMaterialization {
+  const coverage = input.proposal.coverage.find((item) => item.key === input.coverageKey);
+  if (!coverage || coverage.disposition !== "include" || coverage.action !== "create_missing") {
+    throw new Error(`Included missing curriculum coverage not found: ${input.coverageKey}`);
+  }
+
+  const suppliedTopic = input.topic?.trim() ?? "";
+  const topicId = coverage.topicId ?? normalizeAreaKey(suppliedTopic);
+  if (!topicId) {
+    throw new Error(`Topic/group is required for missing concept: ${coverage.label}`);
+  }
+  const existingTopic = input.catalog.topics.find(
+    (topic) =>
+      topic.topicId === topicId ||
+      (suppliedTopic.length > 0 && normalizeAreaKey(topic.topicName) === normalizeAreaKey(suppliedTopic)),
+  );
+  const topicName = existingTopic?.topicName ?? (suppliedTopic || humanizeId(topicId));
+  const conceptId = coverage.suggestedConceptId ?? normalizeAreaKey(coverage.label);
+
+  return validateMissingMaterialization({
+    coverageKey: coverage.key,
+    topicId,
+    topicName,
+    conceptId,
+    title: coverage.label,
+    difficulty: 3,
+    prerequisites: (input.prerequisites ?? []).map((value) => normalizeAreaKey(value)).filter(Boolean),
+    tags: [],
+  });
 }
 
 function validateMissingMaterialization(

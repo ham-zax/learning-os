@@ -189,7 +189,7 @@ A fresh learner may initially see prerequisite blockers or diagnostic work. That
 Useful commands include:
 
 ```bash
-npm run tutor -- interview <topic>
+npm run tutor -- interview <concept-id>
 npm run tutor -- due
 npm run tutor -- stats
 npm run tutor -- goal <goal-id>

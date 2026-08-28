@@ -35,8 +35,8 @@ import {
 } from "./kernel/evidence.js";
 import type { ReviseEvidenceInput } from "./kernel/evidence.js";
 import type { AssessmentResultInput } from "./db/types.js";
-import { getTodayMission } from "./plan/today.js";
-import type { TodayMissionInput } from "./plan/today.js";
+import { getTodayMission, resolveRequestedChallenge } from "./plan/today.js";
+import type { RequestedChallengeInput, TodayMissionInput } from "./plan/today.js";
 import type { SetGoalObjectiveInput } from "./db/database.js";
 import {
   getDurablePreparationContext,
@@ -53,6 +53,8 @@ import {
 export function createTeacherKernel(db: Database.Database) {
   return {
     getTodayMission: (input: TodayMissionInput) => getTodayMission(db, input),
+    resolveRequestedChallenge: (input: RequestedChallengeInput) =>
+      resolveRequestedChallenge(db, input),
     listPreparationContexts: () => listDurablePreparationContexts(db),
     getPreparationContext: (goalId: string) => getDurablePreparationContext(db, goalId),
     setGoalObjective: (input: SetGoalObjectiveInput) => setGoalObjective(db, input),

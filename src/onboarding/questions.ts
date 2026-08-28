@@ -1,4 +1,6 @@
 import type {
+  CatalogConceptCandidate,
+  CatalogResolution,
   InformationNeed,
   IntakeArea,
   KnowledgeCatalog,
@@ -63,6 +65,22 @@ function isBroadTarget(value: string | null): boolean {
   ]).has(normalized);
 }
 
+function catalogCandidates(resolution: CatalogResolution): CatalogConceptCandidate[] | undefined {
+  const concepts =
+    resolution.kind === "ambiguous"
+      ? resolution.concepts
+      : resolution.kind === "topic"
+        ? resolution.topic.concepts
+        : [];
+  if (concepts.length === 0) return undefined;
+  return concepts.map((concept) => ({
+    topicId: concept.topicId,
+    topicName: concept.topicName,
+    conceptId: concept.conceptId,
+    title: concept.title,
+  }));
+}
+
 function addNeed(target: Map<string, InformationNeed>, need: InformationNeed): void {
   const key = `${need.code}/${need.subject ?? ""}`;
   const existing = target.get(key);
@@ -70,11 +88,24 @@ function addNeed(target: Map<string, InformationNeed>, need: InformationNeed): v
     target.set(key, need);
     return;
   }
+  const mergedCandidates = [...(existing.catalogCandidates ?? []), ...(need.catalogCandidates ?? [])]
+    .filter(
+      (candidate, index, all) =>
+        all.findIndex(
+          (other) =>
+            other.topicId === candidate.topicId && other.conceptId === candidate.conceptId,
+        ) === index,
+    )
+    .sort(
+      (left, right) =>
+        left.topicId.localeCompare(right.topicId) || left.conceptId.localeCompare(right.conceptId),
+    );
   target.set(key, {
     ...existing,
     blocking: existing.blocking || need.blocking,
     changes: [...new Set([...existing.changes, ...need.changes])].sort(),
     reason: existing.reason === need.reason ? existing.reason : `${existing.reason} ${need.reason}`,
+    ...(mergedCandidates.length > 0 ? { catalogCandidates: mergedCandidates } : {}),
   });
 }
 
@@ -166,6 +197,7 @@ export function planInformationNeeds(
             : resolution.concepts.length === 1
               ? `A likely existing concept (${resolution.concepts[0].title}) matches this wording; confirm whether it is the intended scope.`
               : "The area maps to multiple existing concepts and needs an explicit concept choice.",
+        catalogCandidates: catalogCandidates(resolution),
       });
     }
   }

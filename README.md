@@ -209,7 +209,7 @@ These are examples and starter material, not a mandatory universal curriculum. A
 | `npm run tutor -- profile use <id>` | Select a learner profile |
 | `npm run tutor -- today <goal-id>` | Build today's bounded evidence-driven mission |
 | `npm run tutor -- goal <goal-id>` | Inspect/configure goal objective requirements |
-| `npm run tutor -- interview <topic>` | Start an interview drill |
+| `npm run tutor -- interview <concept-id>` | Start an interview drill scoped to one concept |
 | `npm run tutor -- due` | Show due review concepts |
 | `npm run tutor -- stats` | Show topic statistics |
 | `npm run tutor -- init <topic> <manifest.json>` | Materialize a topic manifest into the selected profile |

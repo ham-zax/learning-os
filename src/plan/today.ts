@@ -4,6 +4,7 @@ import type {
   DeliveryContext,
   GoalObjective,
   GoalTargetReadiness,
+  InitialDiagnosticKind,
   Readiness,
   TaskForm,
   TransferState,
@@ -14,11 +15,22 @@ import { selectNextChallenge } from "../selection/selector.js";
 import type {
   BlockedSelectionCandidate,
   ChallengeIntent,
+  ChallengeSelectionResult,
   ObjectiveSelectionCandidate,
   PrerequisiteSelectionPolicy,
 } from "../selection/types.js";
 
 export type DailyMissionItemKind = "retrieval" | "main" | "transfer";
+
+export interface RequestedChallengeInput {
+  goalId: string;
+  objectiveId: string;
+  deliveryContext: DeliveryContext;
+  now: string;
+  prerequisitePolicy?: PrerequisiteSelectionPolicy;
+  recentChallengeLimit?: number;
+  retestEligibleWeaknessKeys?: readonly string[];
+}
 
 export interface TodayMissionInput {
   goalId: string;
@@ -60,6 +72,8 @@ type GoalObjectiveState = {
   readiness: Readiness;
   transferState: TransferState;
   durabilityState: DurabilityState;
+  initialDiagnosticKind: InitialDiagnosticKind | null;
+  diagnosticPending: boolean;
   recentFailure: boolean;
   dueAt: string | null;
   weaknesses: Array<{
@@ -121,6 +135,7 @@ function loadGoalObjectiveState(
       `SELECT projection.readiness,
               projection.transfer_state,
               projection.durability_state,
+              projection.last_qualifying_evidence_at,
               projection.recent_failure,
               card.due_at
        FROM objective_projections projection
@@ -132,6 +147,7 @@ function loadGoalObjectiveState(
         readiness: Readiness;
         transfer_state: TransferState;
         durability_state: DurabilityState;
+        last_qualifying_evidence_at: string | null;
         recent_failure: number;
         due_at: string | null;
       }
@@ -154,6 +170,12 @@ function loadGoalObjectiveState(
     readiness: row.readiness,
     transferState: row.transfer_state,
     durabilityState: row.durability_state,
+    initialDiagnosticKind: config.initial_diagnostic_kind,
+    diagnosticPending:
+      config.initial_diagnostic_kind !== null &&
+      (config.initial_diagnostic_kind === "transfer_check"
+        ? row.transfer_state === "untested"
+        : row.last_qualifying_evidence_at === null),
     recentFailure: row.recent_failure === 1,
     dueAt: row.due_at,
     weaknesses,
@@ -205,6 +227,10 @@ function isRelevant(
   return isDue(state, now) || needsForwardProgress(state, eligibleRetestKeys);
 }
 
+function diagnosticBlocksTransfer(state: GoalObjectiveState): boolean {
+  return state.diagnosticPending && state.initialDiagnosticKind !== "transfer_check";
+}
+
 function candidateFor(
   state: GoalObjectiveState,
   urgency: number,
@@ -217,6 +243,7 @@ function candidateFor(
     urgency,
     transfer:
       !options.suppressTransfer &&
+      !diagnosticBlocksTransfer(state) &&
       state.config.require_transfer &&
       state.transferState !== "demonstrated"
         ? "required"
@@ -259,6 +286,9 @@ function taskMinutes(intent: ChallengeIntent, available: number): number {
 
 function missionReason(intent: ChallengeIntent, state: GoalObjectiveState): string {
   const gaps: string[] = [];
+  if (state.diagnosticPending && state.initialDiagnosticKind !== null) {
+    gaps.push(`initial ${state.initialDiagnosticKind} diagnostic pending`);
+  }
   if (!readinessMeets(state.readiness, state.config.target_readiness)) {
     gaps.push(`readiness ${state.readiness} < target ${state.config.target_readiness}`);
   }
@@ -309,6 +339,51 @@ export function resolveTodayAvailableMinutes(
   return value;
 }
 
+export function resolveRequestedChallenge(
+  db: Database.Database,
+  input: RequestedChallengeInput,
+): ChallengeSelectionResult {
+  if (
+    input.recentChallengeLimit !== undefined &&
+    (!Number.isInteger(input.recentChallengeLimit) || input.recentChallengeLimit < 0)
+  ) {
+    throw new Error("recentChallengeLimit must be a non-negative integer");
+  }
+  const now = normalizeInstant(input.now, "requested challenge time");
+  const topic = getTopic(db, input.goalId);
+  if (!topic) throw new Error(`Goal topic not found: ${input.goalId}`);
+  const config = getGoalObjectives(db, input.goalId).find(
+    (candidate) => candidate.objective_id === input.objectiveId,
+  );
+  if (!config) {
+    throw new Error(`Active goal objective not found: ${input.goalId}/${input.objectiveId}`);
+  }
+  const state = loadGoalObjectiveState(db, config);
+  const result = selectNextChallenge(db, {
+    now,
+    deliveryContext: input.deliveryContext,
+    prerequisitePolicy: input.prerequisitePolicy ?? DEFAULT_PREREQUISITE_POLICY,
+    recentChallengeLimit: input.recentChallengeLimit ?? 5,
+    candidates: [
+      candidateFor(
+        state,
+        deadlineUrgency(normalizeDeadline(topic.deadline), now),
+        new Set(input.retestEligibleWeaknessKeys ?? []),
+      ),
+    ],
+  });
+  if (!result.intent || !state.diagnosticPending || state.initialDiagnosticKind === null) {
+    return result;
+  }
+  return {
+    ...result,
+    intent: {
+      ...result.intent,
+      reason: `Initial ${state.initialDiagnosticKind} diagnostic is pending. ${result.intent.reason}`,
+    },
+  };
+}
+
 export function getTodayMission(
   db: Database.Database,
   input: TodayMissionInput,
@@ -336,6 +411,7 @@ export function getTodayMission(
   const stateByObjective = new Map(
     states.map((state) => [state.config.objective_id, state] as const),
   );
+  const pendingDiagnosticStates = states.filter((state) => state.diagnosticPending);
 
   const items: DailyMissionItem[] = [];
   const blocked = new Map<string, BlockedSelectionCandidate>();
@@ -377,13 +453,50 @@ export function getTodayMission(
     if (index >= 0) remainingDue.splice(index, 1);
   }
 
+  const remainingDiagnosticStates = [...pendingDiagnosticStates];
+  while (remainingDiagnosticStates.length > 0 && remaining >= 5) {
+    const result = selectIntent(
+      db,
+      remainingDiagnosticStates,
+      input,
+      now,
+      deadlineAt,
+      input.mainDeliveryContext ?? "practice",
+      eligibleRetestKeys,
+    );
+    addBlocked(blocked, result.blocked);
+    if (!result.intent) break;
+    const minutes = taskMinutes(result.intent, remaining);
+    if (minutes < 5) break;
+    items.push({
+      kind: result.intent.novelty === "transfer" ? "transfer" : "main",
+      objectiveId: result.intent.objectiveId,
+      minutes,
+      reason: missionReason(result.intent, stateByObjective.get(result.intent.objectiveId)!),
+      intent: result.intent,
+    });
+    remaining -= minutes;
+    const index = remainingDiagnosticStates.findIndex(
+      (state) => state.config.objective_id === result.intent!.objectiveId,
+    );
+    if (index >= 0) remainingDiagnosticStates.splice(index, 1);
+  }
+  const plannedInitialDiagnostics = items.some(
+    (item) => stateByObjective.get(item.objectiveId)?.diagnosticPending === true,
+  );
+
   const transferPressure =
+    !plannedInitialDiagnostics &&
+    pendingDiagnosticStates.length === 0 &&
     input.availableMinutes >= 30 &&
     (deadlineAt !== null ||
       input.transferDeliveryContext === "interview" ||
       input.transferDeliveryContext === "mock");
   const transferStates = states.filter(
-    (state) => state.config.require_transfer && state.transferState !== "demonstrated",
+    (state) =>
+      state.config.require_transfer &&
+      state.transferState !== "demonstrated" &&
+      !diagnosticBlocksTransfer(state),
   );
   const transferPreview =
     transferPressure && transferStates.length > 0
@@ -400,10 +513,16 @@ export function getTodayMission(
   if (transferPreview) addBlocked(blocked, transferPreview.blocked);
 
   const forwardStates = states.filter((state) => needsForwardProgress(state, eligibleRetestKeys));
-  if (forwardStates.length > 0 && remaining >= 5 && (input.availableMinutes >= 20 || items.length === 0)) {
+  const preferredForwardStates = pendingDiagnosticStates.length > 0 ? pendingDiagnosticStates : forwardStates;
+  if (
+    !plannedInitialDiagnostics &&
+    forwardStates.length > 0 &&
+    remaining >= 5 &&
+    (input.availableMinutes >= 20 || items.length === 0)
+  ) {
     let result = selectIntent(
       db,
-      forwardStates,
+      preferredForwardStates,
       input,
       now,
       deadlineAt,
@@ -411,8 +530,21 @@ export function getTodayMission(
       eligibleRetestKeys,
     );
     addBlocked(blocked, result.blocked);
+    if (!result.intent && preferredForwardStates !== forwardStates) {
+      result = selectIntent(
+        db,
+        forwardStates,
+        input,
+        now,
+        deadlineAt,
+        input.mainDeliveryContext ?? "practice",
+        eligibleRetestKeys,
+      );
+      addBlocked(blocked, result.blocked);
+    }
     if (
       input.mainDeliveryContext === undefined &&
+      pendingDiagnosticStates.length === 0 &&
       result.intent?.reasonKind === "new_objective"
     ) {
       result = selectIntent(
@@ -461,10 +593,11 @@ export function getTodayMission(
   }
 
   // Small sessions still receive one useful item when a full main block is not possible.
-  if (items.length === 0 && states.length > 0 && remaining > 0) {
+  if (!plannedInitialDiagnostics && items.length === 0 && states.length > 0 && remaining > 0) {
+    const preferredSmallSessionStates = pendingDiagnosticStates.length > 0 ? pendingDiagnosticStates : states;
     let result = selectIntent(
       db,
-      states,
+      preferredSmallSessionStates,
       input,
       now,
       deadlineAt,
@@ -472,8 +605,21 @@ export function getTodayMission(
       eligibleRetestKeys,
     );
     addBlocked(blocked, result.blocked);
+    if (!result.intent && preferredSmallSessionStates !== states) {
+      result = selectIntent(
+        db,
+        states,
+        input,
+        now,
+        deadlineAt,
+        input.mainDeliveryContext ?? "practice",
+        eligibleRetestKeys,
+      );
+      addBlocked(blocked, result.blocked);
+    }
     if (
       input.mainDeliveryContext === undefined &&
+      pendingDiagnosticStates.length === 0 &&
       result.intent?.reasonKind === "new_objective"
     ) {
       result = selectIntent(

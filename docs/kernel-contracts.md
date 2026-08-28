@@ -731,8 +731,11 @@ need for task-form/surface diversity
 
 - Ordinary review warm-up: maximum 3 items and maximum 5 minutes.
 - Review debt cannot consume the full mission.
+- Pending initial diagnostics run before ordinary transfer/durability work. A non-transfer diagnostic suppresses transfer pressure for that objective until qualifying evidence resolves the diagnostic.
+- When several initial diagnostics are immediately eligible, the mission may schedule several of them and leave the remaining budget unallocated; regenerate the mission after their evidence changes learner state.
+- If initial diagnostics are prerequisite-blocked, select useful prerequisite/foundation work rather than bypassing the blocker with transfer work.
 - If `available_minutes >= 20` and a useful forward-progress objective exists, include at least one non-review main challenge.
-- If `available_minutes >= 30` and an active deadline/interview goal makes transfer pressure useful, include one transfer/interview challenge unless a prerequisite blocker is the more urgent work.
+- If `available_minutes >= 30` and an active deadline/interview goal makes transfer pressure useful, include one transfer/interview challenge only after pending initial-diagnostic requirements permit it.
 - Do not hard-code fixed percentages for every session.
 
 ### Output

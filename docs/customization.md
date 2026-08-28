@@ -175,17 +175,18 @@ This distinction lets multiple learners reuse one curriculum while keeping their
 
 Onboarding can mark coverage as `create_missing` when the global catalog does not contain the requested concept.
 
-Confirmed application requires explicit metadata for that missing concept rather than inventing a fake lesson. The materialization contract includes:
+The durable materialization contract still contains IDs, title, difficulty, prerequisites, and tags, but learner-facing clients should not ask the learner to author those technical fields. Use the shared adapter:
 
-```text
-coverage key
-topic ID and name
-concept ID
-title
-prerequisites
-difficulty
-tags
+```ts
+const missing = workspace.deriveMissingConceptMaterialization({
+  proposal,
+  coverageKey: "missing:postgresql",
+  topic: "postgres",
+  prerequisites: ["sql-fundamentals"],
+});
 ```
+
+The adapter derives the concept ID/title, uses the neutral V1 default difficulty, normalizes prerequisite IDs, and keeps tags empty unless a future product contract supplies them. The offline CLI uses this same adapter.
 
 A custom concept can exist as profile-local metadata without a curated global Markdown file. Onboarding does not write into `knowledge/` as a side effect.
 
@@ -270,6 +271,8 @@ let intake = {
 };
 
 const needs = workspace.planOnboardingInformationNeeds(intake, catalog);
+// concept_scope needs include concrete `catalogCandidates` when available.
+// You can also call workspace.resolveCatalogArea({ label: "database fundamentals" }, catalog).
 // Ask the learner only the material questions represented by `needs`.
 
 const proposal = workspace.buildOnboardingProposal({
@@ -301,6 +304,14 @@ const opened = workspace.openProfile(result.profile.id);
 
 const context = opened.getPreparationContext(result.goalId);
 const kernel = opened.kernel;
+
+const requested = kernel.resolveRequestedChallenge({
+  goalId: result.goalId,
+  objectiveId: "load-balancing:design",
+  deliveryContext: "interview",
+  now: new Date().toISOString(),
+});
+// `requested.intent` is null when prerequisites block that requested objective.
 
 // Use the kernel for learner interactions, then close when done.
 opened.close();

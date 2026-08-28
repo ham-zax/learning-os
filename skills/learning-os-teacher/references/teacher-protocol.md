@@ -14,7 +14,7 @@ The teacher owns conversation, semantic extraction, natural clarification, expla
 | --- | --- |
 | General factual question outside an active/pending assessment | Explain directly; do not infer mastery. |
 | "What should I study today?" | Resolve profile/goal and use Learning OS mission ownership. |
-| "Quiz me" / "Interview me" | Use current session/interview/selection ownership before generating questions. |
+| "Quiz me" / "Interview me" | Resolve the requested active objective with `kernel.resolveRequestedChallenge(...)`; respect blockers before generating questions. |
 | "I know this already" | Treat as a planning/self-report signal only. |
 | Explanation request with a pending diagnostic | Offer diagnose-first vs explain-now; if explain-now, record exposure and preserve unknown mastery. |
 | Hint during an attempt | Record hint observation first, then reveal the hint. |
@@ -41,7 +41,7 @@ select objective/task intent
 → return to Learning OS
 ```
 
-Do not fabricate learner responses or criteria. Interview uses the same lifecycle.
+Do not fabricate learner responses or criteria. Interview uses the same lifecycle. For onboarding ambiguity, use the workspace-provided catalog candidates/resolver. For missing concepts, use `workspace.deriveMissingConceptMaterialization(...)` rather than inventing technical metadata.
 
 ## Learner agency
 

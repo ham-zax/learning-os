@@ -251,20 +251,12 @@ export function startCodingDrill(
       conceptId: config.conceptId,
       difficulty: config.difficulty,
     }).filter((candidate) => candidate.conceptId !== null);
-    if (candidates.length > 0) {
-      problem = pickRandom(candidates);
-    } else {
-      // No concept-linked problem — fall back to random by difficulty
-      const fallback = getCodingProblems(db, {
-        difficulty: config.difficulty,
-      }).filter((candidate) => candidate.conceptId !== null);
-      if (fallback.length === 0) {
-        throw new Error(
-          `No coding problems available${config.difficulty ? ` at difficulty ${config.difficulty}` : ""}.`,
-        );
-      }
-      problem = pickRandom(fallback);
+    if (candidates.length === 0) {
+      throw new Error(
+        `No coding problems available for concept ${config.conceptId}${config.difficulty ? ` at difficulty ${config.difficulty}` : ""}.`,
+      );
     }
+    problem = pickRandom(candidates);
   }
   // 3. Random by difficulty
   else {

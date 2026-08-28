@@ -619,10 +619,11 @@ async function runIngestion(
 
 async function runCodingDrill(
   db: ReturnType<typeof createDatabase>,
+  conceptId: string,
   difficulty?: number,
 ): Promise<void> {
   try {
-    const state = startCodingDrill(db, { difficulty });
+    const state = startCodingDrill(db, { conceptId, difficulty });
     const { problem } = state;
 
     header(`Coding Problem: ${problem.title}`);
@@ -692,10 +693,11 @@ async function runCodingDrill(
 
 async function runDesignDrill(
   db: ReturnType<typeof createDatabase>,
+  conceptId: string,
   difficulty?: number,
 ): Promise<void> {
   try {
-    const state = startDesignDrill(db, { difficulty });
+    const state = startDesignDrill(db, { conceptId, difficulty });
     const rl = createPrompt();
 
     header(`System Design: ${state.problem.title}`);
@@ -1012,19 +1014,19 @@ program
 program
   .command("interview")
   .description("Start an interview drill")
-  .argument("<topic>", "Topic or problem category")
+  .argument("<topic>", "Concept ID to interview")
   .option("-t, --type <type>", "Interview type: coding or system-design", "coding")
   .option("-d, --difficulty <n>", "Difficulty level (1-5)")
-  .action(async (_topic: string, opts: { type: string; difficulty?: string }) => {
+  .action(async (topic: string, opts: { type: string; difficulty?: string }) => {
     const db = openCliDatabase();
 
     try {
       const difficulty = opts.difficulty ? parseInt(opts.difficulty, 10) : undefined;
 
       if (opts.type === "system-design") {
-        await runDesignDrill(db, difficulty);
+        await runDesignDrill(db, topic, difficulty);
       } else {
-        await runCodingDrill(db, difficulty);
+        await runCodingDrill(db, topic, difficulty);
       }
     } catch (err) {
       error(err instanceof Error ? err.message : String(err));

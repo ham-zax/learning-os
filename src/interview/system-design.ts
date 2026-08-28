@@ -166,8 +166,14 @@ export function startDesignDrill(
     }
   }
 
+  if (!problem && config?.conceptId) {
+    throw new Error(
+      `No system design problems available for concept ${config.conceptId}${config.difficulty ? ` at difficulty ${config.difficulty}` : ""}.`,
+    );
+  }
+
   if (!problem) {
-    // Last resort: grab any system-design problem.
+    // Last resort only when the caller did not request a specific concept.
     const all = getSystemDesignProblems(db).filter((candidate) => candidate.conceptId !== null);
     if (all.length === 0) {
       throw new Error("No system design problems found in the database. Seed problems first.");

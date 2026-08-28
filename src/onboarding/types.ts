@@ -125,12 +125,21 @@ export type InformationNeedCode =
   | "experience_depth"
   | "coverage_conflict";
 
+export interface CatalogConceptCandidate {
+  topicId: string;
+  topicName: string;
+  conceptId: string;
+  title: string;
+}
+
 export interface InformationNeed {
   code: InformationNeedCode;
   subject: string | null;
   blocking: boolean;
   changes: Array<"priority" | "depth" | "schedule" | "strategy" | "coverage">;
   reason: string;
+  /** Concrete catalog choices when concept_scope needs learner/teacher confirmation. */
+  catalogCandidates?: CatalogConceptCandidate[];
 }
 
 export type ProposalHorizon = "no_deadline" | "expired" | "urgent" | "short" | "medium" | "long";

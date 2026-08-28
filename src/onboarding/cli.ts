@@ -1,7 +1,6 @@
 import { createInterface } from "node:readline";
 import { stdin as input, stdout as output } from "node:process";
 import type { Interface } from "node:readline";
-import { resolveCatalogArea } from "./catalog.js";
 import { normalizeAreaKey } from "./types.js";
 import type {
   ExperienceDepth,
@@ -49,14 +48,6 @@ function parseAreas(value: string): IntakeArea[] {
     .map((item) => item.trim())
     .filter(Boolean)
     .map(parseArea);
-}
-
-function humanizeId(value: string): string {
-  return value
-    .split("-")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function replaceArea(intake: OnboardingIntake, subject: string, replacement: IntakeArea): void {
@@ -122,21 +113,6 @@ async function askDeadline(rl: Interface): Promise<string | null> {
   }
 }
 
-function catalogOptions(catalog: KnowledgeCatalog, subject: string): string[] {
-  const resolution = resolveCatalogArea(catalog, { label: subject });
-  if (resolution.kind === "topic") {
-    return resolution.topic.concepts.map(
-      (concept) => `${concept.topicId}/${concept.conceptId} — ${concept.title}`,
-    );
-  }
-  if (resolution.kind === "ambiguous") {
-    return resolution.concepts.map(
-      (concept) => `${concept.topicId}/${concept.conceptId} — ${concept.title}`,
-    );
-  }
-  return [];
-}
-
 async function answerInformationNeed(
   rl: Interface,
   intake: OnboardingIntake,
@@ -187,10 +163,12 @@ async function answerInformationNeed(
     }
     case "concept_scope": {
       const subject = need.subject ?? "this area";
-      const options = catalogOptions(catalog, subject);
+      const options = need.catalogCandidates ?? [];
       if (options.length > 0) {
         console.log("Available catalog concepts:");
-        for (const option of options) console.log(`  ${option}`);
+        for (const option of options) {
+          console.log(`  ${option.topicId}/${option.conceptId} — ${option.title}`);
+        }
       }
       const exact = parseArea(
         await requireAnswer(rl, `Choose exact topic/concept for ${subject}: `),
@@ -283,7 +261,12 @@ function displayProposal(proposal: OnboardingProposal): void {
 async function materializeMissingConcepts(
   rl: Interface,
   proposal: OnboardingProposal,
-  catalog: KnowledgeCatalog,
+  derive: (input: {
+    proposal: OnboardingProposal;
+    coverageKey: string;
+    topic?: string;
+    prerequisites?: readonly string[];
+  }) => MissingConceptMaterialization,
 ): Promise<MissingConceptMaterialization[]> {
   const missing = proposal.coverage.filter(
     (coverage) => coverage.disposition === "include" && coverage.action === "create_missing",
@@ -293,33 +276,18 @@ async function materializeMissingConcepts(
     console.log(`\nNo reusable catalog concept matched: ${coverage.label}`);
     console.log("The concept ID/title will be derived automatically; only learning-relevant metadata is needed.");
 
-    let topicId = coverage.topicId;
-    let topicName: string;
-    if (topicId) {
-      topicName = catalog.topics.find((topic) => topic.topicId === topicId)?.topicName ?? humanizeId(topicId);
-    } else {
-      const topicAnswer = await requireAnswer(
-        rl,
-        `Topic/group for ${coverage.label} (for example: postgres): `,
-      );
-      topicId = normalizeAreaKey(topicAnswer);
-      topicName = catalog.topics.find((topic) => topic.topicId === topicId)?.topicName ?? topicAnswer;
-    }
-
-    const conceptId = coverage.suggestedConceptId ?? normalizeAreaKey(coverage.label);
+    const topic = coverage.topicId
+      ? undefined
+      : await requireAnswer(rl, `Topic/group for ${coverage.label} (for example: postgres): `);
     const prerequisites = parseAreas(
       await ask(rl, "Known prerequisite concepts (comma-separated, optional): "),
-    ).map((area) => area.conceptId ?? normalizeAreaKey(area.label));
-    result.push({
+    ).map((area) => area.conceptId ?? area.label);
+    result.push(derive({
+      proposal,
       coverageKey: coverage.key,
-      topicId,
-      topicName,
-      conceptId,
-      title: coverage.label,
-      difficulty: 3,
+      ...(topic ? { topic } : {}),
       prerequisites,
-      tags: [],
-    });
+    }));
   }
   return result;
 }
@@ -389,7 +357,11 @@ export async function runOfflineOnboarding(options: OfflineOnboardingOptions): P
       );
     }
 
-    const missingConcepts = await materializeMissingConcepts(rl, proposal, catalog);
+    const missingConcepts = await materializeMissingConcepts(
+      rl,
+      proposal,
+      (input) => workspace.deriveMissingConceptMaterialization(input),
+    );
     displayProposal(proposal);
 
     const confirmation = (await ask(rl, "\nApply this plan and create a NEW learner profile? [y/N]: ")).toLowerCase();

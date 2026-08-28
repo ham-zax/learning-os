@@ -136,8 +136,8 @@ npm run tutor -- today <goal-id>
 npm run tutor -- <topic-id> --mode learn
 npm run tutor -- <topic-id> --mode practice
 npm run tutor -- <topic-id> --mode review
-npm run tutor -- interview <topic-id> --type coding
-npm run tutor -- interview <topic-id> --type system-design
+npm run tutor -- interview <concept-id> --type coding
+npm run tutor -- interview <concept-id> --type system-design
 npm run tutor -- due
 npm run tutor -- stats
 npm run typecheck

@@ -112,7 +112,7 @@ This is the semi-strict balance: **do not block useful teaching, but never hide 
 | --- | --- |
 | "What is MVCC?" outside an active/pending MVCC assessment | Explain directly; do not infer mastery. |
 | "What should I study today?" | Resolve profile/goal and use Learning OS mission ownership. |
-| "Quiz me" / "Interview me" | Use current session/interview/selection ownership before generating questions. |
+| "Quiz me" / "Interview me" | Resolve the requested active objective and call `kernel.resolveRequestedChallenge(...)` before generating an assessable question. Respect an authoritative blocker instead of substituting another generic interview. |
 | "I know this already" | Treat as self-report/planning signal only. |
 | "Explain this" while the same objective has a pending diagnostic | Offer diagnose-first vs explain-now; if explain-now, record exposure and preserve unknown mastery. |
 | "Give me a hint" during an attempt | Record hint observation before showing the hint. |
@@ -143,8 +143,8 @@ Rules:
 - Resume/JD/self-report claims are planning signals only.
 - Before confirmation: no learner profile, goal, objective, evidence, or learner-DB mutation.
 - If intake changes after the proposal is shown, rebuild it. Do not silently apply another proposal.
-- Never guess through `clarify_scope`.
-- Never invent missing-concept metadata when explicit materialization is required.
+- Never guess through `clarify_scope`. Use `InformationNeed.catalogCandidates` or `workspace.resolveCatalogArea(...)` and get explicit learner confirmation.
+- For `create_missing` coverage, collect learner-relevant topic/group and prerequisite information, then call `workspace.deriveMissingConceptMaterialization(...)`. Do not invent IDs, numeric difficulty, or tags outside that adapter.
 - After confirmation, begin from ordinary unknown/untested projections and use diagnostics/evidence to establish actual competence.
 
 ## Existing learner / resumption workflow
@@ -201,7 +201,7 @@ Examples:
 - "Skip the diagnostic and teach me this." → teach it, record exposure when applicable, and do not claim the skipped diagnostic result.
 - "Just give me the answer." → reveal it using the exposure/hint lifecycle and do not count it as independent retrieval.
 - "I only have 15 minutes." → use the explicit time budget; do not rewrite scheduler state.
-- "Interview me on transactions." → route transactions through current interview/selection/evidence ownership rather than a generic interview script.
+- "Interview me on transactions." → resolve the active transactions objective and call `kernel.resolveRequestedChallenge({ ..., deliveryContext: "interview" })`. If it returns a prerequisite blocker, explain that blocker; if it returns an intent, freeze a challenge from that intent and continue through the normal evidence lifecycle.
 
 ## Never do these
 
