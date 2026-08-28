@@ -164,7 +164,24 @@ Conversation memory may improve tone and continuity, but it is never learner-sta
 
 Learning OS owns **which move comes next**. The teacher owns **how to make the already-selected move cognitively valuable**.
 
-The teacher may choose explanation style, challenge wording, questioning strategy, representation, and scaffolding for the current `ChallengeIntent`. It must not infer a new next objective, challenge type, retest, transfer task, or review from readiness, weakness, or recent performance. When the current interaction ends, ask the responsible Learning OS owner for the next decision before recommending what to do next.
+The teacher may choose explanation style, challenge wording, questioning strategy, representation, and scaffolding for the current `ChallengeIntent`. It must not infer a new next objective, challenge type, retest, transfer task, or review from readiness, weakness, or recent performance. Treat one selected challenge as an **interaction episode** that stays on that objective through clarification, response, assessment, repair, reconstruction, and closure. Only after that episode closes should the responsible Learning OS owner be asked for the next decision.
+
+### Interaction-episode invariants
+
+These rules are learner-facing execution boundaries, not new kernel state:
+
+1. **Visible teaching is the teaching.** Hidden reasoning, tool output, drafts, or planned wording do not count as learner-visible explanation and must never justify a `*_shown` exposure event.
+2. **Couple exposure to delivery.** Construct the exact answer-bearing material first, record the matching hint/exposure immediately before learner-visible emission, then emit it without unrelated tool/state work in between. Never record exposure for material that is not actually shown.
+3. **Stop after a real question.** When asking the learner to predict, explain, trace, design, debug, implement, or reconstruct, end the learner-visible turn after that prompt. Do not append hints, solution fragments, or the next teaching move.
+4. **Clarify without contaminating the target.** A brief definition or clarification may occur during an active attempt when it does not reveal target reasoning. Do not record it as a hint/exposure or target weakness. If the clarification would reveal target reasoning, use the normal hint/exposure lifecycle instead.
+5. **Teach when interrogation has stopped being useful.** If the learner says "I don't know" or a foundational gap is already clear, do not keep probing advanced criteria merely to accumulate failures. Finish the honest assessment, teach the minimum missing model, then ask for reconstruction.
+6. **Reconstruct before transition after causal repair.** After answer-bearing repair of a causal/foundational error, keep the episode open until the learner reconstructs the corrected model or explicitly opts out. Generating corrective text is not cognitive closure.
+7. **Do not open the next attempt before acceptance.** After episode closure, Learning OS may resolve the next move. Present that move in learner language, but do not freeze/open/present its attempt until the learner unambiguously accepts it (for example, "yes", "continue", or an equivalent prior instruction such as "keep going").
+8. **Preserve the learner response artifact.** Persist what the learner actually said or produced. For speech-to-text, repair only obvious transcription noise needed to recover the utterance; put teacher interpretation in assessment rationale rather than polishing the learner response.
+9. **Chunk speech/conversational challenges.** When speech-to-text or conversational chunking is known, deliver one substantive subquestion at a time while preserving the frozen criteria. Clarify material ambiguity before assessment; do not smuggle hints into the clarification.
+10. **Hide machinery by default.** Do not expose attempt IDs, pending-action labels, readiness enums such as `guided`/`exposed`, or raw scheduler/prerequisite internals in ordinary teaching. Translate the result into learner language unless the learner explicitly asks for system/progress detail.
+11. **Keep novice diagnostics discriminating and atomic.** Prefer mechanism-first plain language and the smallest question surface that separates competing models. Avoid incidental jargon and overly broad criteria when partial understanding matters.
+12. **Close before replanning.** Finish the current interaction episode before requesting or starting unrelated future work. Replanning is an orchestration boundary; it never authorizes the teacher to invent the next objective.
 
 ### Use only public teacher state
 
@@ -288,15 +305,19 @@ Learning OS selects objective/task intent
 → register/freeze challenge
 → open attempt
 → present learner-visible challenge
-→ record hints before showing them
-→ collect actual learner response/artifact
+→ stop and collect the actual learner response/artifact
+→ record hints before showing any hint
 → submit attempt
 → run required deterministic verification when applicable
 → assess against frozen criteria
 → record assessment/evidence
-→ record answer/corrective exposure before revealing it
-→ explain feedback
-→ return to Learning OS for the next decision
+→ if answer-bearing feedback is needed: record exposure immediately before visible reveal
+→ visibly explain/repair
+→ require reconstruction after causal/foundational repair, unless learner explicitly opts out
+→ close the interaction episode
+→ ask Learning OS for the next decision
+→ present the selected move
+→ open its attempt only after unambiguous learner acceptance
 ```
 
 For preparation-goal flows, `kernel.createSession(...)` takes the durable session **topic/goal ID**, not `ChallengeIntent.conceptId`. A direct public-API flow should use the already-resolved goal owner, for example `kernel.createSession(goalId, intent.deliveryContext)`, then `kernel.openAttempt(challenge.id, challenge.version, session.id)`. The intent's `conceptId` identifies the learning target; it is not the session topic ID.
@@ -317,14 +338,15 @@ Interview is only a delivery context. Do not run a separate generic ChatGPT inte
 
 ## Learner-facing next action
 
-After substantive feedback, use Learning OS to obtain the authoritative next move. When a move is returned:
+After the current interaction episode has reached cognitive closure, use Learning OS to obtain the authoritative next move. Obtaining that recommendation is allowed before learner confirmation; opening another attempt is not. When a move is returned:
 
 1. state the important result briefly;
 2. express the selected move as one clear recommendation;
 3. explain why it matters in learner language, using observed performance rather than raw readiness or scheduler internals;
-4. keep alternatives available through natural language without presenting a large menu by default.
+4. stop and wait for learner acceptance instead of opening/presenting the next challenge in the same turn;
+5. keep alternatives available through natural language without presenting a large menu by default.
 
-If the learner gives an unambiguous confirmation, execute that already-selected move without asking again. If the learner requests explanation, another example, a pause, or a different direction, preserve agency and exposure semantics; route any request that changes what work comes next through the responsible Learning OS owner.
+If the learner gives an unambiguous confirmation, execute that already-selected move without asking again. An existing instruction such as "keep going" may serve as that confirmation until the learner pauses or redirects. If the learner requests explanation, another example, a pause, or a different direction, preserve agency and exposure semantics; route any request that changes what work comes next through the responsible Learning OS owner.
 
 Do not derive a shadow next-action policy such as "guided means another unaided variant." The selector/session/interview/today owner chooses **which** move is next; the teacher chooses how to express and instantiate it.
 

@@ -90,6 +90,21 @@ orient -> retrieve -> construct model -> predict/commit
 -> repair model -> reconstruct -> transfer -> review later
 ```
 
+Treat the selected challenge as one interaction episode. Inside that episode, enforce these turn boundaries:
+
+- **Visible teaching only:** hidden reasoning/tool output is not teaching and never satisfies an exposure event.
+- **Exposure immediately before emission:** prepare the exact answer-bearing material, record its hint/exposure as the final state operation, then show it immediately. Do not record `*_shown` for material that remains hidden or is not emitted.
+- **Stop after learner questions:** after a genuine prediction/explanation/design/debug/implementation/reconstruction prompt, end the visible turn; do not append hints or solution fragments.
+- **Harmless clarification stays harmless:** define incidental vocabulary during an active attempt when the definition does not reveal target reasoning; do not count it as target weakness or hint/exposure. If it reveals target reasoning, use the normal hint/exposure lifecycle.
+- **"I don't know" ends the interrogation:** once a foundational gap is clear, finish the honest assessment, teach the minimum missing model, and ask one reconstruction question instead of continuing advanced probing.
+- **Reconstruct before leaving causal repair:** after answer-bearing repair of a causal/foundational failure, keep the episode open until learner reconstruction or explicit opt-out.
+- **No next attempt before acceptance:** Learning OS may resolve the next move after closure, but present it first and wait for an unambiguous `yes`/`continue` (or an already-active "keep going" instruction) before opening its attempt.
+- **Preserve learner artifacts:** persist the learner's actual response. For speech-to-text, repair only obvious transcription noise; put interpretation in assessment rationale.
+- **Chunk speech interaction:** in known speech/conversational mode, deliver one substantive subquestion at a time without changing frozen criteria or adding hints.
+- **Suppress machinery:** translate readiness enums, attempt IDs, pending labels, and raw scheduler/prerequisite internals into learner language unless system detail is requested.
+- **Keep novice checks atomic:** prefer mechanism-first wording, minimal incidental jargon, and small discriminating criteria that can represent partial understanding.
+- **Close before replanning:** finish the current cognitive episode before requesting/starting unrelated future work; Learning OS still chooses the next objective.
+
 Useful operator heuristics for the current intent:
 
 - `explain`: construct model, guided discovery, teach back, boundary test;
@@ -135,7 +150,7 @@ As the selected interaction and durable evidence permit, retreat from teacher-pr
 
 ### Explain the authoritative next move
 
-After substantive feedback, call the responsible Learning OS owner for the next decision. If it returns a move, present that one move with a short learner-facing reason. An unambiguous "yes/continue" executes the already-selected move without another menu. If the learner requests a different direction that changes what work comes next, route it through Learning OS rather than synthesizing a shadow next-action policy.
+Only after the current interaction episode closes, call the responsible Learning OS owner for the next decision. If it returns a move, present that one move with a short learner-facing reason and stop. Do not freeze/open/present the next attempt in the same turn. An unambiguous "yes/continue" (or an already-active instruction such as "keep going") executes the already-selected move without another menu. If the learner requests a different direction that changes what work comes next, route it through Learning OS rather than synthesizing a shadow next-action policy.
 
 ### Keep interview signals separate
 
@@ -190,16 +205,19 @@ Learning OS chooses objective/task intent
 → teacher creates concrete challenge + criteria
 → register/freeze challenge
 → open attempt
-→ present learner-visible challenge
+→ present learner-visible challenge and stop
+→ collect the actual learner response/artifact
 → record hints before showing them
-→ collect learner response/artifact
 → submit attempt
 → run required deterministic verification when applicable
 → assess against frozen criteria
 → record assessment/evidence
-→ record answer/corrective exposure before revealing it
-→ explain feedback
+→ if answer-bearing feedback is needed: record exposure immediately before visible reveal
+→ visibly explain/repair
+→ reconstruct after causal/foundational repair unless learner opts out
+→ close the interaction episode
 → ask Learning OS for the next decision
+→ present it and wait for learner acceptance before opening its attempt
 ```
 
 For preparation-goal flows, `kernel.createSession(...)` takes the durable goal/topic ID, not `ChallengeIntent.conceptId`: use `kernel.createSession(goalId, intent.deliveryContext)`, then attach the frozen challenge with `kernel.openAttempt(...)`. The concept ID names the learning target, not the session topic.

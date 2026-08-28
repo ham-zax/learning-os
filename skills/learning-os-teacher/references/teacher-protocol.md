@@ -24,21 +24,27 @@ The teacher owns conversation, semantic extraction, natural clarification, expla
 
 ## Active attempt lifecycle
 
+Treat one selected challenge as an interaction episode:
+
 ```text
 select objective/task intent
 → build concrete challenge + criteria
 → register/freeze challenge
 → open attempt
-→ present prompt
+→ present prompt and stop
+→ collect actual learner response/artifact
 → record hints before showing them
-→ collect actual response/artifact
 → submit attempt
 → deterministic verification when required
 → assess against frozen criteria
 → record assessment/evidence
-→ record corrective/answer exposure before reveal
-→ feedback
-→ return to Learning OS
+→ if answer-bearing feedback is needed: record exposure immediately before visible reveal
+→ visible feedback/repair
+→ reconstruction after causal/foundational repair unless learner opts out
+→ close episode
+→ return to Learning OS for the next move
+→ present that move
+→ open its attempt only after unambiguous learner acceptance
 ```
 
 For preparation-goal flows, `kernel.createSession(...)` takes the durable goal/topic ID, not `ChallengeIntent.conceptId`; use the resolved `goalId` for the session and the intent's `conceptId` only as the learning target. After decisive exposure, only a later Learning-OS-selected qualifying follow-up with the required changed surface can provide fresh independent/transfer evidence; independent evidence also requires no hint observations.
@@ -59,15 +65,24 @@ orient -> retrieve -> construct model -> predict/commit
 
 Key rules:
 
+- visible teaching: hidden reasoning/tool output never counts as learner-visible explanation or a `*_shown` exposure;
+- exposure-delivery coupling: prepare the exact answer-bearing material, record its exposure immediately before learner-visible emission, and do no unrelated tool/state work between those steps;
+- stop-after-question: after a real prediction/explanation/design/debug/implementation/reconstruction prompt, end the visible turn without hints or answer fragments;
+- harmless clarification: define incidental vocabulary during an active attempt without hint/exposure or target-weakness consequences when the definition does not reveal target reasoning; otherwise use the normal hint/exposure lifecycle;
+- learner `I don't know`: once a foundational gap is clear, finish the honest assessment, teach the minimum missing model, and ask one reconstruction question instead of continuing advanced interrogation;
 - prediction/debug/design diagnosis: get a committed prediction or hypothesis before decisive reveal when clean evidence is intended;
 - systems topics: have the learner construct relevant ownership/flow/queue/invariant/capacity/failure/observability relationships when that construction is part of the learning value;
-- causal failure: recover expectation -> faulty assumption -> contradicting observation -> corrected relationship -> learner reconstruction;
+- causal failure: recover expectation -> faulty assumption -> contradicting observation -> corrected relationship -> learner reconstruction; do not transition until reconstruction or explicit learner opt-out;
+- learner artifact integrity: persist the learner's actual response; for speech-to-text normalize only obvious transcription noise and keep interpretation in assessment rationale;
+- speech/conversational mode: deliver one substantive subquestion at a time while preserving frozen criteria; clarify material ambiguity without sneaking in hints;
+- novice baseline wording: prefer mechanism-first plain language, minimal incidental jargon, and atomic discriminating criteria that can represent partial understanding;
+- state-language hygiene: suppress attempt IDs, pending labels, readiness enums, and raw scheduler/prerequisite internals unless the learner asks for them;
 - known registered misconception: record its ID; novel causal error: use a precise `observedErrors` category instead of inventing a persistent misconception;
 - scaffolding: `I do` is exposure, `We do` is guided, `You do` is a fresh answer-hidden attempt with no hint observations when independent evidence is intended;
 - model answers/decisive walkthroughs: record exposure first and map them to already-frozen reasoning criteria;
 - variants must change a causal feature, not wording; transfer changes the surface without announcing the mapping.
 
-After substantive feedback, ask the responsible Learning OS owner for the next decision. Present the returned move as one clear recommendation with a short learner-facing reason. Do not synthesize any follow-up when no authoritative next decision exists.
+After the episode closes, ask the responsible Learning OS owner for the next decision. Present the returned move as one clear recommendation with a short learner-facing reason, then wait for unambiguous learner acceptance before opening the next attempt. Do not synthesize any follow-up when no authoritative next decision exists.
 
 For `interview`/`mock`, keep technical evidence separate from descriptive interview signals. Signal feedback may discuss relevant assumption handling, state ownership/invariants, causal reasoning, trade-offs, capacity/backpressure, failure/recovery, observability, uncertainty, or answer structure; it never changes correctness or mastery-related state.
 
