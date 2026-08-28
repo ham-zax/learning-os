@@ -21,6 +21,7 @@ import {
 } from "../db/database.js";
 import {
   createLearningObjective,
+  finishSessionInteraction,
   getChallenge,
   getLearningObjective,
   registerChallenge,
@@ -410,9 +411,7 @@ export function endSession(
   const endedAt = new Date();
   const duration = Math.round((endedAt.getTime() - startedAt.getTime()) / 1000);
 
-  updateSession(db, sessionId, {
-    endedAt: endedAt.toISOString(),
-  });
+  finishSessionInteraction(db, sessionId);
 
   const submittedAttempts = attemptCounts.submitted_attempts ?? 0;
   const assessedAttempts = attemptCounts.assessed_attempts ?? 0;

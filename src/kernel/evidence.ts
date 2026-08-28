@@ -31,9 +31,11 @@ import {
   rebuildObjectiveReviewCard,
 } from "../scheduler/index.js";
 import {
+  advanceSessionToFeedback,
   getAttempt,
   getChallenge,
   getHintObservationsForAttempt,
+  syncSessionAfterEvidenceChange,
 } from "./foundation.js";
 
 const PROJECTOR_VERSION = "v1";
@@ -1094,6 +1096,7 @@ export function recordAssessment(
       }
     }
 
+    advanceSessionToFeedback(db, attemptId);
     return { evidenceEvents, projections, weaknesses };
   })();
 }
@@ -1220,6 +1223,9 @@ export function reviseEvidence(
       appendReviewEventForEvidence(db, replacementEvent);
     }
     rebuildObjectiveReviewCard(db, evidence.objective_id);
+    if (evidence.attempt_id !== null) {
+      syncSessionAfterEvidenceChange(db, evidence.attempt_id);
+    }
 
     return {
       revision,

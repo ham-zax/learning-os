@@ -61,7 +61,13 @@ import {
   createTopic,
   listTopics,
 } from "./db/database.js";
-import { openAttempt, recordExposure, submitAttempt } from "./kernel/foundation.js";
+import {
+  completeSessionFeedback,
+  finishSessionInteraction,
+  openAttempt,
+  recordExposure,
+  submitAttempt,
+} from "./kernel/foundation.js";
 
 import {
   loadConcept,
@@ -628,14 +634,14 @@ async function runCodingDrill(
     const result = await submitCodingSolution(llm, db, state, code);
 
     if (result.verificationOutput || result.qualitativeFeedback) {
-      recordExposure(db, null, {
+      recordExposure(db, state.sessionId, {
         objectiveIds: [result.objectiveId],
         attemptId: result.attemptId,
         exposureType: "corrective_feedback_shown",
         sourceRef: "coding-post-submission-feedback",
       });
       if (result.qualitativeFeedback?.optimalSolution) {
-        recordExposure(db, null, {
+        recordExposure(db, state.sessionId, {
           objectiveIds: [result.objectiveId],
           attemptId: result.attemptId,
           exposureType: "solution_walkthrough",
@@ -645,6 +651,11 @@ async function runCodingDrill(
     }
 
     console.log(formatCodingResult(result));
+    if (result.assessmentStatus === "recorded") {
+      completeSessionFeedback(db, state.sessionId);
+    } else {
+      finishSessionInteraction(db, state.sessionId);
+    }
   } catch (err) {
     error(err instanceof Error ? err.message : String(err));
   }
@@ -691,7 +702,7 @@ async function runDesignDrill(
     info("\nAttempt submitted; assessing the frozen rubric when a trusted evaluator is available.");
     const result = await assessDesignDrill(llm, db, currentState);
     if (result.assessmentStatus === "recorded" && (result.criteria.length > 0 || result.feedback)) {
-      recordExposure(db, null, {
+      recordExposure(db, currentState.sessionId, {
         objectiveIds: [result.objectiveId],
         attemptId: result.attemptId,
         exposureType: "corrective_feedback_shown",
@@ -699,6 +710,11 @@ async function runDesignDrill(
       });
     }
     console.log(formatDesignResult(result));
+    if (result.assessmentStatus === "recorded") {
+      completeSessionFeedback(db, currentState.sessionId);
+    } else {
+      finishSessionInteraction(db, currentState.sessionId);
+    }
   } catch (err) {
     error(err instanceof Error ? err.message : String(err));
   }

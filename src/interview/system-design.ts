@@ -19,7 +19,7 @@ import type { LLMClient } from "../llm/client.js";
 import type { Novelty } from "../db/types.js";
 import { getAttempt, getChallenge, openAttempt, submitAttempt } from "../kernel/foundation.js";
 import { recordAssessment } from "../kernel/evidence.js";
-import { prepareInterviewChallenge } from "./evidence.js";
+import { createInterviewSessionForConcept, prepareInterviewChallenge } from "./evidence.js";
 
 // ─── Exported types ────────────────────────────────────────────────────────
 
@@ -39,6 +39,7 @@ export interface DesignDrillConfig {
 
 export interface DesignDrillState {
   problem: SystemDesignProblem;
+  sessionId: number;
   objectiveId: string;
   challengeId: string;
   challengeVersion: number;
@@ -199,10 +200,12 @@ export function startDesignDrill(
     verificationRequired: false,
     verificationBasis: "frozen_rubric",
   });
-  const opened = openAttempt(db, prepared.challenge.id, prepared.challenge.version);
+  const sessionId = createInterviewSessionForConcept(db, problem.conceptId);
+  const opened = openAttempt(db, prepared.challenge.id, prepared.challenge.version, sessionId);
 
   return {
     problem,
+    sessionId,
     objectiveId: prepared.objectiveId,
     challengeId: prepared.challenge.id,
     challengeVersion: prepared.challenge.version,

@@ -17,7 +17,7 @@ import { VerificationOutputSchema } from "../db/types.js";
 import type { Novelty, Problem, VerificationOutput } from "../db/types.js";
 import { getAttempt, getChallenge, openAttempt, submitAttempt } from "../kernel/foundation.js";
 import { recordAssessment } from "../kernel/evidence.js";
-import { prepareInterviewChallenge } from "./evidence.js";
+import { createInterviewSessionForConcept, prepareInterviewChallenge } from "./evidence.js";
 
 /** Minimal row shape accepted by rowToCodingProblem (DB Problem type). */
 type ProblemRow = Problem;
@@ -41,6 +41,7 @@ export interface CodingDrillConfig {
 
 export interface CodingDrillState {
   problem: CodingProblem;
+  sessionId: number;
   objectiveId: string;
   challengeId: string;
   challengeVersion: number;
@@ -303,10 +304,12 @@ export function startCodingDrill(
     verificationRequired: true,
     verificationBasis: "deterministic_execution",
   });
-  const opened = openAttempt(db, prepared.challenge.id, prepared.challenge.version);
+  const sessionId = createInterviewSessionForConcept(db, problem.conceptId);
+  const opened = openAttempt(db, prepared.challenge.id, prepared.challenge.version, sessionId);
 
   return {
     problem,
+    sessionId,
     objectiveId: prepared.objectiveId,
     challengeId: prepared.challenge.id,
     challengeVersion: prepared.challenge.version,

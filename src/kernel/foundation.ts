@@ -12,6 +12,7 @@ import {
   HintScopeSchema,
   LearningObjectiveSchema,
   ObjectiveProjectionSchema,
+  SessionSchema,
 } from "../db/types.js";
 import type {
   Attempt,
@@ -26,6 +27,9 @@ import type {
   HintScope,
   LearningObjective,
   ObjectiveProjection,
+  Session,
+  SessionPendingAction,
+  SessionPhase,
 } from "../db/types.js";
 
 export interface LearningObjectiveInput {
@@ -59,6 +63,25 @@ export interface RecordExposureInput {
   objectiveIds: string[];
   exposureType: ExposureEvent["exposure_type"];
   sourceRef?: string;
+}
+
+export interface ResumableAttempt {
+  attempt: Attempt;
+  challenge: ChallengeSpec;
+  hintObservations: HintObservation[];
+  exposureEvents: ExposureEvent[];
+  effectiveEvidenceIds: string[];
+}
+
+export interface ResumedSession {
+  session: Session;
+  phase: SessionPhase;
+  pendingAction: SessionPendingAction;
+  activeChallenge: ChallengeSpec | null;
+  activeAttempt: Attempt | null;
+  activeAttemptState: ResumableAttempt | null;
+  unresolvedVerificationAttempts: ResumableAttempt[];
+  unresolvedAssessmentAttempts: ResumableAttempt[];
 }
 
 function requireNonEmpty(value: string, label: string): string {
@@ -410,25 +433,50 @@ export function openAttempt(
   version: number,
   sessionId: number | null = null,
 ): OpenedAttempt {
-  const challenge = getFrozenChallengeOrThrow(db, challengeId, version);
-  const now = new Date().toISOString();
-  const info = db
-    .prepare(
-      `INSERT INTO attempts (
-         challenge_id,
-         challenge_version,
-         session_id,
-         started_at,
-         created_at
-       ) VALUES (?, ?, ?, ?, ?)`,
-    )
-    .run(challenge.id, challenge.version, sessionId, now, now);
+  return db.transaction(() => {
+    const challenge = getFrozenChallengeOrThrow(db, challengeId, version);
+    if (sessionId !== null) {
+      const session = SessionSchema.parse(
+        db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId),
+      );
+      if (session.mode !== challenge.deliveryContext) {
+        throw new Error(
+          `Session delivery context ${session.mode} does not match challenge ${challenge.deliveryContext}`,
+        );
+      }
+    }
 
-  const attempt = getAttemptOrThrow(db, Number(info.lastInsertRowid));
-  return {
-    attempt,
-    challenge: learnerVisibleChallenge(challenge),
-  };
+    const now = new Date().toISOString();
+    const info = db
+      .prepare(
+        `INSERT INTO attempts (
+           challenge_id,
+           challenge_version,
+           session_id,
+           started_at,
+           created_at
+         ) VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(challenge.id, challenge.version, sessionId, now, now);
+
+    const attempt = getAttemptOrThrow(db, Number(info.lastInsertRowid));
+    if (sessionId !== null) {
+      db.prepare(
+        `UPDATE sessions
+         SET phase = 'awaiting_response',
+             pending_action = 'collect_response',
+             active_challenge_id = ?,
+             active_challenge_version = ?,
+             active_attempt_id = ?
+         WHERE id = ?`,
+      ).run(challenge.id, challenge.version, attempt.id, sessionId);
+    }
+
+    return {
+      attempt,
+      challenge: learnerVisibleChallenge(challenge),
+    };
+  })();
 }
 
 export function submitAttempt(
@@ -463,7 +511,29 @@ export function submitAttempt(
       throw new Error(`Attempt could not be submitted: ${attemptId}`);
     }
 
-    return getAttemptOrThrow(db, attemptId);
+    const submitted = getAttemptOrThrow(db, attemptId);
+    if (submitted.session_id !== null && submitted.challenge_id !== null && submitted.challenge_version !== null) {
+      const challenge = getFrozenChallengeOrThrow(
+        db,
+        submitted.challenge_id,
+        submitted.challenge_version,
+      );
+      db.prepare(
+        `UPDATE sessions
+         SET phase = ?, pending_action = ?,
+             active_challenge_id = ?, active_challenge_version = ?, active_attempt_id = ?
+         WHERE id = ?`,
+      ).run(
+        challenge.verification.required ? "awaiting_verification" : "awaiting_assessment",
+        challenge.verification.required ? "run_verification" : "assess_response",
+        challenge.id,
+        challenge.version,
+        submitted.id,
+        submitted.session_id,
+      );
+    }
+
+    return submitted;
   })();
 }
 
@@ -702,4 +772,250 @@ export function getAttemptsTargetingObjective(
     )
     .all(objectiveId);
   return AttemptSchema.array().parse(rows);
+}
+
+function effectiveEvidenceIdsForAttempt(db: Database.Database, attemptId: number): string[] {
+  return (db
+    .prepare(
+      `SELECT evidence.id
+       FROM evidence_events evidence
+       WHERE evidence.attempt_id = ?
+         AND COALESCE((
+           SELECT revision.action
+           FROM evidence_revisions revision
+           WHERE revision.evidence_event_id = evidence.id
+           ORDER BY revision.seq DESC
+           LIMIT 1
+         ), 'restore') <> 'invalidate'
+       ORDER BY evidence.seq`,
+    )
+    .all(attemptId) as Array<{ id: string }>).map((row) => row.id);
+}
+
+function attemptHasCompleteEffectiveAssessment(
+  db: Database.Database,
+  attempt: Attempt,
+  challenge: ChallengeSpec,
+): boolean {
+  const row = db
+    .prepare(
+      `SELECT COUNT(DISTINCT evidence.objective_id) AS count
+       FROM evidence_events evidence
+       WHERE evidence.attempt_id = ?
+         AND COALESCE((
+           SELECT revision.action
+           FROM evidence_revisions revision
+           WHERE revision.evidence_event_id = evidence.id
+           ORDER BY revision.seq DESC
+           LIMIT 1
+         ), 'restore') <> 'invalidate'`,
+    )
+    .get(attempt.id) as { count: number };
+  return row.count === challenge.targets.length;
+}
+
+function resumableAttempt(
+  db: Database.Database,
+  attempt: Attempt,
+  challenge: ChallengeSpec,
+): ResumableAttempt {
+  const exposureRows = db
+    .prepare(`SELECT * FROM exposure_events WHERE attempt_id = ? ORDER BY occurred_at, seq`)
+    .all(attempt.id);
+  return {
+    attempt,
+    challenge,
+    hintObservations: getHintObservationsForAttempt(db, attempt.id),
+    exposureEvents: ExposureEventSchema.array().parse(exposureRows),
+    effectiveEvidenceIds: effectiveEvidenceIdsForAttempt(db, attempt.id),
+  };
+}
+
+function unresolvedAttemptsForSession(db: Database.Database, sessionId: number): {
+  verification: ResumableAttempt[];
+  assessment: ResumableAttempt[];
+} {
+  const attempts = AttemptSchema.array().parse(
+    db.prepare(
+      `SELECT * FROM attempts
+       WHERE session_id = ? AND submitted_at IS NOT NULL AND challenge_id IS NOT NULL
+       ORDER BY submitted_at, id`,
+    ).all(sessionId),
+  );
+  const verification: ResumableAttempt[] = [];
+  const assessment: ResumableAttempt[] = [];
+
+  for (const attempt of attempts) {
+    const challenge = getFrozenChallengeOrThrow(
+      db,
+      attempt.challenge_id!,
+      attempt.challenge_version!,
+    );
+    if (attemptHasCompleteEffectiveAssessment(db, attempt, challenge)) continue;
+    const item = resumableAttempt(db, attempt, challenge);
+    if (challenge.verification.required && attempt.verification_output_json === null) {
+      verification.push(item);
+    } else {
+      assessment.push(item);
+    }
+  }
+  return { verification, assessment };
+}
+
+export function advanceSessionToFeedback(db: Database.Database, attemptId: number): void {
+  const attempt = getAttemptOrThrow(db, attemptId);
+  if (attempt.session_id === null || attempt.challenge_id === null || attempt.challenge_version === null) return;
+  db.prepare(
+    `UPDATE sessions
+     SET phase = 'feedback', pending_action = 'present_feedback',
+         active_challenge_id = ?, active_challenge_version = ?, active_attempt_id = ?
+     WHERE id = ?`,
+  ).run(attempt.challenge_id, attempt.challenge_version, attempt.id, attempt.session_id);
+}
+
+export function syncSessionAfterEvidenceChange(db: Database.Database, attemptId: number): void {
+  const attempt = getAttemptOrThrow(db, attemptId);
+  if (attempt.session_id === null || attempt.challenge_id === null || attempt.challenge_version === null) return;
+  const challenge = getFrozenChallengeOrThrow(db, attempt.challenge_id, attempt.challenge_version);
+  if (attemptHasCompleteEffectiveAssessment(db, attempt, challenge)) {
+    advanceSessionToFeedback(db, attemptId);
+    return;
+  }
+  const awaitingVerification = challenge.verification.required && attempt.verification_output_json === null;
+  db.prepare(
+    `UPDATE sessions
+     SET phase = ?, pending_action = ?,
+         active_challenge_id = ?, active_challenge_version = ?, active_attempt_id = ?
+     WHERE id = ?`,
+  ).run(
+    awaitingVerification ? "awaiting_verification" : "awaiting_assessment",
+    awaitingVerification ? "run_verification" : "assess_response",
+    challenge.id,
+    challenge.version,
+    attempt.id,
+    attempt.session_id,
+  );
+}
+
+function setSessionToNextUnresolvedOrComplete(
+  db: Database.Database,
+  sessionId: number,
+  markEnded: boolean,
+): void {
+  const session = SessionSchema.parse(db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId));
+  const now = new Date().toISOString();
+  if (session.active_attempt_id !== null) {
+    const active = getAttemptOrThrow(db, session.active_attempt_id);
+    if (active.submitted_at === null) {
+      db.prepare(
+        `UPDATE sessions
+         SET ended_at = CASE WHEN ? THEN COALESCE(ended_at, ?) ELSE ended_at END,
+             phase = 'awaiting_response', pending_action = 'collect_response'
+         WHERE id = ?`,
+      ).run(markEnded ? 1 : 0, now, sessionId);
+      return;
+    }
+  }
+
+  const unresolved = unresolvedAttemptsForSession(db, sessionId);
+  const next = unresolved.verification[0] ?? unresolved.assessment[0];
+  if (next) {
+    const needsVerification = unresolved.verification.includes(next);
+    db.prepare(
+      `UPDATE sessions
+       SET ended_at = CASE WHEN ? THEN COALESCE(ended_at, ?) ELSE ended_at END,
+           phase = ?, pending_action = ?,
+           active_challenge_id = ?, active_challenge_version = ?, active_attempt_id = ?
+       WHERE id = ?`,
+    ).run(
+      markEnded ? 1 : 0,
+      now,
+      needsVerification ? "awaiting_verification" : "awaiting_assessment",
+      needsVerification ? "run_verification" : "assess_response",
+      next.challenge.id,
+      next.challenge.version,
+      next.attempt.id,
+      sessionId,
+    );
+    return;
+  }
+
+  db.prepare(
+    `UPDATE sessions
+     SET ended_at = CASE WHEN ? THEN COALESCE(ended_at, ?) ELSE ended_at END,
+         phase = 'complete', pending_action = 'none',
+         active_challenge_id = NULL, active_challenge_version = NULL, active_attempt_id = NULL
+     WHERE id = ?`,
+  ).run(markEnded ? 1 : 0, now, sessionId);
+}
+
+export function finishSessionInteraction(db: Database.Database, sessionId: number): void {
+  const session = SessionSchema.parse(db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId));
+  if (session.phase === "feedback" && session.pending_action === "present_feedback") {
+    db.prepare(`UPDATE sessions SET ended_at = COALESCE(ended_at, ?) WHERE id = ?`)
+      .run(new Date().toISOString(), sessionId);
+    return;
+  }
+  setSessionToNextUnresolvedOrComplete(db, sessionId, true);
+}
+
+export function completeSessionFeedback(db: Database.Database, sessionId: number): void {
+  setSessionToNextUnresolvedOrComplete(db, sessionId, true);
+}
+
+export function resumeSession(db: Database.Database, sessionId: number): ResumedSession {
+  const session = SessionSchema.parse(db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId));
+  const unresolved = unresolvedAttemptsForSession(db, sessionId);
+  const activeAttempt = session.active_attempt_id === null
+    ? null
+    : getAttemptOrThrow(db, session.active_attempt_id);
+  if (
+    (session.active_challenge_id === null) !== (session.active_challenge_version === null) ||
+    (session.active_attempt_id === null) !== (session.active_challenge_id === null)
+  ) {
+    throw new Error(`Session ${sessionId} has inconsistent active restart references`);
+  }
+  const activeChallenge = session.active_challenge_id === null || session.active_challenge_version === null
+    ? null
+    : getFrozenChallengeOrThrow(db, session.active_challenge_id, session.active_challenge_version);
+  if (
+    activeAttempt && activeChallenge &&
+    (activeAttempt.session_id !== sessionId ||
+      activeAttempt.challenge_id !== activeChallenge.id ||
+      activeAttempt.challenge_version !== activeChallenge.version)
+  ) {
+    throw new Error(`Session ${sessionId} active attempt does not match its frozen challenge reference`);
+  }
+  const activeAttemptState = activeAttempt && activeChallenge
+    ? resumableAttempt(db, activeAttempt, activeChallenge)
+    : null;
+
+  let phase = session.phase;
+  let pendingAction = session.pending_action;
+  if (activeAttempt && activeAttempt.submitted_at === null) {
+    phase = "awaiting_response";
+    pendingAction = "collect_response";
+  } else if (!(phase === "feedback" && pendingAction === "present_feedback")) {
+    if (unresolved.verification.length > 0) {
+      phase = "awaiting_verification";
+      pendingAction = "run_verification";
+    } else if (unresolved.assessment.length > 0) {
+      phase = "awaiting_assessment";
+      pendingAction = "assess_response";
+    } else if (session.ended_at !== null) {
+      phase = "complete";
+      pendingAction = "none";
+    }
+  }
+
+  return {
+    session,
+    phase,
+    pendingAction,
+    activeChallenge,
+    activeAttempt,
+    activeAttemptState,
+    unresolvedVerificationAttempts: unresolved.verification,
+    unresolvedAssessmentAttempts: unresolved.assessment,
+  };
 }

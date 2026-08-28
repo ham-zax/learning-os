@@ -351,6 +351,26 @@ export type ObjectiveProjection = z.infer<typeof ObjectiveProjectionSchema>;
 
 // ─── sessions ───────────────────────────────────────────────────────────────
 
+export const SessionPhase = z.enum([
+  "idle",
+  "challenge_prepared",
+  "awaiting_response",
+  "awaiting_verification",
+  "awaiting_assessment",
+  "feedback",
+  "complete",
+]);
+export type SessionPhase = z.infer<typeof SessionPhase>;
+
+export const SessionPendingAction = z.enum([
+  "none",
+  "collect_response",
+  "run_verification",
+  "assess_response",
+  "present_feedback",
+]);
+export type SessionPendingAction = z.infer<typeof SessionPendingAction>;
+
 export const SessionSchema = z.object({
   id: z.number().int(),
   topic_id: z.string(),
@@ -358,6 +378,11 @@ export const SessionSchema = z.object({
   started_at: z.string().nullable().default(null),
   ended_at: z.string().nullable().default(null),
   concepts_reviewed: jsonArrayOfStrings.default([]),
+  phase: SessionPhase.default("idle"),
+  pending_action: SessionPendingAction.default("none"),
+  active_challenge_id: z.string().nullable().default(null),
+  active_challenge_version: z.number().int().positive().nullable().default(null),
+  active_attempt_id: z.number().int().positive().nullable().default(null),
 });
 export type Session = z.infer<typeof SessionSchema>;
 

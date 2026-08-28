@@ -20,7 +20,7 @@ import type {
   DeliveryContext,
 } from "./types.js";
 
-const CURRENT_VERSION = 5;
+const CURRENT_VERSION = 6;
 
 // ─── Schema DDL ──────────────────────────────────────────────────────────────
 
@@ -859,6 +859,146 @@ const migrations: Migration[] = [
           BEGIN
             SELECT RAISE(ABORT, 'review event must match qualifying source evidence');
           END;
+        `);
+      })();
+    },
+  },
+  {
+    version: 6,
+    up: (db) => {
+      db.transaction(() => {
+        db.exec(`
+          ALTER TABLE sessions ADD COLUMN phase TEXT NOT NULL DEFAULT 'idle'
+            CHECK (phase IN (
+              'idle',
+              'challenge_prepared',
+              'awaiting_response',
+              'awaiting_verification',
+              'awaiting_assessment',
+              'feedback',
+              'complete'
+            ));
+          ALTER TABLE sessions ADD COLUMN pending_action TEXT NOT NULL DEFAULT 'none'
+            CHECK (pending_action IN (
+              'none',
+              'collect_response',
+              'run_verification',
+              'assess_response',
+              'present_feedback'
+            ));
+          ALTER TABLE sessions ADD COLUMN active_challenge_id TEXT;
+          ALTER TABLE sessions ADD COLUMN active_challenge_version INTEGER;
+          ALTER TABLE sessions ADD COLUMN active_attempt_id INTEGER REFERENCES attempts(id) ON DELETE SET NULL;
+
+          UPDATE sessions
+          SET phase = CASE
+                WHEN ended_at IS NULL THEN 'idle'
+                WHEN EXISTS (
+                  SELECT 1
+                  FROM attempts attempt
+                  JOIN challenge_versions challenge
+                    ON challenge.challenge_id = attempt.challenge_id
+                   AND challenge.version = attempt.challenge_version
+                  WHERE attempt.session_id = sessions.id
+                    AND attempt.submitted_at IS NOT NULL
+                    AND challenge.verification_required = 1
+                    AND attempt.verification_output_json IS NULL
+                    AND (
+                      SELECT COUNT(*)
+                      FROM challenge_targets target
+                      WHERE target.challenge_id = attempt.challenge_id
+                        AND target.version = attempt.challenge_version
+                    ) > (
+                      SELECT COUNT(DISTINCT evidence.objective_id)
+                      FROM evidence_events evidence
+                      WHERE evidence.attempt_id = attempt.id
+                        AND COALESCE((
+                          SELECT revision.action
+                          FROM evidence_revisions revision
+                          WHERE revision.evidence_event_id = evidence.id
+                          ORDER BY revision.seq DESC
+                          LIMIT 1
+                        ), 'restore') <> 'invalidate'
+                    )
+                ) THEN 'awaiting_verification'
+                WHEN EXISTS (
+                  SELECT 1
+                  FROM attempts attempt
+                  WHERE attempt.session_id = sessions.id
+                    AND attempt.submitted_at IS NOT NULL
+                    AND attempt.challenge_id IS NOT NULL
+                    AND (
+                      SELECT COUNT(*)
+                      FROM challenge_targets target
+                      WHERE target.challenge_id = attempt.challenge_id
+                        AND target.version = attempt.challenge_version
+                    ) > (
+                      SELECT COUNT(DISTINCT evidence.objective_id)
+                      FROM evidence_events evidence
+                      WHERE evidence.attempt_id = attempt.id
+                        AND COALESCE((
+                          SELECT revision.action
+                          FROM evidence_revisions revision
+                          WHERE revision.evidence_event_id = evidence.id
+                          ORDER BY revision.seq DESC
+                          LIMIT 1
+                        ), 'restore') <> 'invalidate'
+                    )
+                ) THEN 'awaiting_assessment'
+                ELSE 'complete'
+              END,
+              pending_action = CASE
+                WHEN ended_at IS NULL THEN 'none'
+                WHEN EXISTS (
+                  SELECT 1
+                  FROM attempts attempt
+                  JOIN challenge_versions challenge
+                    ON challenge.challenge_id = attempt.challenge_id
+                   AND challenge.version = attempt.challenge_version
+                  WHERE attempt.session_id = sessions.id
+                    AND attempt.submitted_at IS NOT NULL
+                    AND challenge.verification_required = 1
+                    AND attempt.verification_output_json IS NULL
+                    AND (
+                      SELECT COUNT(*) FROM challenge_targets target
+                      WHERE target.challenge_id = attempt.challenge_id
+                        AND target.version = attempt.challenge_version
+                    ) > (
+                      SELECT COUNT(DISTINCT evidence.objective_id)
+                      FROM evidence_events evidence
+                      WHERE evidence.attempt_id = attempt.id
+                        AND COALESCE((
+                          SELECT revision.action FROM evidence_revisions revision
+                          WHERE revision.evidence_event_id = evidence.id
+                          ORDER BY revision.seq DESC LIMIT 1
+                        ), 'restore') <> 'invalidate'
+                    )
+                ) THEN 'run_verification'
+                WHEN EXISTS (
+                  SELECT 1 FROM attempts attempt
+                  WHERE attempt.session_id = sessions.id
+                    AND attempt.submitted_at IS NOT NULL
+                    AND attempt.challenge_id IS NOT NULL
+                    AND (
+                      SELECT COUNT(*) FROM challenge_targets target
+                      WHERE target.challenge_id = attempt.challenge_id
+                        AND target.version = attempt.challenge_version
+                    ) > (
+                      SELECT COUNT(DISTINCT evidence.objective_id)
+                      FROM evidence_events evidence
+                      WHERE evidence.attempt_id = attempt.id
+                        AND COALESCE((
+                          SELECT revision.action FROM evidence_revisions revision
+                          WHERE revision.evidence_event_id = evidence.id
+                          ORDER BY revision.seq DESC LIMIT 1
+                        ), 'restore') <> 'invalidate'
+                    )
+                ) THEN 'assess_response'
+                ELSE 'none'
+              END,
+              active_challenge_id = NULL,
+              active_challenge_version = NULL,
+              active_attempt_id = NULL;
         `);
       })();
     },
