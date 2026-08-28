@@ -1,8 +1,8 @@
 {
-  "name": "generic-tutor",
+  "name": "learning-os",
   "version": "0.1.0",
   "type": "module",
-  "description": "AI tutor engine with spaced repetition, interview prep, and ecosystem integration",
+  "description": "Evidence-driven adaptive programming learning system with isolated learner profiles and interview preparation",
   "bin": {
     "tutor": "./dist/cli.js"
   },
@@ -14,11 +14,18 @@
     "tutor": "tsx src/cli.ts",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["tutor", "spaced-repetition", "sm2", "interview-prep", "learning"],
+  "keywords": [
+    "tutor",
+    "spaced-repetition",
+    "fsrs",
+    "adaptive-learning",
+    "interview-prep",
+    "learning"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ding/generic-tutor.git"
+    "url": "https://github.com/ham-zax/learning-os.git"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",

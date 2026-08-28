@@ -1,155 +1,139 @@
-# AGENTS.md — generic-tutor
+# AGENTS.md — Learning OS
 
-## Overview
-An AI tutor engine with SM-2 spaced repetition, interview prep, and ecosystem integration. Teaches any topic using the SM-2 algorithm, drills coding tests and system design, and integrates with job-hunter and ai-feeds for career-driven learning.
+## What this repository is
 
-## Tech Stack
-- **Language:** TypeScript (ESM, Node >= 22)
-- **Runtime:** `tsx` (dev), compiled to `dist/` for production
-- **State:** SQLite via better-sqlite3 (`data/tutor.db`)
-- **Knowledge:** Markdown files in `knowledge/` (YAML frontmatter not required — metadata lives in per-topic `manifest.json`)
-- **CLI:** Commander.js (`src/cli.ts`)
-- **Test:** vitest
+Learning OS is an evidence-driven programming learning system. It uses a TypeScript CLI and SQLite, with ChatGPT or another compatible agent acting as a replaceable teacher.
 
-## Key Paths
+The authoritative learner model is objective-specific evidence, not legacy concept scores or self-ratings.
 
-| Path | Purpose |
-|------|---------|
-| `data/tutor.db` | SQLite database — all SM-2 state, sessions, reviews, synced data |
-| `knowledge/manifest.json` | Topic index listing all available topics |
-| `knowledge/<topic>/manifest.json` | Per-topic manifest: concept IDs, titles, prereqs, difficulty |
-| `knowledge/<topic>/concepts/*.md` | Concept markdown files (per-topic subdirectory) |
-| `knowledge/concepts/*.md` | Legacy concept files (git-basics — flat layout) |
-| `src/sm2.ts` | SM-2 algorithm — pure function, zero dependencies |
-| `src/state.ts` | SM-2 ↔ DB bridge: due queries, summaries, topic init |
-| `src/db/database.ts` | SQLite CRUD — schema, migrations, 8 tables |
-| `src/session/engine.ts` | Session orchestrator: start, grade, end |
+```text
+concept × capability
+→ frozen challenge
+→ attempt
+→ assessment
+→ append-only evidence
+→ projections / weaknesses
+→ ReviewRatingMapper
+→ FSRS
+```
 
-## CLI Commands
+Core capabilities are exactly:
+
+```text
+explain | predict | implement | debug | design
+```
+
+Delivery contexts are exactly:
+
+```text
+learn | practice | review | interview | mock
+```
+
+## State ownership
+
+- Global reusable curriculum lives under `knowledge/`.
+- Managed learner profiles live under `data/profiles/<profile-id>/tutor.db`.
+- `data/profiles/registry.json` stores profile metadata and the active profile only.
+- `data/tutor.db` is supported only as the preserved legacy compatibility profile.
+- Learner evidence, goals, review cards, weaknesses, sessions, and resumable state are profile-local.
+- Raw resumes, job descriptions, chat transcripts, provider IDs, and API keys are not learner-state persistence.
+
+Never treat these legacy `concepts` columns as authoritative mastery:
+
+```text
+status | ef | interval | repetitions | next_review | last_grade
+```
+
+They remain compatibility/provenance fields.
+
+## Core paths
+
+| Path | Responsibility |
+| --- | --- |
+| `src/workspace.ts` | Pre-profile teacher workspace: profiles, catalog, onboarding, profile opening |
+| `src/profile/` | Learner profile registry and isolated DB resolution |
+| `src/onboarding/` | Structured intake, information needs, adaptive proposal, confirmed application |
+| `src/teacher.ts` | Provider-neutral teacher kernel bound to one learner DB |
+| `src/kernel/foundation.ts` | Objectives, frozen challenges, attempts, hints/exposures, resume |
+| `src/kernel/evidence.ts` | Assessment, append-only evidence, projections, correction |
+| `src/selection/` | Deterministic challenge-intent selection |
+| `src/scheduler/` | `ts-fsrs` adapter and evidence-to-rating mapping |
+| `src/plan/today.ts` | Daily mission orchestration and goal time budget |
+| `src/session/` | Ordinary learning-session flow |
+| `src/interview/` | Coding and system-design interview flows |
+| `src/db/database.ts` | SQLite schema, migrations, CRUD |
+| `docs/kernel-contracts.md` | Authoritative V1 kernel contract |
+
+## Onboarding contract
+
+A new learner should flow through:
+
+```text
+structured intake
+→ missing-information questions
+→ purpose/time-aware proposal
+→ explicit learner confirmation
+→ new isolated profile
+→ reusable/custom concept metadata
+→ sparse goal objectives
+→ initial diagnostics
+→ evidence-driven daily learning
+```
+
+Resume/JD/self-reported experience may change coverage, priority, or diagnostic strategy. It must never create mastery evidence or FSRS state.
+
+Preparation strategies are planning metadata:
+
+```text
+learn | refresh | diagnose_first | transfer_practice
+```
+
+They are not readiness states.
+
+## Important invariants
+
+- Freeze an assessable challenge and rubric before the learner answers.
+- One assessed objective produces one `EvidenceEvent`.
+- Hints and answer/explanation exposure are recorded before they are shown.
+- Confidence is metadata, never correctness.
+- Guided or exposed performance does not silently extend FSRS intervals.
+- FSRS owns **when** a valid retrieval is due.
+- The selector owns **what/how** to practice next.
+- Evidence corrections rebuild derived projections/cards; do not rewrite history.
+- Coding correctness requires real executable verification when the challenge requires it. LLM review alone is qualitative.
+- A fresh teacher must be able to resume from durable kernel state without previous chat history.
+
+## Commands
 
 ```bash
-# Development (via tsx)
-npm run tutor -- <command>              # e.g., npm run tutor -- stats
-npx tsx src/cli.ts <command>           # equivalent
-
-# Production
-npm run build && node dist/cli.js <command>
+npm ci
+npm run tutor -- profile create "My Profile"
+npm run tutor -- profile list
+npm run tutor -- onboard
+npm run tutor -- today <goal-id>
+npm run tutor -- <topic-id> --mode learn
+npm run tutor -- <topic-id> --mode practice
+npm run tutor -- <topic-id> --mode review
+npm run tutor -- interview <topic-id> --type coding
+npm run tutor -- interview <topic-id> --type system-design
+npm run tutor -- due
+npm run tutor -- stats
+npm run typecheck
+npm run build
 ```
 
-| Command | Purpose |
-|---------|---------|
-| `tutor <topic>` | Auto-detect: session (if topic exists) or ingestion mode |
-| `tutor <topic> --mode explore\|quiz\|teach-back` | Start a study session |
-| `tutor ingest <topic> [--from job-hunter\|ai-feeds\|manual]` | Ingest concepts from source |
-| `tutor init <topic> <manifest-path>` | Bootstrap topic from manifest JSON |
-| `tutor stats [--topic <topic>]` | Progress summary (all topics or one) |
-| `tutor due [--topic <topic>]` | Concepts due for review |
-| `tutor gaps [--top N]` | Skill gaps from job-hunter |
-| `tutor interview <topic> [--type coding\|system-design]` | Interview drill |
-| `tutor plan <topic> --goal <text> [--deadline YYYY-MM-DD]` | Learning plan |
-| `tutor sync` | Pull gaps from job-hunter + signals from ai-feeds |
-| `tutor search <query> --topic <topic>` | Search concepts |
+Do not commit `data/`, `config.json`, raw learner documents, secrets, or generated personal plans.
 
-## Database (8 tables in `data/tutor.db`)
+## Documentation authority
 
-```sql
-topics         — id, name, phase, goal, deadline, last_session
-concepts       — id, topic_id, title, difficulty, prerequisites, tags,
-                 status, ef, interval, repetitions, next_review, last_grade
-sessions       — id, topic_id, mode, started_at, ended_at
-reviews        — id, session_id, concept_id, grade, mode, feedback
-synced_gaps    — job_id, skill, frequency (from job-hunter)
-synced_signals — source_id, title, url, score (from ai-feeds)
-problems       — id, type, title, description, difficulty, test_cases
-attempts       — id, problem_id, response, score, feedback
+When documentation conflicts, use this order:
+
+```text
+accepted ADRs
+→ docs/kernel-contracts.md
+→ docs/architecture.md + docs/evidence-model.md
+→ docs/implementation-plan.md
+→ research notes
 ```
 
-## How to Query Progress
-
-```bash
-# All topics overview
-npx tsx src/cli.ts stats
-
-# One topic detail (phase, mastery breakdown, due count)
-npx tsx src/cli.ts stats --topic coding-interview
-
-# What's due today
-npx tsx src/cli.ts due --topic coding-interview
-
-# Raw DB queries
-sqlite3 data/tutor.db "SELECT id, title, status, ef, next_review FROM concepts WHERE topic_id='coding-interview' ORDER BY status, id;"
-
-sqlite3 data/tutor.db "SELECT c.title, r.grade, r.mode, r.created_at FROM reviews r JOIN concepts c ON c.id = r.concept_id WHERE c.topic_id='coding-interview' ORDER BY r.created_at DESC LIMIT 20;"
-
-sqlite3 data/tutor.db "SELECT COUNT(*) as mastered FROM concepts WHERE topic_id='coding-interview' AND status='mastered';"
-```
-
-## SM-2 Statuses & Transitions
-
-| Status | Meaning | How to reach |
-|--------|---------|-------------|
-| `unseen` | Never reviewed | Default |
-| `learning` | First interaction done | Any grade on first review |
-| `reviewing` | In spaced repetition | 2+ passes with grade >= 3 |
-| `mastered` | Fully learned | 5+ consecutive passes AND interval > 21 days |
-
-Grade 0-1 on reviewing/mastered → falls back to `learning`.
-
-## Knowledge File Format
-
-Concept files should follow `knowledge/concepts/_template.md`:
-```markdown
----
-id: concept-id
-title: Concept Title
-difficulty: 1
-prerequisites: []
-tags: []
----
-
-## Summary
-Brief overview (2-3 sentences).
-
-## Key Points
-- Point 1
-- Point 2
-
-## Deep Dive
-Detailed explanation with examples.
-
-## Practice Questions
-1. Recall question
-2. Understanding question
-
-## Common Misconceptions
-- Misconception → Correction
-```
-
-Files without YAML frontmatter still work — metadata comes from the manifest JSON.
-
-## Adding a New Topic
-
-```bash
-# 1. Create manifest
-mkdir -p knowledge/my-topic/concepts
-# Write knowledge/my-topic/manifest.json
-
-# 2. Create concept markdown files
-# Write knowledge/my-topic/concepts/<id>.md
-
-# 3. Bootstrap into DB
-npx tsx src/cli.ts init my-topic knowledge/my-topic/manifest.json
-
-# 4. Add to topic index (knowledge/manifest.json)
-
-# 5. Start learning
-npx tsx src/cli.ts my-topic
-```
-
-## Safety
-
-- `data/tutor.db` is git-ignored — never commit learner progress
-- `data/tutor.db-shm` and `data/tutor.db-wal` are WAL files — git-ignored
-- DB uses WAL mode with foreign keys — don't manipulate with raw SQL without understanding the schema
-- `tutor init` is idempotent — safe to re-run on existing topics
-- Manifest JSON format: `{ topicId, topicName, concepts: [{ id, title, difficulty?, prerequisites?, tags? }] }`
+Inspect the current implementation before changing contracts. The repository preserves Generic Tutor ancestry, but current Learning OS contracts override obsolete upstream SM-2 guidance.

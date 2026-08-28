@@ -1,51 +1,72 @@
-# generic-tutor — Project Instructions
+# Learning OS — Repository Instructions
 
-## What This Is
-An AI tutor engine using SM-2 spaced repetition. TypeScript CLI backed by SQLite. Teaches any topic, drills coding and system-design interviews, and integrates with job-hunter (skill gaps) and ai-feeds (learning signals).
+Read `AGENTS.md` first. It describes the current runtime and state ownership.
 
-## Key Files
-- `src/cli.ts` — Commander.js entry point (9 commands)
-- `src/sm2.ts` — SM-2 algorithm (pure function, testable in isolation)
-- `src/state.ts` — SM-2 ↔ DB bridge (due queries, summaries, topic init)
-- `src/db/database.ts` — SQLite schema, migrations, CRUD (8 tables)
-- `src/session/engine.ts` — Session orchestrator (start, grade, end)
-- `src/session/modes/` — explore, quiz, teach-back mode logic
-- `src/ingest/orchestrator.ts` — Multi-source ingestion pipeline
-- `src/knowledge/loader.ts` — Markdown + YAML frontmatter parser
-- `config.json` — Learner config (daily_minutes, knowledge_dir)
-- `knowledge/manifest.json` — Topic index (all available topics)
-- `knowledge/<topic>/manifest.json` — Per-topic concept metadata + prerequisite DAG
-- `data/tutor.db` — SQLite database (git-ignored, learner progress)
+Learning OS is no longer the upstream scalar SM-2 tutor. The current learner truth is objective-specific append-only evidence plus rebuildable projections and FSRS review state.
 
-## Commands (Development)
-```bash
-npx tsx src/cli.ts <topic>                                  # Session or ingestion
-npx tsx src/cli.ts <topic> --mode explore|quiz|teach-back   # Study session
-npx tsx src/cli.ts ingest <topic> [--from job-hunter|ai-feeds|manual]
-npx tsx src/cli.ts init <topic> <manifest-path>             # Bootstrap from manifest
-npx tsx src/cli.ts stats [--topic <topic>]                  # Progress summary
-npx tsx src/cli.ts due [--topic <topic>]                    # Due reviews
-npx tsx src/cli.ts gaps [--top N]                           # Skill gaps from job-hunter
-npx tsx src/cli.ts interview <topic> [--type coding|system-design]
-npx tsx src/cli.ts plan <topic> --goal <text> [--deadline YYYY-MM-DD]
-npx tsx src/cli.ts sync                                     # Pull gaps + signals
+## Non-negotiable model
+
+```text
+concept × capability
+→ frozen challenge/rubric
+→ attempt
+→ assessment
+→ evidence
+→ projections / weaknesses
+→ FSRS
 ```
 
-Shorthand via npm: `npm run tutor -- stats`
+Capabilities:
 
-## Conventions
-- TypeScript ESM (`"type": "module"`), Node >= 22
-- SQLite via better-sqlite3 (synchronous API, WAL mode, foreign keys ON)
-- SM-2 algorithm is in `src/sm2.ts` — pure function, no side effects
-- State updates go through `src/state.ts` or `src/session/engine.ts`, not raw SQL
-- Knowledge files: YAML frontmatter optional — metadata lives in per-topic `manifest.json`
-- Manifest format: `{ topicId, topicName, concepts: [{ id, title, difficulty?, prerequisites?, tags? }] }`
-- `tutor init` is idempotent — safe to re-run
+```text
+explain | predict | implement | debug | design
+```
 
-## What NOT To Do
-- Don't commit `data/` files — they contain learner progress (git-ignored)
-- Don't use `sessionId: 0` in `createReview` — use `null` (FK constraint)
-- Don't modify `src/sm2.ts` without running the SM-2 tests
-- Don't change the manifest format without updating `initializeTopic` in `src/state.ts`
-- Don't hardcode paths — use `config.json` for directory references
-- Don't run `npx tsc --noEmit` directly — use `npm run typecheck` (memory limit)
+Delivery contexts:
+
+```text
+learn | practice | review | interview | mock
+```
+
+Do not use `concepts.status`, `ef`, `interval`, `repetitions`, `next_review`, or `last_grade` as authoritative learner state.
+
+## Profiles and onboarding
+
+- Global curriculum: `knowledge/`
+- Managed learner persistence: `data/profiles/<profile-id>/tutor.db`
+- Profile registry: `data/profiles/registry.json`
+- Legacy compatibility DB: `data/tutor.db`
+
+Use `src/workspace.ts` before a learner profile exists. Use `createTeacherKernel(db)` after opening a profile.
+
+Confirmed onboarding must remain:
+
+```text
+intake → proposal → explicit confirmation → new profile → sparse objectives → diagnostics
+```
+
+Resume/JD claims are planning signals only. They cannot create readiness, transfer, durability, evidence, review events, or review cards.
+
+## Change boundaries
+
+- `src/profile/` owns profile identity and DB resolution.
+- `src/onboarding/` owns intake/proposal/application planning.
+- `src/kernel/foundation.ts` owns challenge/attempt/hint/exposure/resume contracts.
+- `src/kernel/evidence.ts` owns assessment/evidence/projection correction.
+- `src/scheduler/` owns FSRS integration.
+- `src/selection/` owns deterministic challenge selection.
+- `src/plan/today.ts` composes goal state, due work, weaknesses, and time budget.
+
+Do not create a second mastery model, scheduler, profile registry, or provider-specific durable state.
+
+## Routine commands
+
+```bash
+npm run typecheck
+npm run build
+npm run tutor -- profile list
+npm run tutor -- onboard
+npm run tutor -- today <goal-id>
+```
+
+Keep learner data, resumes/JDs, provider transcripts, and secrets out of Git.

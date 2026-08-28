@@ -2,13 +2,11 @@
 
 Learning OS is an evidence-driven programming learning system built around one rule: **a learner should advance because they demonstrated a capability, not because content was shown or they reported confidence.**
 
-This repository now contains the preserved `generic-tutor` TypeScript/SQLite application shell plus the Learning OS design contracts. The evidence-driven kernel is not implemented yet; surviving upstream scalar mastery and SM-2 behavior is legacy compatibility, not the target Learning OS source of learner truth.
+Learning OS now has a working TypeScript/SQLite evidence kernel, isolated learner profiles, adaptive confirmed onboarding, objective-specific projections, FSRS scheduling, challenge selection, resumable sessions, interview workflows, and a provider-neutral teacher API. It preserves useful Generic Tutor shell/history, but legacy scalar mastery and SM-2 fields are compatibility data rather than learner truth.
 
-## Current baseline
+## Current system
 
-Learning OS preserves `alienz-dev/generic-tutor` for its TypeScript/SQLite application shell and is replacing its learning-state core rather than building a tutor from zero.
-
-We plan to reuse ideas from other projects selectively:
+Learning OS evolved from `alienz-dev/generic-tutor` and selectively incorporated ideas from other learning systems while replacing the original scalar learning-state core. The implemented system uses:
 
 - `open-spaced-repetition/ts-fsrs`: scheduling engine.
 - `Nar101/learn-anything`: evidence integrity, hint-aware assessment semantics, transfer, and delayed-retrieval rules.
@@ -16,7 +14,7 @@ We plan to reuse ideas from other projects selectively:
 - `kartikth40/interview-sim`: interview state-machine ideas and weakness lifecycle.
 - `ChenChenyaqi/learn-anything`: coding-exercise workflow patterns.
 
-The goal is not to merge these repositories. The goal is to preserve `generic-tutor`'s useful shell while porting only the abstractions that improve learning evidence and task selection.
+These sources informed specific contracts; Learning OS keeps one coherent local kernel rather than merging their runtimes.
 
 ## Core model
 
@@ -63,18 +61,19 @@ ChatGPT is the preferred V1 interactive teacher, but it is not part of the kerne
 
 Use one active teacher/orchestrator at a time in V1. Durable objectives, challenges, attempts, evidence, projections, scheduling, and resumable session state belong to the kernel rather than to a provider's conversation history or private memory.
 
-## Operational baseline
+## Running Learning OS
 
-The inherited CLI requires Node.js >=22 and npm. The Phase 0 standalone baseline keeps the existing npm/TypeScript workflow:
+Requires Node.js >=22 and npm. Install dependencies once, then create or onboard a learner profile:
 
 ```bash
-npm install
-npm run tutor -- stats
-npm run build
-node dist/cli.js stats
+npm ci
+npm run tutor -- profile create "My Profile"
+npm run tutor -- onboard
+npm run tutor -- profile list
+npm run tutor -- today <goal-id>
 ```
 
-Surviving CLI surfaces include topic sessions, ingestion, gap/signal sync, interview drills, due-review queries, stats, and planning. The sibling `../job-hunter` and `../ai-feeds` integrations remain optional integration points; they do not define Learning OS learner-state semantics.
+Managed profiles keep separate SQLite learner state under `data/profiles/`; reusable Markdown curriculum stays shared under `knowledge/`. ChatGPT or another compatible teacher can use `createTeacherWorkspace()` for pre-profile onboarding and `createTeacherKernel(db)` after a profile is open. The sibling `../job-hunter` and `../ai-feeds` integrations remain optional.
 
 ## Documentation
 
@@ -124,4 +123,4 @@ The first milestone should be capable of learning, practicing, debugging, retrie
 
 `/home/hamza/repo/learning-os` is the product working tree. Its Git graph preserves both the Learning OS design lineage and the complete reachable ancestry of `alienz-dev/generic-tutor` at pinned upstream commit `2fffb72201aba055a4c270e2fddb29352edf2efb` from `https://github.com/alienz-dev/generic-tutor.git`.
 
-Upstream `package.json` and README metadata declare MIT, but the inspected pinned repository has no root `LICENSE` text or copyright notice. Public redistribution and package publication therefore remain separately gated on provenance/license clarification; this repository does not manufacture missing notice text, ownership, or transfer history.
+The repository preserves the pinned upstream ancestry and its declared MIT package metadata while publishing the current Learning OS implementation as its own Git history.
