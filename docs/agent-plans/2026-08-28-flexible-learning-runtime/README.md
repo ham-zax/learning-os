@@ -4,23 +4,27 @@
 **Source of truth:** `docs/flexible-learning-runtime-design.md`
 **Design base:** `79c239e4062fcee44f278dd5a7ee144bd5f8854b`
 **Execution shape:** sequential
-**Current wave:** 1
+**Current wave:** 3
 
 ## Current frontier
 
 | Mission | Type | Status | Can start | Workspace | Isolation reason | Blocked by |
 | --- | --- | --- | --- | --- | --- | --- |
-| Agent A — Learner-facing contract repair | docs/config + live dogfood | ready | now | current `main` checkout | none; sole writer | none |
-| Agent B — Conditional next wave | executable or teacher-helper | blocked | after Agent A report/commit | same current `main` checkout, sequentially | none; one writer at a time | Agent A dogfood outcome |
+| Agent A — Learner-facing contract repair | docs/config + live dogfood | complete | finished at `9ef1040` | current `main` checkout | none; sole writer | none |
+| Agent B — Orchestration flexibility | executable + docs | ready | now from `9ef1040` | same current `main` checkout, sequentially | none; sole writer after A | Agent A `CLEAN_WAVE1` |
 
 ## Dependency map
 
 ```text
-Agent A: strengthen teacher protocol/Skill + fresh-teacher dogfood
+Agent A: strengthen teacher protocol/Skill + fresh-teacher dogfood (`9ef1040`)
         |
-        +-- dogfood clean --> Agent B: Wave 3 orchestration flexibility
+        v
+Fresh-teacher verdict: `CLEAN_WAVE1`
         |
-        +-- fresh teacher still violates contract --> Agent B: Wave 2 pure TurnDirective helper
+        +-- Wave 2 pure TurnDirective helper SKIPPED
+        |
+        v
+Agent B: Wave 3 orchestration flexibility
 
 Wave 4 persistence remains blocked until a real restart/continuity failure demonstrates need.
 ```
@@ -36,13 +40,13 @@ Wave 4 persistence remains blocked until a real restart/continuity failure demon
 
 ## Workspace policy
 
-Use the current `main` checkout sequentially. Do not create worktrees. Parallel writes are not justified because Agent A and the eventual Agent B can touch shared teacher/orchestration contracts, and Agent B's exact mission depends on Agent A's dogfood evidence.
+Use the current `main` checkout sequentially. Do not create worktrees. Agent A is complete; Agent B is now the only delegated writer. The sequential topology avoids overlapping edits across the shared teacher/orchestration boundary.
 
-Only one delegated writer should operate in this checkout at a time. Each agent should commit only its owned changes and explicitly exclude `data/`.
+Each agent commits only its owned changes and explicitly excludes `data/`.
 
 ## Integration policy
 
-No branch integration is required. Agent A commits directly to local `main`. After its finish report, replan Agent B from observed dogfood evidence and Agent A's landed commit. Agent B then works on that new `main` baseline and commits directly to `main`.
+No branch integration is required. Agent A landed `9ef1040` directly on local `main` and returned `CLEAN_WAVE1`. Wave 2 is skipped. Agent B now works from `9ef1040` and commits its Wave 3 changes directly to `main`.
 
 Do not push unless the user separately requests publication to the remote.
 
@@ -58,11 +62,12 @@ The source design explicitly requires fresh-teacher live dogfood for Wave 1, so 
 
 ## Future / blocked work
 
-- **Agent B — Wave 2 helper**: only if Agent A's fresh-teacher dogfood still shows that clear protocol/Skill rules are not reliably executed. Own a pure, non-persistent `TurnDirective`-style helper that cannot choose objectives or mutate learner state.
-- **Agent B — Wave 3 orchestration**: preferred path if Wave 1 dogfood is clean. Own diagnostic-breadth policy, remaining-time replanning/session envelope, and optional soft-focus behavior while keeping FSRS unchanged.
+- **Wave 2 helper**: skipped after Agent A's `CLEAN_WAVE1`; do not revive without new evidence that the strengthened contract is insufficient.
+- **Agent B — Wave 3 orchestration**: ready now. Own diagnostic-breadth policy, remaining-time replanning/session envelope, and optional soft-focus behavior while keeping FSRS unchanged.
 - **Wave 4 persistence**: response segments, scoped stable preferences, or durable reconstruction checkpoints only after a demonstrated fresh-agent restart gap.
 
 ## Status log
 
 - `2026-08-28` — V2 flexible runtime design committed on `main` at `79c239e4062fcee44f278dd5a7ee144bd5f8854b`.
-- `2026-08-28` — Execution chosen as two sequential sessions. Only Agent A is materialized because Agent B's correct mission depends on Wave 1 dogfood evidence.
+- `2026-08-28` — Execution chosen as two sequential sessions. Only Agent A was initially materialized because Agent B's correct mission depended on Wave 1 dogfood evidence.
+- `2026-08-28` — Agent A completed at `9ef1040` with fresh-teacher verdict `CLEAN_WAVE1`; Wave 2 skipped and Agent B Wave 3 mission materialized.
