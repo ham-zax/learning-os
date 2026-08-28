@@ -51,6 +51,35 @@ export const VerificationBasis = z.enum([
 ]);
 export type VerificationBasis = z.infer<typeof VerificationBasis>;
 
+export const EvidenceResult = z.enum([
+  "correct",
+  "partially_correct",
+  "incorrect",
+  "ungradable",
+]);
+export type EvidenceResult = z.infer<typeof EvidenceResult>;
+
+export const EvaluatorType = z.enum(["kernel", "agent", "llm", "human"]);
+export type EvaluatorType = z.infer<typeof EvaluatorType>;
+
+export const EvidenceRevisionAction = z.enum(["invalidate", "restore"]);
+export type EvidenceRevisionAction = z.infer<typeof EvidenceRevisionAction>;
+
+export const MisconceptionDisposition = z.enum(["observed", "cleared"]);
+export type MisconceptionDisposition = z.infer<typeof MisconceptionDisposition>;
+
+export const WeaknessLifecycle = z.enum([
+  "new",
+  "recurring",
+  "improving",
+  "resolved",
+  "retest",
+]);
+export type WeaknessLifecycle = z.infer<typeof WeaknessLifecycle>;
+
+export const VerificationOutcome = z.enum(["passed", "failed"]);
+export type VerificationOutcome = z.infer<typeof VerificationOutcome>;
+
 export const HintScopeKind = z.enum(["objective", "criteria", "all_targets"]);
 export type HintScopeKind = z.infer<typeof HintScopeKind>;
 
@@ -134,6 +163,55 @@ const jsonRecord = z
 const sqliteBoolean = z
   .union([z.boolean(), z.number().int().min(0).max(1)])
   .transform((v: boolean | number) => (typeof v === "boolean" ? v : v === 1));
+
+export const VerificationOutputSchema = z.object({
+  outcome: VerificationOutcome,
+  basis: z.string().min(1),
+  summary: z.string().min(1),
+  details: z.record(z.unknown()).default({}),
+}).strict();
+export type VerificationOutput = z.infer<typeof VerificationOutputSchema>;
+
+const verificationOutputJson = z
+  .union([z.string(), VerificationOutputSchema])
+  .transform((v: string | VerificationOutput) =>
+    typeof v === "string" ? JSON.parse(v) : v,
+  )
+  .pipe(VerificationOutputSchema);
+
+export const ObjectiveAssessmentResultSchema = z.object({
+  objectiveId: z.string().min(1),
+  result: EvidenceResult,
+  criteriaMet: z.array(z.string().min(1)).default([]),
+  criteriaUnmet: z.array(z.string().min(1)).default([]),
+  misconceptionsObserved: z.array(z.string().min(1)).default([]),
+  misconceptionsCleared: z.array(z.string().min(1)).default([]),
+  observedErrors: z.array(z.string().min(1)).default([]),
+  rationale: z.string().min(1),
+}).strict();
+export type ObjectiveAssessmentResult = z.infer<typeof ObjectiveAssessmentResultSchema>;
+
+export const AssessmentResultSchema = z.object({
+  evaluatorType: EvaluatorType,
+  assessmentBasis: VerificationBasis,
+  verificationOutput: VerificationOutputSchema.nullable().optional(),
+  objectiveResults: z.array(ObjectiveAssessmentResultSchema).min(1),
+}).strict();
+export type AssessmentResult = z.infer<typeof AssessmentResultSchema>;
+export type AssessmentResultInput = z.input<typeof AssessmentResultSchema>;
+
+export const EvidenceCriteriaSnapshotSchema = z.object({
+  met: z.array(z.string()),
+  unmet: z.array(z.string()),
+}).strict();
+export type EvidenceCriteriaSnapshot = z.infer<typeof EvidenceCriteriaSnapshotSchema>;
+
+const evidenceCriteriaJson = z
+  .union([z.string(), EvidenceCriteriaSnapshotSchema])
+  .transform((v: string | EvidenceCriteriaSnapshot) =>
+    typeof v === "string" ? JSON.parse(v) : v,
+  )
+  .pipe(EvidenceCriteriaSnapshotSchema);
 
 // ─── challenge contract ─────────────────────────────────────────────────────
 
@@ -390,6 +468,7 @@ export const AttemptSchema = z.object({
   session_id: z.number().int().nullable().default(null),
   response_text: z.string().nullable().default(null),
   artifact_ref_json: jsonRecord.nullable().default(null),
+  verification_output_json: verificationOutputJson.nullable().default(null),
   score: z.number().nullable().default(null),
   feedback: z.string().nullable().default(null),
   time_spent_seconds: z.number().int().nullable().default(null),
@@ -425,6 +504,78 @@ export const ExposureEventSchema = z.object({
 });
 export type ExposureEvent = z.infer<typeof ExposureEventSchema>;
 
+// ─── evidence / correction / misconception state ───────────────────────────
+
+export const EvidenceEventSchema = z.object({
+  seq: z.number().int(),
+  id: z.string(),
+  objective_id: z.string(),
+  supersedes_event_id: z.string().nullable().default(null),
+  session_id: z.number().int().nullable().default(null),
+  problem_id: z.string().nullable().default(null),
+  attempt_id: z.number().int().nullable().default(null),
+  task_id: z.string(),
+  task_version: z.number().int().positive(),
+  rubric_id: z.string().nullable().default(null),
+  rubric_version: z.number().int().positive().nullable().default(null),
+  task_form: TaskForm,
+  delivery_context: DeliveryContext,
+  result: EvidenceResult,
+  hint_level: z.number().int().min(0).max(5),
+  novelty: Novelty,
+  retrieval_valid: sqliteBoolean,
+  delay_anchor_at: z.string().nullable().default(null),
+  delay_seconds: z.number().int().nonnegative().nullable().default(null),
+  assessment_basis: VerificationBasis,
+  evaluator_type: EvaluatorType,
+  criteria_json: evidenceCriteriaJson,
+  observed_errors_json: jsonArrayOfStrings,
+  rationale: z.string(),
+  performed_at: z.string(),
+  created_at: z.string(),
+});
+export type EvidenceEvent = z.infer<typeof EvidenceEventSchema>;
+
+export const EvidenceRevisionSchema = z.object({
+  seq: z.number().int(),
+  evidence_event_id: z.string(),
+  action: EvidenceRevisionAction,
+  reason: z.string(),
+  created_at: z.string(),
+});
+export type EvidenceRevision = z.infer<typeof EvidenceRevisionSchema>;
+
+export const MisconceptionSchema = z.object({
+  id: z.string(),
+  concept_id: z.string(),
+  description: z.string(),
+  correction_strategy: z.string().nullable().default(null),
+  is_blocking: sqliteBoolean,
+  created_at: z.string(),
+});
+export type Misconception = z.infer<typeof MisconceptionSchema>;
+
+export const MisconceptionObservationSchema = z.object({
+  seq: z.number().int(),
+  misconception_id: z.string(),
+  objective_id: z.string(),
+  evidence_event_id: z.string(),
+  disposition: MisconceptionDisposition,
+  created_at: z.string(),
+});
+export type MisconceptionObservation = z.infer<typeof MisconceptionObservationSchema>;
+
+export const WeaknessProjectionSchema = z.object({
+  key: z.string(),
+  objective_id: z.string(),
+  category: z.string(),
+  lifecycle: WeaknessLifecycle,
+  last_event_seq: z.number().int().nonnegative(),
+  projector_version: z.string(),
+  rebuilt_at: z.string(),
+});
+export type WeaknessProjection = z.infer<typeof WeaknessProjectionSchema>;
+
 // ─── Schema registry (convenient for generic helpers) ───────────────────────
 
 export const schemas = {
@@ -444,6 +595,11 @@ export const schemas = {
   attempts: AttemptSchema,
   hint_observations: HintObservationSchema,
   exposure_events: ExposureEventSchema,
+  evidence_events: EvidenceEventSchema,
+  evidence_revisions: EvidenceRevisionSchema,
+  misconceptions: MisconceptionSchema,
+  misconception_observations: MisconceptionObservationSchema,
+  weakness_projections: WeaknessProjectionSchema,
 } as const;
 
 export type TableName = keyof typeof schemas;

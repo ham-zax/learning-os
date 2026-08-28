@@ -20,7 +20,7 @@ import type {
   DeliveryContext,
 } from "./types.js";
 
-const CURRENT_VERSION = 3;
+const CURRENT_VERSION = 4;
 
 // ─── Schema DDL ──────────────────────────────────────────────────────────────
 
@@ -556,6 +556,249 @@ const migrations: Migration[] = [
         for (const [id, description] of capabilities) {
           insertCapability.run(id, description, createdAt);
         }
+      })();
+    },
+  },
+  {
+    version: 4,
+    up: (db) => {
+      db.transaction(() => {
+        db.exec(`
+          ALTER TABLE attempts ADD COLUMN verification_output_json TEXT;
+
+          CREATE TABLE evidence_events (
+            seq                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            id                    TEXT NOT NULL UNIQUE,
+            objective_id          TEXT NOT NULL REFERENCES learning_objectives(id) ON DELETE RESTRICT,
+            supersedes_event_id   TEXT REFERENCES evidence_events(id) ON DELETE RESTRICT,
+            session_id            INTEGER REFERENCES sessions(id) ON DELETE RESTRICT,
+            problem_id            TEXT REFERENCES problems(id) ON DELETE RESTRICT,
+            attempt_id            INTEGER REFERENCES attempts(id) ON DELETE RESTRICT,
+            task_id               TEXT NOT NULL,
+            task_version          INTEGER NOT NULL CHECK (task_version > 0),
+            rubric_id             TEXT,
+            rubric_version        INTEGER CHECK (rubric_version IS NULL OR rubric_version > 0),
+            task_form             TEXT NOT NULL
+              CHECK (task_form IN ('explanation', 'runtime_trace', 'implementation', 'debugging', 'design')),
+            delivery_context      TEXT NOT NULL
+              CHECK (delivery_context IN ('learn', 'practice', 'review', 'interview', 'mock')),
+            result                TEXT NOT NULL
+              CHECK (result IN ('correct', 'partially_correct', 'incorrect', 'ungradable')),
+            hint_level            INTEGER NOT NULL CHECK (hint_level BETWEEN 0 AND 5),
+            novelty               TEXT NOT NULL CHECK (novelty IN ('same', 'variant', 'transfer')),
+            retrieval_valid       INTEGER NOT NULL CHECK (retrieval_valid IN (0, 1)),
+            delay_anchor_at       TEXT,
+            delay_seconds         INTEGER CHECK (delay_seconds IS NULL OR delay_seconds >= 0),
+            assessment_basis      TEXT NOT NULL
+              CHECK (assessment_basis IN ('deterministic_execution', 'frozen_rubric', 'human', 'mixed')),
+            evaluator_type        TEXT NOT NULL
+              CHECK (evaluator_type IN ('kernel', 'agent', 'llm', 'human')),
+            criteria_json         TEXT NOT NULL,
+            observed_errors_json TEXT NOT NULL DEFAULT '[]',
+            rationale             TEXT NOT NULL,
+            performed_at          TEXT NOT NULL,
+            created_at            TEXT NOT NULL
+          );
+
+          CREATE TABLE evidence_revisions (
+            seq               INTEGER PRIMARY KEY AUTOINCREMENT,
+            evidence_event_id TEXT NOT NULL REFERENCES evidence_events(id) ON DELETE RESTRICT,
+            action            TEXT NOT NULL CHECK (action IN ('invalidate', 'restore')),
+            reason            TEXT NOT NULL,
+            created_at        TEXT NOT NULL
+          );
+
+          CREATE TABLE misconceptions (
+            id                  TEXT PRIMARY KEY,
+            concept_id          TEXT NOT NULL REFERENCES concepts(id) ON DELETE CASCADE,
+            description         TEXT NOT NULL,
+            correction_strategy TEXT,
+            is_blocking         INTEGER NOT NULL CHECK (is_blocking IN (0, 1)),
+            created_at          TEXT NOT NULL
+          );
+
+          CREATE TABLE misconception_observations (
+            seq               INTEGER PRIMARY KEY AUTOINCREMENT,
+            misconception_id  TEXT NOT NULL REFERENCES misconceptions(id) ON DELETE RESTRICT,
+            objective_id      TEXT NOT NULL REFERENCES learning_objectives(id) ON DELETE RESTRICT,
+            evidence_event_id TEXT NOT NULL REFERENCES evidence_events(id) ON DELETE RESTRICT,
+            disposition       TEXT NOT NULL CHECK (disposition IN ('observed', 'cleared')),
+            created_at        TEXT NOT NULL
+          );
+
+          CREATE TABLE weakness_projections (
+            key               TEXT PRIMARY KEY,
+            objective_id      TEXT NOT NULL REFERENCES learning_objectives(id) ON DELETE CASCADE,
+            category          TEXT NOT NULL,
+            lifecycle         TEXT NOT NULL
+              CHECK (lifecycle IN ('new', 'recurring', 'improving', 'resolved', 'retest')),
+            last_event_seq    INTEGER NOT NULL CHECK (last_event_seq >= 0),
+            projector_version TEXT NOT NULL,
+            rebuilt_at        TEXT NOT NULL,
+            UNIQUE(objective_id, category)
+          );
+
+          CREATE INDEX idx_evidence_objective_performed
+            ON evidence_events(objective_id, performed_at, seq);
+          CREATE INDEX idx_evidence_objective_created
+            ON evidence_events(objective_id, created_at);
+          CREATE INDEX idx_evidence_attempt_objective
+            ON evidence_events(attempt_id, objective_id);
+          CREATE INDEX idx_evidence_retrieval_objective
+            ON evidence_events(retrieval_valid, objective_id);
+          CREATE INDEX idx_evidence_revisions_event
+            ON evidence_revisions(evidence_event_id, seq);
+          CREATE INDEX idx_misconception_observations_objective
+            ON misconception_observations(objective_id, seq);
+          CREATE INDEX idx_misconception_observations_evidence
+            ON misconception_observations(evidence_event_id, seq);
+          CREATE INDEX idx_weakness_projections_objective
+            ON weakness_projections(objective_id);
+
+          CREATE TRIGGER evidence_events_no_update
+          BEFORE UPDATE ON evidence_events
+          BEGIN
+            SELECT RAISE(ABORT, 'evidence events are append-only');
+          END;
+
+          CREATE TRIGGER evidence_events_no_delete
+          BEFORE DELETE ON evidence_events
+          BEGIN
+            SELECT RAISE(ABORT, 'evidence events are append-only');
+          END;
+
+          CREATE TRIGGER evidence_events_snapshot_matches_attempt
+          BEFORE INSERT ON evidence_events
+          WHEN NEW.attempt_id IS NOT NULL AND NOT EXISTS (
+            SELECT 1
+            FROM attempts attempt
+            JOIN challenge_versions challenge
+              ON challenge.challenge_id = attempt.challenge_id
+             AND challenge.version = attempt.challenge_version
+             AND challenge.is_frozen = 1
+            JOIN challenge_targets target
+              ON target.challenge_id = challenge.challenge_id
+             AND target.version = challenge.version
+             AND target.objective_id = NEW.objective_id
+            WHERE attempt.id = NEW.attempt_id
+              AND attempt.challenge_id = NEW.task_id
+              AND attempt.challenge_version = NEW.task_version
+              AND challenge.rubric_id = NEW.rubric_id
+              AND challenge.rubric_version = NEW.rubric_version
+              AND challenge.task_form = NEW.task_form
+              AND challenge.delivery_context = NEW.delivery_context
+              AND target.novelty = NEW.novelty
+              AND (NEW.session_id IS attempt.session_id OR NEW.session_id = attempt.session_id)
+              AND (
+                NEW.problem_id = challenge.source_problem_id OR
+                (
+                  NEW.problem_id IS NULL AND
+                  (
+                    challenge.source_problem_id IS NULL OR
+                    NOT EXISTS (
+                      SELECT 1 FROM problems source_problem
+                      WHERE source_problem.id = challenge.source_problem_id
+                    )
+                  )
+                )
+              )
+          )
+          BEGIN
+            SELECT RAISE(ABORT, 'evidence snapshot must match the frozen challenge attempt');
+          END;
+
+          CREATE TRIGGER evidence_events_single_effective_attempt_objective
+          BEFORE INSERT ON evidence_events
+          WHEN NEW.attempt_id IS NOT NULL AND EXISTS (
+            SELECT 1
+            FROM evidence_events existing
+            WHERE existing.attempt_id = NEW.attempt_id
+              AND existing.objective_id = NEW.objective_id
+              AND COALESCE((
+                SELECT revision.action
+                FROM evidence_revisions revision
+                WHERE revision.evidence_event_id = existing.id
+                ORDER BY revision.seq DESC
+                LIMIT 1
+              ), 'restore') <> 'invalidate'
+          )
+          BEGIN
+            SELECT RAISE(ABORT, 'attempt objective already has effective evidence');
+          END;
+
+          CREATE TRIGGER evidence_revisions_no_update
+          BEFORE UPDATE ON evidence_revisions
+          BEGIN
+            SELECT RAISE(ABORT, 'evidence revisions are append-only');
+          END;
+
+          CREATE TRIGGER evidence_revisions_no_delete
+          BEFORE DELETE ON evidence_revisions
+          BEGIN
+            SELECT RAISE(ABORT, 'evidence revisions are append-only');
+          END;
+
+          CREATE TRIGGER evidence_revisions_restore_conflict
+          BEFORE INSERT ON evidence_revisions
+          WHEN NEW.action = 'restore' AND EXISTS (
+            SELECT 1
+            FROM evidence_events target
+            JOIN evidence_events other
+              ON other.attempt_id = target.attempt_id
+             AND other.objective_id = target.objective_id
+             AND other.id <> target.id
+            WHERE target.id = NEW.evidence_event_id
+              AND target.attempt_id IS NOT NULL
+              AND COALESCE((
+                SELECT revision.action
+                FROM evidence_revisions revision
+                WHERE revision.evidence_event_id = other.id
+                ORDER BY revision.seq DESC
+                LIMIT 1
+              ), 'restore') <> 'invalidate'
+          )
+          BEGIN
+            SELECT RAISE(ABORT, 'restoring evidence would create conflicting effective evidence');
+          END;
+
+          CREATE TRIGGER misconception_observations_no_update
+          BEFORE UPDATE ON misconception_observations
+          BEGIN
+            SELECT RAISE(ABORT, 'misconception observations are append-only');
+          END;
+
+          CREATE TRIGGER misconception_observations_no_delete
+          BEFORE DELETE ON misconception_observations
+          BEGIN
+            SELECT RAISE(ABORT, 'misconception observations are append-only');
+          END;
+
+          CREATE TRIGGER misconception_observations_match_evidence_objective
+          BEFORE INSERT ON misconception_observations
+          WHEN NOT EXISTS (
+            SELECT 1
+            FROM evidence_events evidence
+            WHERE evidence.id = NEW.evidence_event_id
+              AND evidence.objective_id = NEW.objective_id
+          )
+          BEGIN
+            SELECT RAISE(ABORT, 'misconception observation objective must match source evidence');
+          END;
+
+          CREATE TRIGGER attempts_verification_requires_submission
+          BEFORE UPDATE OF verification_output_json ON attempts
+          WHEN NEW.verification_output_json IS NOT NULL AND NEW.submitted_at IS NULL
+          BEGIN
+            SELECT RAISE(ABORT, 'verification output requires a submitted attempt');
+          END;
+
+          CREATE TRIGGER attempts_verification_output_immutable
+          BEFORE UPDATE OF verification_output_json ON attempts
+          WHEN OLD.verification_output_json IS NOT NULL
+          BEGIN
+            SELECT RAISE(ABORT, 'attempt verification output is immutable once recorded');
+          END;
+        `);
       })();
     },
   },
