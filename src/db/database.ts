@@ -4,7 +4,10 @@
  * Uses better-sqlite3 in WAL mode with PRAGMA user_version for migration tracking.
  */
 
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import Database from "better-sqlite3";
+import { ReviewSchema, SessionSchema } from "./types.js";
 import type {
   Topic,
   Concept,
@@ -14,9 +17,10 @@ import type {
   SyncedSignal,
   Problem,
   Attempt,
+  DeliveryContext,
 } from "./types.js";
 
-const CURRENT_VERSION = 1;
+const CURRENT_VERSION = 2;
 
 // ─── Schema DDL ──────────────────────────────────────────────────────────────
 
@@ -145,6 +149,57 @@ const migrations: Migration[] = [
       db.exec(INDEXES_SQL);
     },
   },
+  {
+    version: 2,
+    up: (db) => {
+      db.transaction(() => {
+        const unknownSessionModes = db
+          .prepare(
+            `SELECT DISTINCT mode FROM sessions
+             WHERE mode NOT IN ('learn', 'practice', 'review', 'interview', 'mock', 'explore', 'quiz', 'teach-back')
+             ORDER BY mode`,
+          )
+          .all() as Array<{ mode: string }>;
+        const unknownReviewModes = db
+          .prepare(
+            `SELECT DISTINCT mode FROM reviews
+             WHERE mode NOT IN ('learn', 'practice', 'review', 'interview', 'mock', 'explore', 'quiz', 'teach-back')
+             ORDER BY mode`,
+          )
+          .all() as Array<{ mode: string }>;
+
+        if (unknownSessionModes.length > 0 || unknownReviewModes.length > 0) {
+          const details = [
+            ...unknownSessionModes.map((row) => `sessions.mode=${row.mode}`),
+            ...unknownReviewModes.map((row) => `reviews.mode=${row.mode}`),
+          ];
+          throw new Error(
+            `Cannot migrate delivery context with unknown persisted values: ${details.join(", ")}`,
+          );
+        }
+
+        db.exec(`
+          UPDATE sessions
+          SET mode = CASE mode
+            WHEN 'explore' THEN 'learn'
+            WHEN 'quiz' THEN 'review'
+            WHEN 'teach-back' THEN 'practice'
+            ELSE mode
+          END
+          WHERE mode IN ('explore', 'quiz', 'teach-back');
+
+          UPDATE reviews
+          SET mode = CASE mode
+            WHEN 'explore' THEN 'learn'
+            WHEN 'quiz' THEN 'review'
+            WHEN 'teach-back' THEN 'practice'
+            ELSE mode
+          END
+          WHERE mode IN ('explore', 'quiz', 'teach-back');
+        `);
+      })();
+    },
+  },
 ];
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -154,6 +209,10 @@ const migrations: Migration[] = [
  * run any pending migrations, and return the database instance.
  */
 export function createDatabase(dbPath: string): Database.Database {
+  if (dbPath !== ":memory:") {
+    mkdirSync(dirname(dbPath), { recursive: true });
+  }
+
   const db = new Database(dbPath);
 
   // Performance pragmas
@@ -377,7 +436,7 @@ export function updateConcept(
 
 export function createSession(
   db: Database.Database,
-  input: { topicId: string; mode: string },
+  input: { topicId: string; mode: DeliveryContext },
 ): Session {
   const now = new Date().toISOString();
   const info = db
@@ -397,9 +456,8 @@ export function getSession(
   db: Database.Database,
   id: number,
 ): Session | undefined {
-  return db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(id) as
-    | Session
-    | undefined;
+  const row = db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(id);
+  return row === undefined ? undefined : SessionSchema.parse(row);
 }
 
 export function updateSession(
@@ -430,7 +488,7 @@ export function createReview(
     sessionId: number | null;
     conceptId: string;
     grade: number;
-    mode: string;
+    mode: DeliveryContext;
     response?: string;
     feedback?: string;
   },
@@ -450,18 +508,20 @@ export function createReview(
       feedback: input.feedback ?? null,
       created_at: now,
     });
-  return db
+  const row = db
     .prepare(`SELECT * FROM reviews WHERE id = ?`)
-    .get(Number(info.lastInsertRowid)) as Review;
+    .get(Number(info.lastInsertRowid));
+  return ReviewSchema.parse(row);
 }
 
 export function getReviewsBySession(
   db: Database.Database,
   sessionId: number,
 ): Review[] {
-  return db
+  const rows = db
     .prepare(`SELECT * FROM reviews WHERE session_id = ? ORDER BY created_at`)
-    .all(sessionId) as Review[];
+    .all(sessionId);
+  return ReviewSchema.array().parse(rows);
 }
 
 // ─── CRUD: Synced Gaps ────────────────────────────────────────────────────

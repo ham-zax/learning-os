@@ -8,7 +8,6 @@
 
 import { readFileSync } from "node:fs";
 import Database from "better-sqlite3";
-import { sm2, updateStatus, type SM2Result } from "./sm2.js";
 import {
   getConcept,
   getConceptsByTopic,
@@ -17,10 +16,8 @@ import {
   createConcept,
   createTopic,
   getTopic,
-  updateTopic,
-  createReview,
 } from "./db/database.js";
-import type { Concept, Topic, ConceptStatus } from "./db/types.js";
+import type { Concept, Topic } from "./db/types.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -82,55 +79,6 @@ export function getConceptState(
 }
 
 /**
- * Run an SM-2 review on a concept: update easiness factor, interval,
- * repetitions, next-review date, and status, then persist the changes
- * and record a review row.
- *
- * @returns The SM-2 result (ef, interval, repetitions, nextReview) after
- *          the algorithm has been applied.
- */
-export function updateConceptAfterReview(
-  db: Database.Database,
-  conceptId: string,
-  grade: number,
-  mode: string,
-): SM2Result {
-  const concept = getConceptState(db, conceptId);
-  const today = todayISO();
-
-  // Run SM-2 algorithm
-  const result = sm2(grade, concept.ef, concept.interval, concept.repetitions, today);
-
-  // Derive new status
-  const newStatus: ConceptStatus = updateStatus(
-    concept.status,
-    grade,
-    result.repetitions,
-    result.interval,
-  );
-
-  // Persist updated concept fields
-  updateConcept(db, conceptId, {
-    ef: result.ef,
-    interval: result.interval,
-    repetitions: result.repetitions,
-    next_review: result.nextReview,
-    last_grade: grade,
-    status: newStatus,
-  });
-
-  // Record the review (no session association here; callers can link later)
-  createReview(db, {
-    sessionId: null,
-    conceptId,
-    grade,
-    mode,
-  });
-
-  return result;
-}
-
-/**
  * Get all concepts that are due for review: next_review is today or earlier,
  * or next_review has never been set (unseen / brand-new concepts).
  *
@@ -166,8 +114,8 @@ export function getDueConcepts(
 }
 
 /**
- * Build a summary for a topic: concept counts by status, due/overdue counts,
- * and a suggestion for phase advancement.
+ * Build a read-only summary for a topic: concept counts by status and
+ * due/overdue counts.
  */
 export function getTopicSummary(
   db: Database.Database,
@@ -218,20 +166,7 @@ export function getTopicSummary(
     }
   }
 
-  // Phase auto-advance check: if 80% of concepts are at reviewing/mastered
-  // with ef > 2.3, suggest bumping the phase.
   const total = concepts.length;
-  const mature = reviewing + mastered;
-  if (total > 0 && mature / total >= 0.8) {
-    const highEfCount = concepts.filter(
-      (c) =>
-        (c.status === "reviewing" || c.status === "mastered") && c.ef > 2.3,
-    ).length;
-    if (highEfCount / total >= 0.8 && topic.phase < 5) {
-      updateTopic(db, topicId, { phase: topic.phase + 1 });
-      return getTopicSummary(db, topicId); // re-read with updated phase
-    }
-  }
 
   return {
     topic: topic.name,

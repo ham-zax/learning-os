@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DeliveryContext } from '../db/types.js';
 
 // ---------------------------------------------------------------------------
 // ConceptFrontmatter — markdown frontmatter for a single concept file
@@ -100,7 +101,7 @@ export const PlanSessionSchema = z.object({
   conceptIds: z.array(z.string()),
   estimatedMinutes: z.number().int().positive(),
   targetDate: z.string().nullable().default(null),
-  mode: z.enum(['explore', 'quiz', 'teach-back']),
+  mode: DeliveryContext,
 });
 
 export type PlanSession = z.infer<typeof PlanSessionSchema>;

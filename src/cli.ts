@@ -69,6 +69,7 @@ import { generateTeachBackSession } from "./session/modes/teach-back.js";
 import { generateQuizBatch } from "./session/modes/quiz.js";
 
 import type { ConceptMap, ConceptProposal, ConceptFile } from "./knowledge/types.js";
+import type { DeliveryContext } from "./db/types.js";
 import type { SessionState } from "./session/engine.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -316,12 +317,31 @@ async function presentQuiz(
   reveal("Gotchas", sectionText(file, "misconceptions"));
 }
 
-// ─── Session mode ────────────────────────────────────────────────────────────
+// ─── Session delivery context ────────────────────────────────────────────────
+
+function normalizeSessionDeliveryContext(value: string): DeliveryContext {
+  switch (value) {
+    case "learn":
+    case "practice":
+    case "review":
+      return value;
+    case "explore":
+      return "learn";
+    case "quiz":
+      return "review";
+    case "teach-back":
+      return "practice";
+    default:
+      throw new Error(
+        `Unknown session delivery context "${value}". Use learn, practice, or review.`,
+      );
+  }
+}
 
 async function runSession(
   db: ReturnType<typeof createDatabase>,
   topicId: string,
-  mode: "explore" | "quiz" | "teach-back" = "explore",
+  mode: DeliveryContext = "learn",
 ): Promise<void> {
   const sessionState = startSession(db, { topicId, mode });
 
@@ -333,7 +353,7 @@ async function runSession(
   const rl = createPrompt();
 
   console.log(
-    chalk.bold(`\nSession started — ${mode} mode, ${sessionState.concepts.length} concepts\n`),
+    chalk.bold(`\nSession started — ${mode} context, ${sessionState.concepts.length} concepts\n`),
   );
 
   const config = loadConfig();
@@ -347,15 +367,17 @@ async function runSession(
     const file = tryLoadConceptFile(knowledgeDir, topicId, concept.id);
     if (!file) missingFiles++;
 
-    if (mode === "explore") {
+    if (mode === "learn") {
       console.log(
         chalk.dim(`  Prerequisites: ${concept.prerequisites.join(", ") || "none"}`),
       );
       await presentExplore(rl, file);
-    } else if (mode === "teach-back") {
+    } else if (mode === "practice") {
       await presentTeachBack(rl, concept.title, file);
-    } else {
+    } else if (mode === "review") {
       await presentQuiz(rl, file);
+    } else {
+      throw new Error(`Delivery context ${mode} is not supported by ordinary sessions.`);
     }
 
     const grade = await askGrade(rl, concept.title);
@@ -525,7 +547,7 @@ async function runCodingDrill(
 
     const llm = tryCreateLLM();
     if (!llm) {
-      warn("LLM not configured — skipping grading. Set LLM_ENDPOINT + LLM_API_KEY to enable.");
+      warn("LLM provider is not configured in this Phase 0 baseline — skipping grading.");
       console.log(chalk.dim(`Problem ID: ${problem.id}`));
       rl.close();
       return;
@@ -582,7 +604,7 @@ async function runDesignDrill(
     info("\nGrading all phases...");
     const llm = tryCreateLLM();
     if (!llm) {
-      warn("LLM not configured — skipping grading. Set LLM_ENDPOINT + LLM_API_KEY to enable.");
+      warn("LLM provider is not configured in this Phase 0 baseline — skipping grading.");
       console.log(chalk.dim(`Problem ID: ${state.problem.id}`));
       return;
     }
@@ -606,7 +628,11 @@ program
 // tutor <topic> — auto-detect mode
 program
   .argument("<topic>", "Topic to study (auto-detects session vs ingestion)")
-  .option("-m, --mode <mode>", "Session mode: explore, quiz, teach-back", "explore")
+  .option(
+    "-m, --mode <mode>",
+    "Session delivery context: learn, practice, review (legacy: explore, quiz, teach-back)",
+    "learn",
+  )
   .action(async (topic: string, opts: { mode: string }) => {
     const db = createDatabase(DB_PATH);
 
@@ -614,8 +640,8 @@ program
       const topicId = topic.toLowerCase().replace(/\s+/g, "-");
 
       if (topicExists(db, topicId) && topicHasConcepts(db, topicId)) {
-        // Session mode
-        const mode = opts.mode as "explore" | "quiz" | "teach-back";
+        // Normalize legacy spelling only at the CLI boundary.
+        const mode = normalizeSessionDeliveryContext(opts.mode);
         await runSession(db, topicId, mode);
       } else {
         // Ingestion mode
@@ -623,7 +649,7 @@ program
         await runIngestion(db, topicId, "manual");
         // After ingestion, start a session
         if (topicHasConcepts(db, topicId)) {
-          await runSession(db, topicId, "explore");
+          await runSession(db, topicId, "learn");
         }
       }
     } catch (err) {

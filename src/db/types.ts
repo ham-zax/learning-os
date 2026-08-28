@@ -22,23 +22,14 @@ export const ConceptStatus = z.enum([
 ]);
 export type ConceptStatus = z.infer<typeof ConceptStatus>;
 
-export const SessionMode = z.enum([
+export const DeliveryContext = z.enum([
   "learn",
-  "review",
-  "quiz",
-  "interview",
   "practice",
-]);
-export type SessionMode = z.infer<typeof SessionMode>;
-
-export const ReviewMode = z.enum([
-  "learn",
   "review",
-  "quiz",
   "interview",
-  "practice",
+  "mock",
 ]);
-export type ReviewMode = z.infer<typeof ReviewMode>;
+export type DeliveryContext = z.infer<typeof DeliveryContext>;
 
 export const ProblemType = z.enum([
   "coding",
@@ -120,7 +111,7 @@ export type Concept = z.infer<typeof ConceptSchema>;
 export const SessionSchema = z.object({
   id: z.number().int(),
   topic_id: z.string(),
-  mode: SessionMode,
+  mode: DeliveryContext,
   started_at: z.string().nullable().default(null),
   ended_at: z.string().nullable().default(null),
   concepts_reviewed: jsonArrayOfStrings.default([]),
@@ -134,7 +125,7 @@ export const ReviewSchema = z.object({
   session_id: z.number().int().nullable().default(null),
   concept_id: z.string(),
   grade: z.number().int(),
-  mode: ReviewMode,
+  mode: DeliveryContext,
   response: z.string().nullable().default(null),
   feedback: z.string().nullable().default(null),
   created_at: z.string().nullable().default(null),

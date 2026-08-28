@@ -9,7 +9,7 @@
  */
 
 import type Database from "better-sqlite3";
-import type { Concept } from "../db/types.js";
+import type { Concept, DeliveryContext } from "../db/types.js";
 import type { SM2Result, ConceptStatus } from "../sm2.js";
 import {
   createSession,
@@ -32,7 +32,7 @@ import { sm2, updateStatus } from "../sm2.js";
 
 export interface SessionConfig {
   topicId: string;
-  mode: "explore" | "quiz" | "teach-back";
+  mode: DeliveryContext;
   maxConcepts?: number; // default: based on daily_minutes
   maxMinutes?: number; // default: from config
 }
@@ -40,7 +40,7 @@ export interface SessionConfig {
 export interface SessionState {
   sessionId: number;
   topicId: string;
-  mode: string;
+  mode: DeliveryContext;
   concepts: Concept[]; // selected for this session
   currentIndex: number;
   startedAt: string;
@@ -57,7 +57,7 @@ export interface GradedResponse {
 export interface SessionSummary {
   sessionId: number;
   topicId: string;
-  mode: string;
+  mode: DeliveryContext;
   conceptsReviewed: number;
   grades: number[];
   averageGrade: number;
@@ -69,38 +69,39 @@ export interface SessionSummary {
 
 const DEFAULT_DAILY_MINUTES = 30;
 
-/** Rough estimate: ~3 min per concept in explore/teach-back, ~2 min in quiz. */
-function defaultMaxConcepts(dailyMinutes: number, mode: string): number {
-  const minutesPerConcept = mode === "quiz" ? 2 : 3;
+/** Rough estimate: ~3 min per concept in learn/practice, ~2 min in review. */
+function defaultMaxConcepts(dailyMinutes: number, mode: DeliveryContext): number {
+  const minutesPerConcept = mode === "review" ? 2 : 3;
   return Math.max(3, Math.floor(dailyMinutes / minutesPerConcept));
 }
 
 // ─── Concept Selection ──────────────────────────────────────────────────────
 
 /**
- * Select concepts for a session based on the learning mode.
+ * Select concepts for an ordinary session based on delivery context.
  *
- * - **explore**: pick unseen concepts in prerequisite order
- * - **quiz**: pick due concepts + interleave 2-3 older reviewed concepts
- * - **teach-back**: pick reviewing concepts (reviewed at least once)
+ * - **learn**: use the existing explore strategy for unseen concepts
+ * - **review**: use the existing quiz strategy for due/interleaved concepts
+ * - **practice**: use the existing teach-back strategy for reviewed concepts
  */
 export function selectConcepts(
   db: Database.Database,
   topicId: string,
-  mode: string,
+  mode: DeliveryContext,
   maxConcepts: number,
 ): Concept[] {
   const allConcepts = getConceptsByTopic(db, topicId);
 
   switch (mode) {
-    case "explore":
+    case "learn":
       return selectExplore(allConcepts, maxConcepts);
-    case "quiz":
+    case "review":
       return selectQuiz(db, topicId, allConcepts, maxConcepts);
-    case "teach-back":
+    case "practice":
       return selectTeachBack(allConcepts, maxConcepts);
-    default:
-      return selectExplore(allConcepts, maxConcepts);
+    case "interview":
+    case "mock":
+      throw new Error(`Delivery context ${mode} is not supported by ordinary sessions.`);
   }
 }
 
@@ -248,11 +249,11 @@ export function startSession(
     config.maxConcepts ?? defaultMaxConcepts(dailyMinutes, mode);
   const maxMinutes = config.maxMinutes ?? dailyMinutes;
 
+  // Select concepts before persisting so unsupported contexts cannot create sessions.
+  const concepts = selectConcepts(db, topicId, mode, maxConcepts);
+
   // Create session record
   const session = createSession(db, { topicId, mode });
-
-  // Select concepts for this session
-  const concepts = selectConcepts(db, topicId, mode, maxConcepts);
 
   // Update session with selected concept IDs
   updateSession(db, session.id, {
@@ -283,7 +284,7 @@ export function startSession(
  * @param db       Database instance
  * @param conceptId  The concept being reviewed
  * @param grade    Quality of recall (0-5, where >= 3 is successful)
- * @param mode     Session mode (for the review record)
+ * @param mode     Delivery context (for the review record)
  * @param sessionId Optional session ID to link the review to
  * @param response Optional user response text (stored in review record)
  * @returns        GradedResponse with SM-2 result and new status
@@ -292,7 +293,7 @@ export function gradeResponse(
   db: Database.Database,
   conceptId: string,
   grade: number,
-  mode: string,
+  mode: DeliveryContext,
   sessionId?: number,
   response?: string,
 ): GradedResponse {

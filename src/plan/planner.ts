@@ -121,26 +121,26 @@ export function suggestDeadline(
   return deadline.toISOString().slice(0, 10);
 }
 
-// ─── Mode assignment ────────────────────────────────────────────────────────
+// ─── Delivery-context assignment ───────────────────────────────────────────
 
 /**
- * Determine the session mode for a concept based on its current status.
+ * Determine delivery context from the temporary legacy concept status input.
  *
- * - unseen / learning  -> explore  (new material)
- * - reviewing          -> quiz     (active recall)
- * - mastered           -> teach-back (consolidation)
+ * - unseen / learning  -> learn
+ * - reviewing          -> review
+ * - mastered           -> practice
  */
 function modeForStatus(status: string): PlanSession["mode"] {
   switch (status) {
     case "unseen":
     case "learning":
-      return "explore";
+      return "learn";
     case "reviewing":
-      return "quiz";
+      return "review";
     case "mastered":
-      return "teach-back";
+      return "practice";
     default:
-      return "explore";
+      return "learn";
   }
 }
 
@@ -182,7 +182,7 @@ function gapPriority(concept: Concept, gaps: SkillGap[]): number {
  * 4. Estimates per-concept time from difficulty.
  * 5. Packs concepts into sessions respecting the daily minutes budget.
  * 6. If a deadline is provided, back-calculates to fit (may compress sessions).
- * 7. Assigns modes: explore / quiz / teach-back based on concept status.
+ * 7. Assigns canonical delivery context from temporary legacy concept status.
  */
 export function generateLearningPlan(options: {
   db: Database.Database;
@@ -317,14 +317,13 @@ function buildSession(
   totalMinutes: number,
   targetDate: string | null,
 ): PlanSession {
-  // Determine the dominant mode — if any concept is new, the session explores;
-  // if all are reviewing, it's a quiz; if all are mastered, teach-back.
+  // Determine the dominant delivery context from the temporary legacy statuses.
   const modes = concepts.map((c) => modeForStatus(c.concept.status));
-  const mode = modes.includes("explore")
-    ? "explore"
-    : modes.includes("quiz")
-      ? "quiz"
-      : "teach-back";
+  const mode = modes.includes("learn")
+    ? "learn"
+    : modes.includes("review")
+      ? "review"
+      : "practice";
 
   return {
     sessionNumber,
