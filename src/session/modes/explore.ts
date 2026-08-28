@@ -10,8 +10,9 @@
  *   2. Ask learner to predict before revealing details.
  *   3. Use Socratic questions — never state facts directly.
  *   4. Reveal incrementally: summary -> key points -> deep dive.
- *   5. End with: have learner restate concept in their own words.
- *   6. Grade 0-5 -> run SM-2 -> update state.
+ *   5. End with an assessable learner restatement in their own words.
+ *
+ * Assessment is owned by the Learning OS kernel, not this presentation module.
  */
 
 import type { ConceptFile } from "../../knowledge/types.js";
@@ -19,7 +20,7 @@ import type { ConceptFile } from "../../knowledge/types.js";
 // ─── Exported Types ──────────────────────────────────────────────────────────
 
 export interface ExploreStep {
-  type: "question" | "reveal" | "prompt";
+  type: "question" | "reveal";
   content: string;
   section?: string; // which section of the concept file this relates to
 }
@@ -28,7 +29,8 @@ export interface ExploreSequence {
   conceptId: string;
   title: string;
   steps: ExploreStep[];
-  gradingPrompt: string; // final prompt for grading
+  assessmentPrompt: string;
+  surfaceId: "restatement";
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -91,77 +93,17 @@ export function generateExploreSequence(concept: ConceptFile): ExploreSequence {
     section: "deepDive",
   });
 
-  // Step 8: Restate in own words (this is the graded response)
-  steps.push({
-    type: "question",
-    content:
-      `Now, can you restate **${title}** in your own words? Explain it as if teaching someone who has never heard of it.`,
-  });
-
-  // Step 9: Grading prompt
-  const gradingPrompt = getGradingPrompt(concept, "{{userRestatement}}");
-  steps.push({
-    type: "prompt",
-    content: gradingPrompt,
-    section: "grading",
-  });
+  const assessmentPrompt =
+    `Now, can you restate **${title}** in your own words? ` +
+    "Explain it as if teaching someone who has never heard of it.";
 
   return {
     conceptId: id,
     title,
     steps,
-    gradingPrompt,
+    assessmentPrompt,
+    surfaceId: "restatement",
   };
-}
-
-/**
- * Generate a prompt for the LLM to grade the user's restatement (0-5).
- *
- * The prompt is designed to be sent to an LLM along with the user's
- * restatement. It includes the reference material so the grader can
- * evaluate accuracy and completeness.
- *
- * @param concept         The concept file with all reference content
- * @param userRestatement The learner's restatement to be graded
- */
-export function getGradingPrompt(
-  concept: ConceptFile,
-  userRestatement: string,
-): string {
-  const { frontmatter, summary, keyPoints, deepDive } = concept;
-
-  return `You are grading a learner's restatement of the concept "${frontmatter.title}".
-
-## Reference Material
-
-**Summary:**
-${summary}
-
-**Key Points:**
-${formatKeyPoints(keyPoints)}
-
-**Deep Dive:**
-${deepDive}
-
-## Learner's Restatement
-
-${userRestatement}
-
-## Grading Criteria
-
-Grade 0-5 using this scale:
-- **5 — Perfect**: Accurate, complete, uses own words, demonstrates genuine understanding
-- **4 — Good**: Mostly accurate and complete, minor gaps or slightly borrowed phrasing
-- **3 — Adequate**: Core idea is correct but missing important details or has minor inaccuracies
-- **2 — Partial**: Got the general topic right but key aspects are wrong or missing
-- **1 — Minimal**: Mentioned the concept name but restatement is mostly incorrect
-- **0 — No recall**: Completely wrong or no attempt
-
-Respond with ONLY a JSON object:
-{
-  "grade": <0-5>,
-  "feedback": "<one sentence explaining the grade>"
-}`;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

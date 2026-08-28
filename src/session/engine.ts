@@ -1,32 +1,30 @@
 /**
  * Session orchestrator for the tutor engine.
  *
- * Manages the full lifecycle of a tutoring session:
- *   1. Start a session (create DB record, select concepts by mode)
- *   2. Present concepts (delegated to mode-specific logic)
- *   3. Grade user responses (SM-2 integration)
- *   4. End session (summary stats)
+ * Manages the ordinary tutoring-session lifecycle:
+ *   1. Start a session (create DB record, select concepts by delivery context)
+ *   2. Prepare an objective-backed frozen challenge for each assessable response
+ *   3. End the session with attempt/submission summary facts
+ *
+ * Learner work is persisted through the kernel attempt APIs. Assessment and
+ * learner-state projection are separate kernel responsibilities.
  */
 
 import type Database from "better-sqlite3";
-import type { Concept, DeliveryContext } from "../db/types.js";
-import type { SM2Result, ConceptStatus } from "../sm2.js";
+import type { ChallengeSpec, Concept, DeliveryContext } from "../db/types.js";
 import {
   createSession,
   getSession,
   updateSession,
   getConceptsByTopic,
-  getConcept,
-  getReviewsBySession,
   updateTopic,
-  updateConcept,
-  createReview,
 } from "../db/database.js";
 import {
-  getConceptState,
-  getDueConcepts,
-} from "../state.js";
-import { sm2, updateStatus } from "../sm2.js";
+  createLearningObjective,
+  getChallenge,
+  getLearningObjective,
+  registerChallenge,
+} from "../kernel/foundation.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -46,23 +44,26 @@ export interface SessionState {
   startedAt: string;
 }
 
-export interface GradedResponse {
-  conceptId: string;
-  grade: number; // 0-5
-  feedback: string;
-  sm2Result: SM2Result;
-  newStatus: ConceptStatus;
+export interface OrdinaryChallengeSurface {
+  surfaceId: string;
+  prompt: string;
+  referenceMaterial?: string[];
+}
+
+export interface PreparedOrdinaryChallenge {
+  objectiveId: string;
+  challenge: ChallengeSpec;
 }
 
 export interface SessionSummary {
   sessionId: number;
   topicId: string;
   mode: DeliveryContext;
-  conceptsReviewed: number;
-  grades: number[];
-  averageGrade: number;
+  challengesAttempted: number;
+  submittedAttempts: number;
+  assessedAttempts: number;
+  pendingAssessmentAttempts: number;
   duration: number; // seconds
-  nextDueDate: string | null; // earliest next review
 }
 
 // ─── Defaults ────────────────────────────────────────────────────────────────
@@ -102,6 +103,8 @@ export function selectConcepts(
     case "interview":
     case "mock":
       throw new Error(`Delivery context ${mode} is not supported by ordinary sessions.`);
+    default:
+      throw new Error(`Unknown delivery context: ${String(mode)}`);
   }
 }
 
@@ -276,89 +279,151 @@ export function startSession(
 }
 
 /**
- * Grade a user's response to a concept.
+ * Ensure the ordinary explanation objective exists, then register or reuse the
+ * frozen challenge for one stable learner-visible surface.
  *
- * Runs the SM-2 algorithm, updates the concept's state in the DB,
- * creates a review record, and returns the grading result.
- *
- * @param db       Database instance
- * @param conceptId  The concept being reviewed
- * @param grade    Quality of recall (0-5, where >= 3 is successful)
- * @param mode     Delivery context (for the review record)
- * @param sessionId Optional session ID to link the review to
- * @param response Optional user response text (stored in review record)
- * @returns        GradedResponse with SM-2 result and new status
+ * An exact prompt reuses its existing frozen challenge. If the prompt changes
+ * in the same stable surface slot, a new challenge/rubric version is frozen
+ * instead of mutating the prior assessment contract.
  */
-export function gradeResponse(
+export function prepareOrdinaryChallenge(
   db: Database.Database,
-  conceptId: string,
-  grade: number,
+  concept: Concept,
   mode: DeliveryContext,
-  sessionId?: number,
-  response?: string,
-): GradedResponse {
-  // Clamp grade to valid range
-  const clampedGrade = Math.max(0, Math.min(5, Math.round(grade)));
+  surface: OrdinaryChallengeSurface,
+): PreparedOrdinaryChallenge {
+  if (mode === "interview" || mode === "mock") {
+    throw new Error(`Delivery context ${mode} is not supported by ordinary sessions.`);
+  }
 
-  // Get current concept state
-  const concept = getConceptState(db, conceptId);
-  const today = new Date().toISOString().slice(0, 10);
+  const canonicalObjectiveId = `${concept.id}:explain`;
+  const canonicalObjective = getLearningObjective(db, canonicalObjectiveId);
+  let objectiveId: string;
 
-  // Run SM-2 algorithm
-  const sm2Result = sm2(
-    clampedGrade,
-    concept.ef,
-    concept.interval,
-    concept.repetitions,
-    today,
+  if (canonicalObjective) {
+    if (
+      canonicalObjective.concept_id !== concept.id ||
+      canonicalObjective.capability_id !== "explain"
+    ) {
+      throw new Error(`Objective ID collision: ${canonicalObjectiveId}`);
+    }
+    objectiveId = canonicalObjective.id;
+  } else {
+    const existingObjective = db
+      .prepare(
+        `SELECT id FROM learning_objectives
+         WHERE concept_id = ? AND capability_id = 'explain'`,
+      )
+      .get(concept.id) as { id: string } | undefined;
+
+    if (existingObjective) {
+      objectiveId = existingObjective.id;
+    } else {
+      objectiveId = canonicalObjectiveId;
+      createLearningObjective(db, {
+        id: objectiveId,
+        conceptId: concept.id,
+        capabilityId: "explain",
+      });
+    }
+  }
+
+  const ordinaryChallengePrefix = `ordinary:${concept.id}:explain:${mode}:`;
+  const matchingFrozen = db
+    .prepare(
+      `SELECT challenge.challenge_id, challenge.version
+       FROM challenge_versions challenge
+       JOIN challenge_targets target
+         ON target.challenge_id = challenge.challenge_id
+        AND target.version = challenge.version
+       WHERE challenge.is_frozen = 1
+         AND substr(challenge.challenge_id, 1, length(?)) = ?
+         AND challenge.delivery_context = ?
+         AND challenge.task_form = 'explanation'
+         AND challenge.public_prompt = ?
+         AND target.objective_id = ?
+         AND (
+           SELECT COUNT(*)
+           FROM challenge_targets frozen_target
+           WHERE frozen_target.challenge_id = challenge.challenge_id
+             AND frozen_target.version = challenge.version
+         ) = 1
+       ORDER BY challenge.created_at, challenge.challenge_id, challenge.version
+       LIMIT 1`,
+    )
+    .get(
+      ordinaryChallengePrefix,
+      ordinaryChallengePrefix,
+      mode,
+      surface.prompt,
+      objectiveId,
+    ) as
+    | { challenge_id: string; version: number }
+    | undefined;
+
+  if (matchingFrozen) {
+    const challenge = getChallenge(
+      db,
+      matchingFrozen.challenge_id,
+      matchingFrozen.version,
+    );
+    if (!challenge) {
+      throw new Error(
+        `Frozen ordinary challenge could not be reconstructed: ${matchingFrozen.challenge_id}@${matchingFrozen.version}`,
+      );
+    }
+    return { objectiveId, challenge };
+  }
+
+  const challengeId = `ordinary:${concept.id}:explain:${mode}:${surface.surfaceId}`;
+  const latestVersion = db
+    .prepare(`SELECT MAX(version) AS version FROM challenge_versions WHERE challenge_id = ?`)
+    .get(challengeId) as { version: number | null };
+  const version = (latestVersion.version ?? 0) + 1;
+
+  const referenceMaterial = (surface.referenceMaterial ?? []).filter(
+    (item) => item.trim().length > 0,
   );
-
-  // Derive new status
-  const newStatus: ConceptStatus = updateStatus(
-    concept.status,
-    clampedGrade,
-    sm2Result.repetitions,
-    sm2Result.interval,
-  );
-
-  // Generate feedback based on grade
-  const feedback = generateFeedback(clampedGrade, concept.status, newStatus);
-
-  // Update concept in DB
-  updateConcept(db, conceptId, {
-    ef: sm2Result.ef,
-    interval: sm2Result.interval,
-    repetitions: sm2Result.repetitions,
-    next_review: sm2Result.nextReview,
-    last_grade: clampedGrade,
-    status: newStatus,
+  const criterionId = "explain-response";
+  const challenge = registerChallenge(db, {
+    id: challengeId,
+    version,
+    publicPrompt: surface.prompt,
+    taskForm: "explanation",
+    deliveryContext: mode,
+    targets: [
+      {
+        objectiveId,
+        novelty: "same",
+        criterionIds: [criterionId],
+      },
+    ],
+    rubric: {
+      id: `${challengeId}:rubric`,
+      version,
+      criteria: [
+        {
+          id: criterionId,
+          objectiveId,
+          required: true,
+          description:
+            `Answers the frozen explanation prompt for ${concept.title} accurately, ` +
+            "covering the relevant mechanism and boundaries.",
+          acceptableVariants: referenceMaterial,
+        },
+      ],
+    },
+    hintLadder: {},
+    verification: {
+      required: false,
+      basis: "frozen_rubric",
+    },
   });
 
-  // Create review record linked to the session if provided
-  createReview(db, {
-    sessionId: sessionId ?? null,
-    conceptId,
-    grade: clampedGrade,
-    mode,
-    response,
-    feedback,
-  });
-
-  return {
-    conceptId,
-    grade: clampedGrade,
-    feedback,
-    sm2Result,
-    newStatus,
-  };
+  return { objectiveId, challenge };
 }
 
-/**
- * End a tutoring session and return summary statistics.
- *
- * Calculates grades, duration, and the earliest next review date.
- * Updates the session record with ended_at timestamp.
- */
+/** End a tutoring session and return attempt/submission summary facts. */
 export function endSession(
   db: Database.Database,
   sessionId: number,
@@ -368,88 +433,54 @@ export function endSession(
     throw new Error(`Session not found: ${sessionId}`);
   }
 
-  // Get all reviews for this session
-  const reviews = getReviewsBySession(db, sessionId);
-  const grades = reviews.map((r) => r.grade);
-  const conceptsReviewed = new Set(reviews.map((r) => r.concept_id)).size;
+  const attemptCounts = db
+    .prepare(
+      `SELECT COUNT(*) AS challenges_attempted,
+              SUM(CASE WHEN submitted_at IS NOT NULL THEN 1 ELSE 0 END) AS submitted_attempts,
+              SUM(CASE
+                WHEN submitted_at IS NOT NULL AND EXISTS (
+                  SELECT 1
+                  FROM evidence_events evidence
+                  WHERE evidence.attempt_id = attempts.id
+                    AND COALESCE((
+                      SELECT revision.action
+                      FROM evidence_revisions revision
+                      WHERE revision.evidence_event_id = evidence.id
+                      ORDER BY revision.seq DESC
+                      LIMIT 1
+                    ), 'restore') <> 'invalidate'
+                ) THEN 1 ELSE 0
+              END) AS assessed_attempts
+       FROM attempts
+       WHERE session_id = ?`,
+    )
+    .get(sessionId) as {
+    challenges_attempted: number;
+    submitted_attempts: number | null;
+    assessed_attempts: number | null;
+  };
 
-  // Calculate average grade
-  const averageGrade =
-    grades.length > 0
-      ? grades.reduce((sum, g) => sum + g, 0) / grades.length
-      : 0;
-
-  // Calculate duration in seconds
   const startedAt = session.started_at
     ? new Date(session.started_at)
     : new Date();
   const endedAt = new Date();
   const duration = Math.round((endedAt.getTime() - startedAt.getTime()) / 1000);
 
-  // Find earliest next review date from reviewed concepts
-  const conceptIds = session.concepts_reviewed;
-  let nextDueDate: string | null = null;
-
-  for (const cid of conceptIds) {
-    const concept = getConcept(db, cid);
-    if (concept?.next_review) {
-      if (nextDueDate === null || concept.next_review < nextDueDate) {
-        nextDueDate = concept.next_review;
-      }
-    }
-  }
-
-  // Update session record with ended_at
   updateSession(db, sessionId, {
     endedAt: endedAt.toISOString(),
   });
+
+  const submittedAttempts = attemptCounts.submitted_attempts ?? 0;
+  const assessedAttempts = attemptCounts.assessed_attempts ?? 0;
 
   return {
     sessionId,
     topicId: session.topic_id,
     mode: session.mode,
-    conceptsReviewed,
-    grades,
-    averageGrade: Math.round(averageGrade * 100) / 100,
+    challengesAttempted: attemptCounts.challenges_attempted,
+    submittedAttempts,
+    assessedAttempts,
+    pendingAssessmentAttempts: submittedAttempts - assessedAttempts,
     duration,
-    nextDueDate,
   };
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/**
- * Generate human-readable feedback based on the grade and status transition.
- */
-function generateFeedback(
-  grade: number,
-  oldStatus: string,
-  newStatus: string,
-): string {
-  // Status transition messages
-  if (oldStatus !== newStatus) {
-    switch (newStatus) {
-      case "learning":
-        if (oldStatus === "unseen") {
-          return "New concept introduced. Keep practicing to build familiarity.";
-        }
-        return "Back to learning. Review the material and try again.";
-      case "reviewing":
-        return "Good progress! Moving to spaced review intervals.";
-      case "mastered":
-        return "Excellent! This concept is now mastered.";
-    }
-  }
-
-  // Grade-based feedback for same-status
-  if (grade >= 4) {
-    return "Great recall! Keep it up.";
-  }
-  if (grade === 3) {
-    return "Adequate recall. A bit more practice will strengthen it.";
-  }
-  if (grade === 2) {
-    return "Partial recall. Review the material and try again soon.";
-  }
-  return "Needs more practice. Don't worry, repetition builds mastery.";
 }

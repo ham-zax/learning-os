@@ -27,7 +27,11 @@ import {
   initializeTopic,
   getDueConcepts as getDueConceptsFromState,
 } from "./state.js";
-import { startSession, gradeResponse, endSession } from "./session/engine.js";
+import {
+  startSession,
+  prepareOrdinaryChallenge,
+  endSession,
+} from "./session/engine.js";
 import { openJobHunterDb, getSkillGaps } from "./integrations/job-hunter.js";
 import { openAiFeedsDb, getHighScoredPapers } from "./integrations/ai-feeds.js";
 import {
@@ -55,9 +59,9 @@ import {
   getTopic,
   getConceptsByTopic,
   createTopic,
-  getConcept,
   listTopics,
 } from "./db/database.js";
+import { openAttempt, recordExposure, submitAttempt } from "./kernel/foundation.js";
 
 import {
   loadConcept,
@@ -70,7 +74,6 @@ import { generateQuizBatch } from "./session/modes/quiz.js";
 
 import type { ConceptMap, ConceptProposal, ConceptFile } from "./knowledge/types.js";
 import type { DeliveryContext } from "./db/types.js";
-import type { SessionState } from "./session/engine.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -123,19 +126,6 @@ function askYesNo(
   return ask(rl, `${question} [y/N] `).then(
     (answer) => answer.toLowerCase() === "y" || answer.toLowerCase() === "yes",
   );
-}
-
-function askGrade(
-  rl: ReturnType<typeof createInterface>,
-  conceptTitle: string,
-): Promise<number> {
-  return ask(
-    rl,
-    chalk.cyan(`\nRate your recall of "${conceptTitle}" (0-5, where 3+ is passing): `),
-  ).then((answer) => {
-    const grade = parseInt(answer, 10);
-    return Math.max(0, Math.min(5, isNaN(grade) ? 0 : grade));
-  });
 }
 
 // ─── Display helpers ─────────────────────────────────────────────────────────
@@ -233,34 +223,58 @@ function reveal(label: string, content: string): void {
   }
 }
 
+type MaterialRevealRecorder = (sourceRef: string) => void;
+
+function revealWithExposure(
+  label: string,
+  content: string,
+  sourceRef: string,
+  recordMaterialExposure: MaterialRevealRecorder,
+): void {
+  if (!content.trim()) return;
+  recordMaterialExposure(sourceRef);
+  reveal(label, content);
+}
+
 /** Reveal any sections the typed fields don't claim (Common Patterns, References…). */
-function revealExtraSections(file: ConceptFile): void {
+function revealExtraSections(
+  file: ConceptFile,
+  recordMaterialExposure: MaterialRevealRecorder,
+): void {
   for (const heading of extraSectionHeadings(file)) {
-    reveal(heading, file.sections[heading] ?? "");
+    const content = file.sections[heading] ?? "";
+    if (!content.trim()) continue;
+    recordMaterialExposure(`section:${heading}`);
+    reveal(heading, content);
   }
+}
+
+function challengeReferenceMaterial(file: ConceptFile | null): string[] {
+  if (!file) return [];
+  return [file.summary, ...file.keyPoints, file.deepDive].filter(
+    (item) => item.trim().length > 0,
+  );
 }
 
 // ─── Mode presenters ─────────────────────────────────────────────────────────
 
 /**
- * Explore: walk the Socratic sequence, revealing each section's raw markdown
- * rather than the flattened list so nested headings and tables survive.
+ * Explore acquisition material before the frozen restatement response.
+ * Every material reveal is recorded before it is shown.
  */
-async function presentExplore(
+async function presentExploreAcquisition(
   rl: ReturnType<typeof createInterface>,
   file: ConceptFile | null,
+  recordMaterialExposure: MaterialRevealRecorder,
 ): Promise<void> {
   if (!file) {
-    await ask(rl, chalk.dim("\n  Press Enter when ready to self-test..."));
+    await ask(rl, chalk.dim("\n  Press Enter when ready to answer..."));
     return;
   }
 
   const sequence = generateExploreSequence(file);
 
   for (const step of sequence.steps) {
-    // The grading prompt is built for an LLM grader; this session self-grades.
-    if (step.type === "prompt") continue;
-
     if (step.type === "question") {
       await ask(rl, chalk.yellow(`\n  ${step.content.replace(/\*\*/g, "")}\n  > `));
       continue;
@@ -272,49 +286,67 @@ async function presentExplore(
         : step.section === "deepDive"
           ? "Deep Dive"
           : "Summary";
-    reveal(label, sectionText(file, step.section ?? ""));
+    revealWithExposure(
+      label,
+      sectionText(file, step.section ?? ""),
+      `section:${step.section ?? "material"}`,
+      recordMaterialExposure,
+    );
   }
 
-  reveal("Gotchas", sectionText(file, "misconceptions"));
-  revealExtraSections(file);
+  revealWithExposure(
+    "Gotchas",
+    sectionText(file, "misconceptions"),
+    "section:misconceptions",
+    recordMaterialExposure,
+  );
+  revealExtraSections(file, recordMaterialExposure);
 }
 
-/** Teach-back: ask for an explanation first, then reveal the material to check against. */
-async function presentTeachBack(
-  rl: ReturnType<typeof createInterface>,
-  title: string,
+function revealTeachBackReference(
   file: ConceptFile | null,
-): Promise<void> {
-  if (!file) {
-    await ask(rl, chalk.dim(`\n  Explain ${title} out loud, then press Enter...`));
-    return;
-  }
-
-  const session = generateTeachBackSession(file);
-  await ask(rl, chalk.yellow(`\n  ${session.openingPrompt.replace(/\*\*/g, "")}\n  > `));
-
-  reveal("Summary", sectionText(file, "summary"));
-  reveal("Key Points", sectionText(file, "keyPoints"));
-  reveal("Deep Dive", sectionText(file, "deepDive"));
-  reveal("Gotchas", sectionText(file, "misconceptions"));
-}
-
-/** Quiz: pose one question, take the answer, then reveal the material. */
-async function presentQuiz(
-  rl: ReturnType<typeof createInterface>,
-  file: ConceptFile | null,
-): Promise<void> {
+  recordMaterialExposure: MaterialRevealRecorder,
+): void {
   if (!file) return;
+  revealWithExposure("Summary", sectionText(file, "summary"), "section:summary", recordMaterialExposure);
+  revealWithExposure(
+    "Key Points",
+    sectionText(file, "keyPoints"),
+    "section:keyPoints",
+    recordMaterialExposure,
+  );
+  revealWithExposure(
+    "Deep Dive",
+    sectionText(file, "deepDive"),
+    "section:deepDive",
+    recordMaterialExposure,
+  );
+  revealWithExposure(
+    "Gotchas",
+    sectionText(file, "misconceptions"),
+    "section:misconceptions",
+    recordMaterialExposure,
+  );
+}
 
-  const batch = generateQuizBatch([file], 1);
-  const question = batch.questions[0];
-  if (question) {
-    await ask(rl, chalk.yellow(`\n  ${question.question}\n  > `));
-  }
-
-  reveal("Summary", sectionText(file, "summary"));
-  reveal("Key Points", sectionText(file, "keyPoints"));
-  reveal("Gotchas", sectionText(file, "misconceptions"));
+function revealQuizReference(
+  file: ConceptFile | null,
+  recordMaterialExposure: MaterialRevealRecorder,
+): void {
+  if (!file) return;
+  revealWithExposure("Summary", sectionText(file, "summary"), "section:summary", recordMaterialExposure);
+  revealWithExposure(
+    "Key Points",
+    sectionText(file, "keyPoints"),
+    "section:keyPoints",
+    recordMaterialExposure,
+  );
+  revealWithExposure(
+    "Gotchas",
+    sectionText(file, "misconceptions"),
+    "section:misconceptions",
+    recordMaterialExposure,
+  );
 }
 
 // ─── Session delivery context ────────────────────────────────────────────────
@@ -362,38 +394,87 @@ async function runSession(
 
   for (const concept of sessionState.concepts) {
     console.log(chalk.bold.underline(`\nConcept: ${concept.title}`));
-    console.log(chalk.dim(`  Difficulty: ${concept.difficulty}/5 | Status: ${concept.status}`));
+    console.log(
+      chalk.dim(`  Difficulty: ${concept.difficulty}/5 | Legacy status: ${concept.status}`),
+    );
 
     const file = tryLoadConceptFile(knowledgeDir, topicId, concept.id);
     if (!file) missingFiles++;
+
+    let surfaceId: string;
+    let prompt: string;
+
+    if (mode === "learn") {
+      const sequence = file ? generateExploreSequence(file) : null;
+      surfaceId = sequence?.surfaceId ?? "restatement";
+      prompt =
+        sequence?.assessmentPrompt ??
+        `Explain **${concept.title}** in your own words as if teaching someone new to it.`;
+    } else if (mode === "practice") {
+      const teachBack = file ? generateTeachBackSession(file) : null;
+      surfaceId = teachBack?.surfaceId ?? "teach-back";
+      prompt =
+        teachBack?.openingPrompt ??
+        `Explain **${concept.title}** to me like I'm new to this topic. Focus on the mechanism and intuition.`;
+    } else if (mode === "review") {
+      const question = file ? generateQuizBatch([file], 1).questions[0] : undefined;
+      surfaceId = question?.surfaceId ?? "general-explanation";
+      prompt =
+        question?.question ??
+        `Explain the key ideas behind **${concept.title}** in your own words.`;
+    } else {
+      throw new Error(`Delivery context ${mode} is not supported by ordinary sessions.`);
+    }
+
+    const prepared = prepareOrdinaryChallenge(db, concept, mode, {
+      surfaceId,
+      prompt,
+      referenceMaterial: challengeReferenceMaterial(file),
+    });
+    const opened = openAttempt(
+      db,
+      prepared.challenge.id,
+      prepared.challenge.version,
+      sessionState.sessionId,
+    );
+
+    const recordLearnExposure: MaterialRevealRecorder = (sourceRef) => {
+      recordExposure(db, sessionState.sessionId, {
+        attemptId: opened.attempt.id,
+        objectiveIds: [prepared.objectiveId],
+        exposureType: "explanation_shown",
+        sourceRef,
+      });
+    };
+    const recordPostResponseExposure: MaterialRevealRecorder = (sourceRef) => {
+      recordExposure(db, sessionState.sessionId, {
+        attemptId: opened.attempt.id,
+        objectiveIds: [prepared.objectiveId],
+        exposureType: "answer_revealed",
+        sourceRef,
+      });
+    };
 
     if (mode === "learn") {
       console.log(
         chalk.dim(`  Prerequisites: ${concept.prerequisites.join(", ") || "none"}`),
       );
-      await presentExplore(rl, file);
-    } else if (mode === "practice") {
-      await presentTeachBack(rl, concept.title, file);
-    } else if (mode === "review") {
-      await presentQuiz(rl, file);
-    } else {
-      throw new Error(`Delivery context ${mode} is not supported by ordinary sessions.`);
+      await presentExploreAcquisition(rl, file, recordLearnExposure);
     }
 
-    const grade = await askGrade(rl, concept.title);
-
-    const result = gradeResponse(db, concept.id, grade, mode, sessionState.sessionId);
-
-    if (grade >= 3) {
-      success(`  ${result.feedback}`);
-    } else {
-      warn(`  ${result.feedback}`);
-    }
-    console.log(
-      chalk.dim(
-        `  Next review: ${result.sm2Result.nextReview} | Status: ${result.newStatus}`,
-      ),
+    const response = await ask(
+      rl,
+      chalk.yellow(`\n  ${opened.challenge.publicPrompt.replace(/\*\*/g, "")}\n  > `),
     );
+    submitAttempt(db, opened.attempt.id, { responseText: response });
+
+    if (mode === "practice") {
+      revealTeachBackReference(file, recordPostResponseExposure);
+    } else if (mode === "review") {
+      revealQuizReference(file, recordPostResponseExposure);
+    }
+
+    info("  Response submitted. Assessment pending; no trusted evaluator is configured in this CLI.");
   }
 
   const summary = endSession(db, sessionState.sessionId);
@@ -402,15 +483,14 @@ async function runSession(
   if (missingFiles > 0) {
     warn(
       `  ${missingFiles} of ${sessionState.concepts.length} concept(s) had no markdown file — ` +
-        `those were presented as title only.`,
+        `those used a generic explanation prompt.`,
     );
   }
-  console.log(`  Concepts reviewed: ${summary.conceptsReviewed}`);
-  console.log(`  Average grade: ${summary.averageGrade}/5`);
+  console.log(`  Challenges attempted: ${summary.challengesAttempted}`);
+  console.log(`  Submitted attempts: ${summary.submittedAttempts}`);
+  console.log(`  Assessed attempts: ${summary.assessedAttempts}`);
+  console.log(`  Awaiting assessment: ${summary.pendingAssessmentAttempts}`);
   console.log(`  Duration: ${Math.floor(summary.duration / 60)}m ${summary.duration % 60}s`);
-  if (summary.nextDueDate) {
-    console.log(`  Next due: ${summary.nextDueDate}`);
-  }
 
   rl.close();
 }

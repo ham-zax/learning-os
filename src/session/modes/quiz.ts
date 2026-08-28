@@ -15,13 +15,13 @@ export interface QuizQuestion {
   conceptId: string;
   conceptTitle: string;
   question: string;
-  questionIndex: number; // 1-based
+  questionIndex: number; // 1-based within the generated batch
   difficulty: number;
+  surfaceId: string;
 }
 
 export interface QuizBatch {
   questions: QuizQuestion[];
-  summaryPrompt: string; // shown after all questions answered
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ const DEFAULT_COUNT = 5;
  *
  * @param concepts  Concept files to draw questions from.
  * @param count     Maximum number of questions (default 5).
- * @returns         A QuizBatch with ordered questions and a summary prompt.
+ * @returns         A QuizBatch with ordered learner-facing questions.
  */
 export function generateQuizBatch(
   concepts: ConceptFile[],
@@ -51,76 +51,7 @@ export function generateQuizBatch(
     buildQuestion(concept, index + 1),
   );
 
-  return {
-    questions,
-    summaryPrompt: buildSummaryPrompt(questions.length),
-  };
-}
-
-/**
- * Generate a brief performance summary after a quiz batch.
- *
- * @param results  Graded results for the batch ({ conceptId, grade }[]).
- * @returns        Human-readable summary string.
- */
-export function generateQuizSummary(
-  results: { conceptId: string; grade: number }[],
-): string {
-  if (results.length === 0) {
-    return "No questions were answered in this batch.";
-  }
-
-  const total = results.length;
-  const grades = results.map((r) => r.grade);
-  const sum = grades.reduce((a, b) => a + b, 0);
-  const avg = sum / total;
-  const perfect = grades.filter((g) => g === 5).length;
-  const strong = grades.filter((g) => g >= 4).length;
-  const weak = grades.filter((g) => g < 3).length;
-
-  const lines: string[] = [
-    `## Quiz Summary`,
-    ``,
-    `**Questions answered:** ${total}`,
-    `**Average grade:** ${avg.toFixed(1)} / 5`,
-    `**Strong recall (4-5):** ${strong}`,
-    `**Needs work (0-2):** ${weak}`,
-  ];
-
-  if (perfect > 0) {
-    lines.push(`**Perfect scores:** ${perfect}`);
-  }
-
-  // Performance commentary
-  lines.push("");
-  if (avg >= 4.5) {
-    lines.push(
-      "Excellent work! Your recall is strong. The spaced repetition schedule will keep these concepts fresh.",
-    );
-  } else if (avg >= 3.5) {
-    lines.push(
-      "Solid performance. A few concepts need more practice — they will come back sooner in your review queue.",
-    );
-  } else if (avg >= 2.5) {
-    lines.push(
-      "Mixed results. Consider reviewing the weaker concepts before your next quiz session.",
-    );
-  } else {
-    lines.push(
-      "This batch was tough. The concepts with low grades will return quickly for reinforcement — that is by design.",
-    );
-  }
-
-  // List weak concepts for attention
-  if (weak > 0) {
-    const weakIds = results
-      .filter((r) => r.grade < 3)
-      .map((r) => r.conceptId);
-    lines.push("");
-    lines.push(`**Concepts to revisit:** ${weakIds.join(", ")}`);
-  }
-
-  return lines.join("\n");
+  return { questions };
 }
 
 // ─── Internals ───────────────────────────────────────────────────────────────
@@ -132,10 +63,28 @@ export function generateQuizSummary(
 function buildQuestion(concept: ConceptFile, questionIndex: number): QuizQuestion {
   const { id, title, difficulty } = concept.frontmatter;
 
-  const question =
-    concept.practiceQuestions.length > 0
-      ? pickRandom(concept.practiceQuestions)
-      : generateFromKeyPoints(concept);
+  let question: string;
+  let surfaceId: string;
+
+  if (concept.practiceQuestions.length > 0) {
+    const selectedIndex = randomIndex(concept.practiceQuestions.length);
+    question = concept.practiceQuestions[selectedIndex];
+    const canonicalIndex = concept.practiceQuestions.findIndex(
+      (candidate: string) => candidate === question,
+    );
+    surfaceId = `practice-question-${canonicalIndex + 1}`;
+  } else if (concept.keyPoints.length > 0) {
+    const selectedIndex = randomIndex(concept.keyPoints.length);
+    const point = concept.keyPoints[selectedIndex];
+    const canonicalIndex = concept.keyPoints.findIndex(
+      (candidate: string) => candidate === point,
+    );
+    question = promptFromKeyPoint(point);
+    surfaceId = `key-point-${canonicalIndex + 1}`;
+  } else {
+    question = `Explain the key ideas behind "${title}" in your own words.`;
+    surfaceId = "general-explanation";
+  }
 
   return {
     conceptId: id,
@@ -143,56 +92,19 @@ function buildQuestion(concept: ConceptFile, questionIndex: number): QuizQuestio
     question,
     questionIndex,
     difficulty,
+    surfaceId,
   };
 }
 
-/**
- * Pick a random element from an array.
- */
-function pickRandom<T>(items: T[]): T {
-  const index = Math.floor(Math.random() * items.length);
-  return items[index];
+function randomIndex(length: number): number {
+  return Math.floor(Math.random() * length);
 }
 
-/**
- * Generate a practice question from a concept's key points when no
- * explicit practice questions exist. Picks a random key point and
- * wraps it in a recall prompt.
- */
-function generateFromKeyPoints(concept: ConceptFile): string {
-  if (concept.keyPoints.length === 0) {
-    // Absolute fallback — ask about the concept generally
-    return `Explain the key ideas behind "${concept.frontmatter.title}" in your own words.`;
-  }
-
-  const point = pickRandom(concept.keyPoints);
-
-  // Strip leading markdown formatting (bullet markers, bold wrappers)
+function promptFromKeyPoint(point: string): string {
   const cleaned = point
     .replace(/^[-*+]\s*/, "")
     .replace(/^\*\*([^*]+)\*\*:?\s*/, "$1: ")
     .trim();
 
   return `Explain the following concept: ${cleaned}`;
-}
-
-/**
- * Build the prompt shown to the learner after all quiz questions are
- * presented but before grading begins. Sets expectations for the
- * answer-then-grade flow.
- */
-function buildSummaryPrompt(questionCount: number): string {
-  return [
-    `You have answered all ${questionCount} questions in this quiz batch.`,
-    ``,
-    `For each question above, I will now grade your response on a 0-5 scale:`,
-    `- **5** — Perfect recall, articulate explanation`,
-    `- **4** — Correct with minor hesitation`,
-    `- **3** — Correct but needed significant thinking`,
-    `- **2** — Wrong but close`,
-    `- **1** — Wrong, minimal relevant knowledge`,
-    `- **0** — Complete blank or refused`,
-    ``,
-    `Your grades will update the spaced repetition schedule. Concepts you struggled with will return sooner.`,
-  ].join("\n");
 }
