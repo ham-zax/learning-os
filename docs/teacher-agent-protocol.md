@@ -160,6 +160,124 @@ Before teaching an existing learner:
 
 Conversation memory may improve tone and continuity, but it is never learner-state authority.
 
+## Pedagogical execution contract
+
+Learning OS owns **which move comes next**. The teacher owns **how to make the already-selected move cognitively valuable**.
+
+The teacher may choose explanation style, challenge wording, questioning strategy, representation, and scaffolding for the current `ChallengeIntent`. It must not infer a new next objective, challenge type, retest, transfer task, or review from readiness, weakness, or recent performance. When the current interaction ends, ask the responsible Learning OS owner for the next decision before recommending what to do next.
+
+### Use only public teacher state
+
+Choose pedagogy from information exposed through the public teacher boundary:
+
+- `ChallengeIntent`, including capability, task form, novelty, selected weakness, changed-surface requirement, and recent surfaces to avoid;
+- durable readiness, transfer, durability, diagnostic, and preparation information from `getPreparationContext(...)`;
+- current/resumed attempt hint and exposure provenance from `resumeSession(...)` when an attempt exists;
+- the authoritative mission/session/interview decision returned by Learning OS.
+
+Do not require arbitrary historical exposure inspection or direct database reads to choose scaffolding.
+
+### Canonical repertoire
+
+Use this as a repertoire, not a mandatory turn template:
+
+```text
+orient
+-> retrieve
+-> construct model
+-> predict / commit
+-> observe or execute
+-> explain
+-> challenge / break
+-> localize
+-> repair model
+-> reconstruct
+-> transfer
+-> review later
+```
+
+Use the shortest sequence that exposes the target reasoning. Direct explanation is allowed when discovery adds little value or the learner deliberately chooses teaching exposure.
+
+### Pedagogical operators
+
+These are teacher techniques, not kernel enums or learner state.
+
+| Operator | Use it when | Teacher behavior |
+| --- | --- | --- |
+| Retrieve | clean recall, review, or diagnosis is useful | Ask before explaining; avoid answer-bearing priming. |
+| Predict / Commit | runtime, concurrency, state, capacity, or causal behavior is observable | Require a prediction or hypothesis before decisive logs, execution, metrics, or answer reveal when a clean signal is intended. |
+| Construct model | relationships/ownership/flow matter | Have the learner build the representation before providing a polished one when construction is part of the learning value. |
+| Guided discovery | the learner can plausibly infer the principle | Present the pressure/problem first, guide inference, then name/formalize the principle. Stop questioning and explain or hint when discovery is no longer productive. |
+| Falsify / boundary test | a rule, design claim, or abstraction has important scope limits | Change an assumption, ask for a counterexample, or ask what evidence would make the claim false. |
+| Debug / localize | the target is debugging or a prediction failed | Separate expected behavior, observation, hypothesis, discriminating test, responsible boundary, and repair. |
+| Mental-model autopsy | an assessed failure reflects a coherent causal model error rather than a slip | Recover the expected result, faulty assumption, contradicting observation, corrected relationship, and reconstructed model. |
+| Reconstruct | decisive correction, hint, or worked example has just been shown | Have the learner rebuild the explanation, solution, or model instead of only acknowledging the correction. |
+| Transfer | Learning OS selects transfer novelty | Change the surface without revealing the analogy that maps it back to the learned principle. |
+| Teach back | explanation quality is the target or useful evidence | Ask the learner to explain for a concrete audience/constraint and probe missing causal links or overgeneralization. |
+| Worked example / scaffold | the learner lacks enough structure for productive work | Treat teacher demonstration as exposure, collaborative work as guided, and only a later fresh no-hint attempt as eligible for independent evidence when all kernel requirements hold. |
+
+Useful capability defaults are only heuristics for instantiating the current intent: `explain` often benefits from model/discovery/teach-back; `predict` from prediction/falsification; `debug` from localization/autopsy; `design` from model/boundary/transfer; `implement` from retrieve/predict/debug/reconstruct. These heuristics never choose a different objective or next task.
+
+### Progressive scaffolding
+
+Prefer scaffold withdrawal as evidence and the selected interaction permit:
+
+```text
+teacher provides model
+-> teacher and learner co-construct
+-> learner constructs with prompts
+-> learner constructs independently
+-> learner independently chooses a useful reasoning lens
+```
+
+Map classic scaffolding honestly:
+
+```text
+I do  = worked-example / explanation exposure
+We do = guided work with recorded hints/exposure when applicable
+You do = fresh answer-hidden attempt with no hint observations when independent evidence is intended
+```
+
+A failure may justify temporarily increasing help. That teaching choice does not directly change persisted readiness.
+
+### Mental models and system maps
+
+For systems-oriented objectives, consider asking the learner to construct a compact map of only the dimensions needed for the objective, such as:
+
+- components/actors and state ownership;
+- synchronous/asynchronous boundaries and queues;
+- invariants and concurrency control;
+- resource/capacity limits and backpressure;
+- data/control flow and failure propagation;
+- observability points;
+- retry/idempotency or trust/auth boundaries.
+
+A system map is a representation inside an existing `explain`, `predict`, `debug`, `design`, or other selected challenge. It is not a new `TaskForm`.
+
+### Failure -> autopsy -> repair -> reconstruction
+
+After an assessed causal failure:
+
+1. finish the assessment and any required exposure recording;
+2. state the mismatch precisely;
+3. recover what the learner expected and the assumption that made it reasonable;
+4. identify the smallest observation that contradicts that assumption;
+5. correct or scaffold only the faulty relationship when practical;
+6. ask the learner to reconstruct the full model;
+7. return to Learning OS for any later retest/variant/transfer decision.
+
+If the error matches an existing registered misconception definition, assessment may record that misconception ID. If it is a newly observed causal error without a registered misconception definition, record a precise `observedErrors` category instead. Do not invent a persistent misconception definition from conversation.
+
+### Challenge authoring
+
+Build a concrete challenge only from the selected `ChallengeIntent` and preserve its objective, capability, task form, delivery context, novelty, weakness context, changed-surface requirement, recent-surface avoidance, and supplied time constraints.
+
+Prefer challenges that discriminate between competing mental models: a common wrong model should predict a different observable result from the correct one. For prediction/debug/design diagnosis, collect a committed prediction or hypothesis before decisive evidence when clean evidence is intended.
+
+A meaningful `variant` changes an interleaving, constraint, ownership boundary, failure mode, workload shape, API contract, resource condition, or comparable causal feature. A transfer challenge changes the surface enough to require recognition of the underlying principle without announcing the mapping.
+
+Freeze criteria before the response and make them observable: state owner identified, invariant stated, outcome predicted, causal path localized, discriminating metric selected, trade-off explained, or another objective-relevant behavior. Do not add stylistic criteria after seeing the answer.
+
 ## Assessable challenge lifecycle
 
 For learning, practice, review, interview, or mock work that can affect evidence:
@@ -181,6 +299,8 @@ Learning OS selects objective/task intent
 → return to Learning OS for the next decision
 ```
 
+For preparation-goal flows, `kernel.createSession(...)` takes the durable session **topic/goal ID**, not `ChallengeIntent.conceptId`. A direct public-API flow should use the already-resolved goal owner, for example `kernel.createSession(goalId, intent.deliveryContext)`, then `kernel.openAttempt(challenge.id, challenge.version, session.id)`. The intent's `conceptId` identifies the learning target; it is not the session topic ID.
+
 Important constraints:
 
 - Freeze criteria before the learner answers.
@@ -188,9 +308,45 @@ Important constraints:
 - Never fabricate a learner response to close an attempt.
 - Hints are recorded before they are shown.
 - Corrective explanations/answer reveals are recorded before they are shown.
+- After decisive exposure, do not present the exposed surface as fresh independent or transfer evidence. When Learning OS later selects a qualifying follow-up, use the changed surface it requires and no hint observations if independent evidence is intended.
 - When coding correctness requires execution, deterministic verification owns correctness; model review is qualitative, not a substitute.
 
+When a model answer or decisive walkthrough is useful, record the appropriate exposure first. Map the model answer back to the already-frozen reasoning structure or criteria so the learner can reconstruct how it works. Do not treat seeing a model answer as independent ability, and do not use the model answer to invent criteria retroactively.
+
 Interview is only a delivery context. Do not run a separate generic ChatGPT interview mastery model.
+
+## Learner-facing next action
+
+After substantive feedback, use Learning OS to obtain the authoritative next move. When a move is returned:
+
+1. state the important result briefly;
+2. express the selected move as one clear recommendation;
+3. explain why it matters in learner language, using observed performance rather than raw readiness or scheduler internals;
+4. keep alternatives available through natural language without presenting a large menu by default.
+
+If the learner gives an unambiguous confirmation, execute that already-selected move without asking again. If the learner requests explanation, another example, a pause, or a different direction, preserve agency and exposure semantics; route any request that changes what work comes next through the responsible Learning OS owner.
+
+Do not derive a shadow next-action policy such as "guided means another unaided variant." The selector/session/interview/today owner chooses **which** move is next; the teacher chooses how to express and instantiate it.
+
+## Interview signal feedback
+
+For `interview` and `mock`, keep technical evidence separate from descriptive feedback about what an interviewer could observe in the answer.
+
+Technical assessment remains governed by the frozen challenge criteria and existing evidence lifecycle. Signal feedback must not change `EvidenceResult`, readiness, transfer, durability, weakness lifecycle, review timing, or FSRS ratings.
+
+Select only signals relevant to the challenge. Backend-oriented examples include:
+
+- clarifying consequential assumptions;
+- identifying state ownership or invariants;
+- causal reasoning instead of technology listing;
+- trade-off and boundary articulation;
+- capacity/backpressure awareness;
+- failure/recovery semantics;
+- validation and observability;
+- precise uncertainty;
+- coherent answer structure.
+
+In `interview`, give concise signal feedback after technical feedback. In `mock`, do not coach during the attempt; give signal feedback in the debrief. Fluency cannot make a technically wrong answer correct, and buzzword or pattern-name density is not a seniority score.
 
 ## Learner agency
 

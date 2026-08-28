@@ -6,7 +6,7 @@ Use this page to choose the right documentation for what you are trying to do.
 
 - [Getting started](getting-started.md) — install Learning OS, onboard a learner, manage profiles, and run a daily mission.
 - [Customizing Learning OS](customization.md) — add your own curriculum, local defaults, profiles, and conversational teacher integration.
-- [Teacher-agent protocol](teacher-agent-protocol.md) — rules a ChatGPT/CLI/IDE teacher follows so Learning OS, not the model's default tutoring policy, controls learner state and sequencing.
+- [Teacher-agent protocol](teacher-agent-protocol.md) — normative rules a ChatGPT/CLI/IDE teacher follows so Learning OS, not the model's default tutoring policy, controls learner state, sequencing, evidence-safe pedagogy, and next-action ownership.
 
 If you only want to try the product, start with `getting-started.md`. You do not need to understand the evidence kernel first.
 
@@ -20,6 +20,8 @@ Read these before changing how mastery, assessment, scheduling, or challenge sel
 
 ## Understand why the system is shaped this way
 
+- [Teacher pedagogy design](teacher-pedagogy-design.md) — rationale and detailed operator/challenge guidance behind the normative teacher-agent protocol. If wording conflicts, `teacher-agent-protocol.md` governs teacher behavior unless a higher-authority repository contract applies.
+- [Teacher pedagogy implementation plan](teacher-pedagogy-implementation-plan.md) — completed first-wave protocol/Skill rollout and fresh-teacher dogfood, with product extensions kept evidence-gated.
 - [Implementation plan](implementation-plan.md) — staged migration from the original Generic Tutor architecture.
 - [Source comparison](research/source-comparison.md) — ideas evaluated from other learning/interview projects.
 - [ADR 0001: fork Generic Tutor](decisions/0001-fork-generic-tutor.md)

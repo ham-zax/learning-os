@@ -68,6 +68,79 @@ Explanations, hints, answers, worked solutions, and corrective feedback are allo
 
 This is the balance: **do not block useful teaching, but never hide its effect on evidence.**
 
+## Turn selected work into a strong learning interaction
+
+Learning OS owns **which move is next**. You own **how to instantiate the already-selected move**. Never infer a new next objective, retest, review, transfer task, or challenge type from readiness or weakness state; ask the responsible Learning OS owner for the next decision.
+
+Use only public teacher inputs for pedagogy:
+
+- the current `ChallengeIntent`;
+- durable preparation/projection state from `getPreparationContext(...)`;
+- the selected weakness carried by the intent;
+- current/resumed attempt hint and exposure provenance from `resumeSession(...)`;
+- the current mission/session/interview decision.
+
+Do not require arbitrary historical exposure queries or direct database reads.
+
+Use the shortest useful subset of this repertoire:
+
+```text
+orient -> retrieve -> construct model -> predict/commit
+-> observe/execute -> explain -> challenge/break -> localize
+-> repair model -> reconstruct -> transfer -> review later
+```
+
+Useful operator heuristics for the current intent:
+
+- `explain`: construct model, guided discovery, teach back, boundary test;
+- `predict`: commit before reveal, construct model, falsify;
+- `debug`: expected vs observed, hypothesis, discriminating test, localization, mental-model autopsy;
+- `design`: system model, invariants/ownership, boundary tests, trade-offs;
+- `implement`: retrieve, predict/commit, attempt, debug/localize, reconstruct.
+
+These are conversational techniques, not kernel enums. Direct explanation is allowed when discovery has low value or the learner chooses exposure.
+
+### Commit before reveal
+
+When a clean prediction or diagnosis is part of the selected work, get the learner's prediction/hypothesis before showing decisive execution, logs, metrics, or solution details. A mismatch is useful because it exposes the learner's current model.
+
+### Make systems models learner-built
+
+When relationships are central, ask the learner to construct the relevant representation before giving a polished one. Useful dimensions include state ownership, boundaries, queues, invariants, capacity/backpressure, data/control flow, failure propagation, observability, retries/idempotency, and trust/auth boundaries. Request only dimensions that discriminate the selected objective.
+
+### Repair causal failures
+
+After an assessed failure caused by a coherent model error rather than a slip:
+
+```text
+expected result
+-> faulty assumption
+-> contradicting observation
+-> corrected relationship
+-> learner reconstructs the model
+-> Learning OS chooses any later retest/variant/transfer
+```
+
+If an existing registered misconception definition matches, record its ID in assessment. Otherwise use a precise `observedErrors` category; never create a persistent misconception definition from conversation.
+
+### Withdraw scaffolding honestly
+
+```text
+I do  = worked-example/explanation exposure
+We do = guided work with recorded hints/exposure when applicable
+You do = fresh answer-hidden attempt with no hint observations when independent evidence is intended
+```
+
+As the selected interaction and durable evidence permit, retreat from teacher-provided model -> co-construction -> prompted learner construction -> independent construction. Increasing help after failure is a teaching choice, not a direct readiness mutation.
+
+### Explain the authoritative next move
+
+After substantive feedback, call the responsible Learning OS owner for the next decision. If it returns a move, present that one move with a short learner-facing reason. An unambiguous "yes/continue" executes the already-selected move without another menu. If the learner requests a different direction that changes what work comes next, route it through Learning OS rather than synthesizing a shadow next-action policy.
+
+### Keep interview signals separate
+
+For `interview` or `mock`, technical assessment remains authoritative. After technical feedback (`interview`) or in the debrief (`mock`), optionally describe only relevant observable signals such as assumption clarification, state ownership/invariants, causal reasoning, trade-offs, capacity/backpressure, failure/recovery, observability, precise uncertainty, and answer structure. Signal feedback never changes correctness, readiness, transfer, durability, weakness state, review timing, or FSRS.
+
 ## Follow the learner workflow
 
 ### A. New learner / onboarding
@@ -128,6 +201,10 @@ Learning OS chooses objective/task intent
 → explain feedback
 → ask Learning OS for the next decision
 ```
+
+For preparation-goal flows, `kernel.createSession(...)` takes the durable goal/topic ID, not `ChallengeIntent.conceptId`: use `kernel.createSession(goalId, intent.deliveryContext)`, then attach the frozen challenge with `kernel.openAttempt(...)`. The concept ID names the learning target, not the session topic.
+
+After decisive exposure, do not reuse that exposed surface as fresh independent or transfer evidence. A later qualifying follow-up must come from Learning OS and honor its changed-surface requirement; independent evidence also requires no hint observations.
 
 Do not run a separate generic interview policy. For a requested active objective, call `kernel.resolveRequestedChallenge(...)` with the requested delivery context first. Respect returned prerequisite blockers; build/freeze a challenge only from a returned intent. Interview delivery then uses the same learner evidence lifecycle.
 

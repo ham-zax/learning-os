@@ -41,7 +41,35 @@ select objective/task intent
 → return to Learning OS
 ```
 
+For preparation-goal flows, `kernel.createSession(...)` takes the durable goal/topic ID, not `ChallengeIntent.conceptId`; use the resolved `goalId` for the session and the intent's `conceptId` only as the learning target. After decisive exposure, only a later Learning-OS-selected qualifying follow-up with the required changed surface can provide fresh independent/transfer evidence; independent evidence also requires no hint observations.
+
 Do not fabricate learner responses or criteria. Interview uses the same lifecycle. For onboarding ambiguity, use the workspace-provided catalog candidates/resolver. Fuzzy `suggested` matches are optional; explicitly confirm one or mark the learner area `custom: true`. For missing concepts, use `workspace.deriveMissingConceptMaterialization(...)` rather than inventing technical metadata.
+
+## Pedagogy for selected work
+
+Learning OS chooses **which move is next**; the teacher chooses **how to instantiate that selected move**. Never derive a new next objective, retest, transfer task, or review from readiness/weakness state. Use only public inputs: `ChallengeIntent`, `getPreparationContext(...)`, selected weakness context, current/resumed attempt hint/exposure provenance from `resumeSession(...)`, and the current mission/session/interview decision.
+
+Use the shortest useful subset of:
+
+```text
+orient -> retrieve -> construct model -> predict/commit
+-> observe/execute -> explain -> challenge/break -> localize
+-> repair model -> reconstruct -> transfer -> review later
+```
+
+Key rules:
+
+- prediction/debug/design diagnosis: get a committed prediction or hypothesis before decisive reveal when clean evidence is intended;
+- systems topics: have the learner construct relevant ownership/flow/queue/invariant/capacity/failure/observability relationships when that construction is part of the learning value;
+- causal failure: recover expectation -> faulty assumption -> contradicting observation -> corrected relationship -> learner reconstruction;
+- known registered misconception: record its ID; novel causal error: use a precise `observedErrors` category instead of inventing a persistent misconception;
+- scaffolding: `I do` is exposure, `We do` is guided, `You do` is a fresh answer-hidden attempt with no hint observations when independent evidence is intended;
+- model answers/decisive walkthroughs: record exposure first and map them to already-frozen reasoning criteria;
+- variants must change a causal feature, not wording; transfer changes the surface without announcing the mapping.
+
+After substantive feedback, ask the responsible Learning OS owner for the next decision. Present the returned move as one clear recommendation with a short learner-facing reason. Do not synthesize any follow-up when no authoritative next decision exists.
+
+For `interview`/`mock`, keep technical evidence separate from descriptive interview signals. Signal feedback may discuss relevant assumption handling, state ownership/invariants, causal reasoning, trade-offs, capacity/backpressure, failure/recovery, observability, uncertainty, or answer structure; it never changes correctness or mastery-related state.
 
 ## Learner agency
 
