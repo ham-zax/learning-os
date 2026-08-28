@@ -293,7 +293,7 @@ export function startCodingDrill(
     taskForm: "implementation",
     publicPrompt: `${problem.title}\n\n${problem.description}`,
     novelty: config?.novelty,
-    timeBudgetMinutes,
+    timeBudgetMinutes: timeLimitMinutes,
     criteria: [
       {
         id: "implementation-verification",
