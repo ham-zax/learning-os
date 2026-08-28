@@ -144,7 +144,7 @@ npm run typecheck
 npm run build
 ```
 
-Do not commit `data/`, `config.json`, raw learner documents, secrets, or generated personal plans.
+Do not commit live runtime learner databases under `data/`, `config.json`, raw learner documents, secrets, or generated personal plans. Portable, intentionally curated learner examples or personalized lesson snapshots may be committed outside `data/` when they are human-readable, explicitly non-secret, and documented as examples rather than authoritative runtime state. Such snapshots are for learning/reference unless an explicit import/restore path exists.
 
 ## Documentation authority
 

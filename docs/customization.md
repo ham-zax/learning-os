@@ -334,6 +334,8 @@ const workspace = createTeacherWorkspace({
 
 Each managed profile still gets its own database below that data directory. Registry mutations are serialized so concurrent creation of different learner profiles does not lose entries.
 
+For a personal repository that should carry reusable learning setups across machines, keep the live SQLite learner database local and commit a curated, human-readable lesson blueprint instead. The [Backend Systems personalized lesson example](examples/backend-systems-personalized-lesson.md) shows this pattern. Such a blueprint can preserve the goal, objective set, lesson arc, and teacher techniques without pretending to be current readiness/evidence state. It is a reconstruction/reference format unless a real import path is added later.
+
 Do not point multiple independent writers at the same learner profile. The current product assumes one active teacher/orchestrator at a time.
 
 ## 9. Customize challenge delivery without corrupting evidence

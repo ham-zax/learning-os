@@ -7,6 +7,7 @@ Use this page to choose the right documentation for what you are trying to do.
 - [Getting started](getting-started.md) — install Learning OS, onboard a learner, manage profiles, and run a daily mission.
 - [Customizing Learning OS](customization.md) — add your own curriculum, local defaults, profiles, and conversational teacher integration.
 - [Teacher-agent protocol](teacher-agent-protocol.md) — normative rules a ChatGPT/CLI/IDE teacher follows so Learning OS, not the model's default tutoring policy, controls learner state, sequencing, evidence-safe pedagogy, and next-action ownership.
+- [Backend Systems personalized lesson example](examples/backend-systems-personalized-lesson.md) — a source-controlled, non-default seven-day lesson blueprint showing how a personal learning goal can travel with the repository while live learner evidence remains under Learning OS ownership.
 
 If you only want to try the product, start with `getting-started.md`. You do not need to understand the evidence kernel first.
 
