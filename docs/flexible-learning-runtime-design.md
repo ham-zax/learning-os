@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented through the learner-facing contract and episode-aware orchestration waves on `main` (`9ef1040` and `4e520748`). The pure `TurnDirective` helper was skipped after clean fresh-teacher dogfood, and persistence extensions remain evidence-gated.
+Implemented through the learner-facing contract and episode-aware orchestration waves on `main` (`9ef1040` and `4e520748`). Later live use demonstrated that curriculum-phase focus also needs durable orchestration ownership, so active study focus now belongs to `goal_preparation`. The pure `TurnDirective` helper remains skipped; response-segment, reconstruction-checkpoint, and preference persistence remain evidence-gated.
 
 This design is based on two live Backend Systems learner sessions, the current Learning OS implementation, and the learner's prior systems-first mentor material.
 
@@ -362,26 +362,26 @@ The Backend Systems seven-day blueprint says Day 1 focuses on runtime/concurrenc
 
 This is a real planning gap, not a teacher-prompt problem.
 
-Introduce an optional **focus envelope** only if the user/goal has an intended sequence:
+The implemented boundary stores a generic active study focus on `goal_preparation`:
 
 ```text
-FocusEnvelope
-  goalId
-  label
-  preferredObjectiveIds
-  startsAt / endsAt or explicit activation
-  soft = true
+goalId
+activeFocusLabel
+activeFocusObjectiveIds
 ```
 
-A soft focus:
+The focus survives teacher replacement and is recovered through `getPreparationContext(goalId).studyFocus`. `getTodayMission(...)` uses it automatically unless the caller deliberately supplies a per-call `focusObjectiveIds` override.
 
-- prioritizes the current learning arc;
+An active study focus:
+
+- prioritizes the current learning arc and prerequisite/foundation work needed to unlock it;
+- prevents unrelated pending baseline diagnostics from winning merely because every goal objective is active;
 - never bypasses true prerequisites;
-- still allows due retrieval and urgent weaknesses;
-- does not imply mastery when the focus window ends;
-- can be changed by the learner without rewriting evidence.
+- still allows higher-authority Learning OS reasons such as due retrieval, recurring/retest weakness, required transfer, and contradictory evidence;
+- does not imply mastery when the focus ends;
+- can be changed or cleared without rewriting evidence.
 
-Prefer a generic focus mechanism over a hard-coded `day_1` field.
+This remains a generic focus mechanism rather than a hard-coded `day_1` field.
 
 ## P13. Prompt-only pedagogy is not reliably executed
 
@@ -1024,19 +1024,20 @@ Day 2 database correctness / connection pressure
 ...
 ```
 
-Treat this as **soft focus**, not a hard prerequisite chain.
+Treat this as **study focus**, not a hard prerequisite chain or competence state.
 
-The selector still owns the exact objective within the eligible/favored set.
+Persist explicit phase intent on the existing goal-preparation orchestration owner so a fresh teacher can recover it without chat memory. The selector still owns the exact objective: focused targets and the prerequisite/foundation closure needed to unlock them are preferred, while higher-authority rules can escape the focus.
 
-A focus policy should allow escape for:
+A focus policy allows escape for:
 
-- true prerequisite blockers;
+- true prerequisite blockers and their foundation work;
 - due retrieval;
 - recurring weakness/retest;
+- required transfer or contradictory evidence;
 - learner-requested redirection;
-- deadline pressure.
+- deadline/importance pressure.
 
-This provides continuity without making the curriculum brittle.
+This provides continuity without making the curriculum brittle or creating a second scheduler.
 
 # Learner preferences and interaction context
 

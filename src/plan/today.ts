@@ -39,7 +39,7 @@ export interface TodayMissionInput {
   now: string;
   /** Bound returned work for episode-by-episode orchestration. Pass 1 to request only the next move. */
   maxItems?: number;
-  /** Optional non-persistent soft focus over active goal objectives. */
+  /** Optional per-call focus override. When omitted, durable goal study focus is used. */
   focusObjectiveIds?: readonly string[];
   prerequisitePolicy?: PrerequisiteSelectionPolicy;
   recentChallengeLimit?: number;
@@ -116,6 +116,12 @@ const MIN_TASK_START_MINUTES: Record<TaskForm, number> = {
 };
 
 const MAX_INITIAL_DIAGNOSTICS_PER_MISSION = 1;
+
+const IMPORTANCE_RANK: Record<GoalObjective["importance"], number> = {
+  core: 0,
+  important: 1,
+  supporting: 2,
+};
 
 function normalizeInstant(value: string, label: string): string {
   const parsed = new Date(value);
@@ -269,6 +275,96 @@ function candidateFor(
   };
 }
 
+type FocusPrerequisitePlan = {
+  preferredObjectiveIds: Set<string>;
+  extraCandidates: ObjectiveSelectionCandidate[];
+};
+
+function deriveFocusPrerequisites(
+  db: Database.Database,
+  goalObjectives: readonly GoalObjective[],
+  focusTargetObjectiveIds: ReadonlySet<string>,
+  policy: PrerequisiteSelectionPolicy,
+  urgency: number,
+): FocusPrerequisitePlan {
+  const preferredObjectiveIds = new Set(focusTargetObjectiveIds);
+  if (focusTargetObjectiveIds.size === 0) {
+    return { preferredObjectiveIds, extraCandidates: [] };
+  }
+
+  const goalObjectiveIds = new Set(goalObjectives.map((objective) => objective.objective_id));
+  const candidateImportance = new Map<string, GoalObjective["importance"]>();
+  const conceptImportance = new Map<string, GoalObjective["importance"]>();
+  const queue: Array<{ conceptId: string; importance: GoalObjective["importance"] }> = [];
+
+  const objectiveConcept = db.prepare(
+    `SELECT concept_id FROM learning_objectives WHERE id = ?`,
+  );
+  for (const config of goalObjectives) {
+    if (!focusTargetObjectiveIds.has(config.objective_id)) continue;
+    const row = objectiveConcept.get(config.objective_id) as { concept_id: string } | undefined;
+    if (row) queue.push({ conceptId: row.concept_id, importance: config.importance });
+  }
+
+  const conceptRow = db.prepare(`SELECT prerequisites FROM concepts WHERE id = ?`);
+  const prerequisiteObjective = db.prepare(
+    `SELECT objective.id AS objective_id, projection.readiness
+     FROM learning_objectives objective
+     JOIN objective_projections projection ON projection.objective_id = objective.id
+     WHERE objective.concept_id = ? AND objective.capability_id = ?`,
+  );
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const previousImportance = conceptImportance.get(current.conceptId);
+    if (
+      previousImportance !== undefined &&
+      IMPORTANCE_RANK[previousImportance] <= IMPORTANCE_RANK[current.importance]
+    ) {
+      continue;
+    }
+    conceptImportance.set(current.conceptId, current.importance);
+
+    const row = conceptRow.get(current.conceptId) as { prerequisites: string } | undefined;
+    if (!row) continue;
+    const prerequisites = JSON.parse(row.prerequisites) as unknown;
+    if (!Array.isArray(prerequisites) || prerequisites.some((value) => typeof value !== "string")) {
+      throw new Error(`Concept ${current.conceptId} has invalid prerequisites`);
+    }
+
+    for (const prerequisiteId of prerequisites) {
+      const objective = prerequisiteObjective.get(prerequisiteId, policy.capabilityId) as
+        | { objective_id: string; readiness: Readiness }
+        | undefined;
+      if (!objective) continue;
+      if (READINESS_RANK[objective.readiness] >= READINESS_RANK[policy.minimumReadiness]) continue;
+
+      preferredObjectiveIds.add(objective.objective_id);
+      const existingImportance = candidateImportance.get(objective.objective_id);
+      if (
+        existingImportance === undefined ||
+        IMPORTANCE_RANK[current.importance] < IMPORTANCE_RANK[existingImportance]
+      ) {
+        candidateImportance.set(objective.objective_id, current.importance);
+      }
+      queue.push({ conceptId: prerequisiteId, importance: current.importance });
+    }
+  }
+
+  return {
+    preferredObjectiveIds,
+    extraCandidates: [...candidateImportance.entries()]
+      .filter(([objectiveId]) => !goalObjectiveIds.has(objectiveId))
+      .map(([objectiveId, importance]) => ({
+        objectiveId,
+        importance,
+        urgency,
+        transfer: "none" as const,
+        preferred: true,
+      })),
+  };
+}
+
 function selectIntent(
   db: Database.Database,
   states: readonly GoalObjectiveState[],
@@ -277,23 +373,28 @@ function selectIntent(
   deadlineAt: string | null,
   deliveryContext: DeliveryContext,
   eligibleRetestKeys: ReadonlySet<string>,
-  focusObjectiveIds: ReadonlySet<string>,
+  preferredObjectiveIds: ReadonlySet<string>,
   options: { suppressTransfer?: boolean; suppressRetest?: boolean } = {},
+  additionalCandidates: readonly ObjectiveSelectionCandidate[] = [],
 ) {
+  const stateObjectiveIds = new Set(states.map((state) => state.config.objective_id));
   return selectNextChallenge(db, {
     now,
     deliveryContext,
     prerequisitePolicy: input.prerequisitePolicy ?? DEFAULT_PREREQUISITE_POLICY,
     recentChallengeLimit: input.recentChallengeLimit ?? 5,
-    candidates: states.map((state) => ({
-      ...candidateFor(
-        state,
-        deadlineUrgency(deadlineAt, now),
-        eligibleRetestKeys,
-        options,
-      ),
-      preferred: focusObjectiveIds.has(state.config.objective_id),
-    })),
+    candidates: [
+      ...states.map((state) => ({
+        ...candidateFor(
+          state,
+          deadlineUrgency(deadlineAt, now),
+          eligibleRetestKeys,
+          options,
+        ),
+        preferred: preferredObjectiveIds.has(state.config.objective_id),
+      })),
+      ...additionalCandidates.filter((candidate) => !stateObjectiveIds.has(candidate.objectiveId)),
+    ],
   });
 }
 
@@ -322,7 +423,19 @@ function missionReason(
   }
   const reason =
     gaps.length === 0 ? intent.reason : `${intent.reason} Goal gap: ${gaps.join(", ")}.`;
-  return softFocused ? `${reason} Current soft focus prefers this objective.` : reason;
+  return softFocused ? `${reason} Current study focus prefers this objective.` : reason;
+}
+
+function missionReasonForIntent(
+  intent: ChallengeIntent,
+  stateByObjective: ReadonlyMap<string, GoalObjectiveState>,
+  preferredObjectiveIds: ReadonlySet<string>,
+): string {
+  const state = stateByObjective.get(intent.objectiveId);
+  if (state) {
+    return missionReason(intent, state, preferredObjectiveIds.has(intent.objectiveId));
+  }
+  return `Prerequisite/foundation work needed for the current study focus. ${intent.reason}`;
 }
 
 function addBlocked(
@@ -353,14 +466,16 @@ function selectFittingIntent(
   deadlineAt: string | null,
   deliveryContext: DeliveryContext,
   eligibleRetestKeys: ReadonlySet<string>,
-  focusObjectiveIds: ReadonlySet<string>,
+  preferredObjectiveIds: ReadonlySet<string>,
   availableMinutes: number,
   options: { suppressTransfer?: boolean; suppressRetest?: boolean } = {},
+  additionalCandidates: readonly ObjectiveSelectionCandidate[] = [],
 ): ChallengeSelectionResult {
   const remainingStates = [...states];
+  const remainingAdditionalCandidates = [...additionalCandidates];
   const blocked = new Map<string, BlockedSelectionCandidate>();
 
-  while (remainingStates.length > 0) {
+  while (remainingStates.length > 0 || remainingAdditionalCandidates.length > 0) {
     const result = selectIntent(
       db,
       remainingStates,
@@ -369,8 +484,9 @@ function selectFittingIntent(
       deadlineAt,
       deliveryContext,
       eligibleRetestKeys,
-      focusObjectiveIds,
+      preferredObjectiveIds,
       options,
+      remainingAdditionalCandidates,
     );
     addBlocked(blocked, result.blocked);
     if (!result.intent) break;
@@ -386,8 +502,15 @@ function selectFittingIntent(
     const selectedIndex = remainingStates.findIndex(
       (state) => state.config.objective_id === result.intent!.objectiveId,
     );
-    if (selectedIndex < 0) break;
-    remainingStates.splice(selectedIndex, 1);
+    if (selectedIndex >= 0) {
+      remainingStates.splice(selectedIndex, 1);
+      continue;
+    }
+    const additionalIndex = remainingAdditionalCandidates.findIndex(
+      (candidate) => candidate.objectiveId === result.intent!.objectiveId,
+    );
+    if (additionalIndex < 0) break;
+    remainingAdditionalCandidates.splice(additionalIndex, 1);
   }
 
   return {
@@ -490,19 +613,35 @@ export function getTodayMission(
   const eligibleRetestKeys = new Set(input.retestEligibleWeaknessKeys ?? []);
   const goalObjectives = getGoalObjectives(db, input.goalId);
   const activeObjectiveIds = new Set(goalObjectives.map((config) => config.objective_id));
-  const focusObjectiveIds = new Set(input.focusObjectiveIds ?? []);
-  for (const objectiveId of focusObjectiveIds) {
+  const preparation = getGoalPreparation(db, input.goalId);
+  const focusTargetObjectiveIds = new Set(
+    input.focusObjectiveIds ?? preparation?.active_focus_objective_ids ?? [],
+  );
+  for (const objectiveId of focusTargetObjectiveIds) {
     if (!activeObjectiveIds.has(objectiveId)) {
-      throw new Error(`Soft focus objective is not active for goal ${input.goalId}: ${objectiveId}`);
+      throw new Error(`Study focus objective is not active for goal ${input.goalId}: ${objectiveId}`);
     }
   }
+  const prerequisitePolicy = input.prerequisitePolicy ?? DEFAULT_PREREQUISITE_POLICY;
+  const focusPlan = deriveFocusPrerequisites(
+    db,
+    goalObjectives,
+    focusTargetObjectiveIds,
+    prerequisitePolicy,
+    deadlineUrgency(deadlineAt, now),
+  );
+  const preferredObjectiveIds = focusPlan.preferredObjectiveIds;
   const states = goalObjectives
     .map((config) => loadGoalObjectiveState(db, config))
     .filter((state) => isRelevant(state, now, eligibleRetestKeys));
   const stateByObjective = new Map(
     states.map((state) => [state.config.objective_id, state] as const),
   );
-  const pendingDiagnosticStates = states.filter((state) => state.diagnosticPending);
+  const pendingDiagnosticStates = states.filter(
+    (state) =>
+      state.diagnosticPending &&
+      (focusTargetObjectiveIds.size === 0 || focusTargetObjectiveIds.has(state.config.objective_id)),
+  );
 
   const items: DailyMissionItem[] = [];
   const blocked = new Map<string, BlockedSelectionCandidate>();
@@ -531,7 +670,7 @@ export function getTodayMission(
       deadlineAt,
       "review",
       eligibleRetestKeys,
-      focusObjectiveIds,
+      preferredObjectiveIds,
       availableForRetrieval,
       { suppressTransfer: true, suppressRetest: true },
     );
@@ -545,7 +684,7 @@ export function getTodayMission(
       reason: missionReason(
         result.intent,
         stateByObjective.get(result.intent.objectiveId)!,
-        focusObjectiveIds.has(result.intent.objectiveId),
+        preferredObjectiveIds.has(result.intent.objectiveId),
       ),
       intent: result.intent,
     });
@@ -573,7 +712,7 @@ export function getTodayMission(
       deadlineAt,
       input.mainDeliveryContext ?? "practice",
       eligibleRetestKeys,
-      focusObjectiveIds,
+      preferredObjectiveIds,
       remaining,
     );
     addBlocked(blocked, result.blocked);
@@ -586,7 +725,7 @@ export function getTodayMission(
       reason: missionReason(
         result.intent,
         stateByObjective.get(result.intent.objectiveId)!,
-        focusObjectiveIds.has(result.intent.objectiveId),
+        preferredObjectiveIds.has(result.intent.objectiveId),
       ),
       intent: result.intent,
     });
@@ -624,14 +763,19 @@ export function getTodayMission(
           deadlineAt,
           input.transferDeliveryContext ?? "practice",
           eligibleRetestKeys,
-          focusObjectiveIds,
+          preferredObjectiveIds,
           remaining,
         )
       : null;
   if (transferPreview) addBlocked(blocked, transferPreview.blocked);
 
   const forwardStates = states.filter((state) => needsForwardProgress(state, eligibleRetestKeys));
-  const preferredForwardStates = pendingDiagnosticStates.length > 0 ? pendingDiagnosticStates : forwardStates;
+  const preferredForwardStates =
+    focusTargetObjectiveIds.size > 0
+      ? forwardStates
+      : pendingDiagnosticStates.length > 0
+        ? pendingDiagnosticStates
+        : forwardStates;
   if (
     !plannedInitialDiagnostics &&
     forwardStates.length > 0 &&
@@ -647,8 +791,10 @@ export function getTodayMission(
       deadlineAt,
       input.mainDeliveryContext ?? "practice",
       eligibleRetestKeys,
-      focusObjectiveIds,
+      preferredObjectiveIds,
       remaining,
+      {},
+      focusPlan.extraCandidates,
     );
     addBlocked(blocked, result.blocked);
     if (!result.intent && preferredForwardStates !== forwardStates) {
@@ -660,14 +806,16 @@ export function getTodayMission(
         deadlineAt,
         input.mainDeliveryContext ?? "practice",
         eligibleRetestKeys,
-        focusObjectiveIds,
+        preferredObjectiveIds,
         remaining,
+        {},
+        focusPlan.extraCandidates,
       );
       addBlocked(blocked, result.blocked);
     }
     if (
       input.mainDeliveryContext === undefined &&
-      pendingDiagnosticStates.length === 0 &&
+      (focusTargetObjectiveIds.size > 0 || pendingDiagnosticStates.length === 0) &&
       result.intent?.reasonKind === "new_objective"
     ) {
       result = selectFittingIntent(
@@ -678,8 +826,10 @@ export function getTodayMission(
         deadlineAt,
         "learn",
         eligibleRetestKeys,
-        focusObjectiveIds,
+        preferredObjectiveIds,
         remaining,
+        {},
+        focusPlan.extraCandidates,
       );
       addBlocked(blocked, result.blocked);
     }
@@ -699,10 +849,10 @@ export function getTodayMission(
           kind: result.intent.novelty === "transfer" ? "transfer" : "main",
           objectiveId: result.intent.objectiveId,
           minutes,
-          reason: missionReason(
+          reason: missionReasonForIntent(
             result.intent,
-            stateByObjective.get(result.intent.objectiveId)!,
-            focusObjectiveIds.has(result.intent.objectiveId),
+            stateByObjective,
+            preferredObjectiveIds,
           ),
           intent: result.intent,
         });
@@ -727,7 +877,7 @@ export function getTodayMission(
         reason: missionReason(
           transferPreview.intent,
           stateByObjective.get(transferPreview.intent.objectiveId)!,
-          focusObjectiveIds.has(transferPreview.intent.objectiveId),
+          preferredObjectiveIds.has(transferPreview.intent.objectiveId),
         ),
         intent: transferPreview.intent,
       });
@@ -737,7 +887,12 @@ export function getTodayMission(
 
   // Small sessions still receive one useful item when a full main block is not possible.
   if (!plannedInitialDiagnostics && items.length === 0 && states.length > 0 && remaining > 0) {
-    const preferredSmallSessionStates = pendingDiagnosticStates.length > 0 ? pendingDiagnosticStates : states;
+    const preferredSmallSessionStates =
+      focusTargetObjectiveIds.size > 0
+        ? states
+        : pendingDiagnosticStates.length > 0
+          ? pendingDiagnosticStates
+          : states;
     let result = selectFittingIntent(
       db,
       preferredSmallSessionStates,
@@ -746,8 +901,10 @@ export function getTodayMission(
       deadlineAt,
       input.mainDeliveryContext ?? "practice",
       eligibleRetestKeys,
-      focusObjectiveIds,
+      preferredObjectiveIds,
       remaining,
+      {},
+      focusPlan.extraCandidates,
     );
     addBlocked(blocked, result.blocked);
     if (!result.intent && preferredSmallSessionStates !== states) {
@@ -759,14 +916,16 @@ export function getTodayMission(
         deadlineAt,
         input.mainDeliveryContext ?? "practice",
         eligibleRetestKeys,
-        focusObjectiveIds,
+        preferredObjectiveIds,
         remaining,
+        {},
+        focusPlan.extraCandidates,
       );
       addBlocked(blocked, result.blocked);
     }
     if (
       input.mainDeliveryContext === undefined &&
-      pendingDiagnosticStates.length === 0 &&
+      (focusTargetObjectiveIds.size > 0 || pendingDiagnosticStates.length === 0) &&
       result.intent?.reasonKind === "new_objective"
     ) {
       result = selectFittingIntent(
@@ -777,8 +936,10 @@ export function getTodayMission(
         deadlineAt,
         "learn",
         eligibleRetestKeys,
-        focusObjectiveIds,
+        preferredObjectiveIds,
         remaining,
+        {},
+        focusPlan.extraCandidates,
       );
       addBlocked(blocked, result.blocked);
     }
@@ -788,10 +949,10 @@ export function getTodayMission(
         kind: result.intent.novelty === "transfer" ? "transfer" : "main",
         objectiveId: result.intent.objectiveId,
         minutes,
-        reason: missionReason(
+        reason: missionReasonForIntent(
           result.intent,
-          stateByObjective.get(result.intent.objectiveId)!,
-          focusObjectiveIds.has(result.intent.objectiveId),
+          stateByObjective,
+          preferredObjectiveIds,
         ),
         intent: result.intent,
       });

@@ -150,6 +150,10 @@ export interface DurablePreparationContext {
     daysPerWeek: number | null;
     minutesPerWeek: number | null;
   };
+  studyFocus: {
+    label: string | null;
+    objectiveIds: string[];
+  } | null;
   confirmedAt: string;
   objectives: DurablePreparationObjective[];
   prerequisiteDiagnosticGaps: PrerequisiteDiagnosticGap[];
@@ -680,6 +684,13 @@ export function getDurablePreparationContext(
       daysPerWeek: preparation.days_per_week,
       minutesPerWeek: effectiveMinutesPerWeek,
     },
+    studyFocus:
+      preparation.active_focus_objective_ids.length === 0
+        ? null
+        : {
+            label: preparation.active_focus_label,
+            objectiveIds: [...preparation.active_focus_objective_ids],
+          },
     confirmedAt: preparation.confirmed_at,
     objectives,
     prerequisiteDiagnosticGaps: derivePrerequisiteDiagnosticGaps(

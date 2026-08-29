@@ -106,9 +106,13 @@ Confirmed goal-level preparation context that must survive replacement of the co
 | `minutes_per_day` | integer/null | Normal per-day orchestration budget; does not affect FSRS. |
 | `days_per_week` | integer/null | Optional availability context, 1–7. |
 | `minutes_per_week` | integer/null | Optional weekly orchestration budget. |
+| `active_focus_label` | text/null | Optional learner-facing label for the current curriculum/study phase. |
+| `active_focus_objective_ids` | JSON/text | Active goal-objective IDs that define the current study focus; empty means no durable focus. |
 | `confirmed_at` | timestamp | Explicit learner-confirmation time. |
 | `created_at` | timestamp | Persistence creation time. |
 | `updated_at` | timestamp | Planning-metadata update time. |
+
+`active_focus_label` and `active_focus_objective_ids` are learner-intent/orchestration metadata. `setGoalStudyFocus(...)` persists an explicit curriculum/session focus so a replacement teacher can recover it; `clearGoalStudyFocus(...)` removes it when the learner completes, leaves, or changes that phase. Focus never grants readiness, changes evidence, activates/deactivates goal objectives, or alters FSRS state.
 
 Do not persist raw resumes, job descriptions, chat transcripts, provider identifiers, or the full draft proposal here. Resume/JD/self-report claims may shape this confirmed plan but cannot create evidence, review events/cards, misconceptions, or non-unknown objective projections.
 
@@ -784,7 +788,9 @@ getTodayMission({
 
 `availableMinutes` is the outer daily budget on the first call and the current remaining session budget on later episode-boundary replans. A compatible episode-by-episode teacher should pass `maxItems: 1`, execute and close that selected episode, persist resulting evidence, then call again with the new remaining budget so selection sees current projections rather than a stale full-session script.
 
-`focusObjectiveIds` is an optional non-persistent soft preference over active goal objectives. It is only a tie-breaker after higher-authority selection policy such as prerequisite blocking, recurring/retest weakness, due retrieval, importance/urgency, recent contradictory evidence, and blocking misconceptions. It never changes evidence, readiness, transfer, durability, review cards, prerequisites, or goal-objective activation.
+When `focusObjectiveIds` is omitted, `getTodayMission(...)` resolves the durable goal study focus from `goal_preparation`. Supplying `focusObjectiveIds` is a per-call override and does not rewrite the durable focus.
+
+An active study focus prefers its objective set and the prerequisite/foundation closure needed to unlock that set. It prevents unrelated pending baseline diagnostics from winning merely because every goal objective is globally active. Higher-authority selection policy still escapes the focus: due retrieval, recurring/retest weakness, required transfer, prerequisite blocking, importance/urgency, recent contradictory evidence, and blocking misconceptions retain their existing authority. Focus never changes evidence, readiness, transfer, durability, review cards, prerequisites, or goal-objective activation.
 
 Long `design` and `implementation` episodes require at least 10 remaining minutes before the planner will start them; if they do not fit, the planner may select a shorter eligible objective or leave the remaining budget intentionally unallocated. These are session-budget guards, not FSRS semantics.
 
@@ -874,7 +880,7 @@ reviseEvidence(
 
 `correctedObjectiveResult` is allowed only with invalidation and causes the atomic corrected-replacement path. Restore reactivates the original event and its existing derived events only when that would not conflict with another effective replacement.
 
-### 9. Resume after interruption
+### 9. Resume or abandon an unsubmitted interaction
 
 ```text
 resumeSession(sessionId)
@@ -882,7 +888,12 @@ resumeSession(sessionId)
 → pending_action
 → active challenge/attempt
 → unresolved verification or assessment step
+
+abandonUnsubmittedSession(sessionId)
+→ completed session
 ```
+
+`abandonUnsubmittedSession(...)` is only for an active attempt with no learner submission and no submitted verification/assessment work. It ends the session and clears restart pointers without inventing a response, assessment, or evidence event. The unsubmitted attempt remains as historical memory-contact provenance.
 
 Recommended V1 session phases:
 

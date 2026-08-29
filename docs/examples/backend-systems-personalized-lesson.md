@@ -69,6 +69,19 @@ These are not a manually enforced study order. The teacher must let Learning OS 
 
 The day labels below are a **human learning map**, not a replacement selector. They describe the intended conceptual arc. Within each day, Learning OS remains authoritative for the concrete next objective and challenge.
 
+When the learner explicitly enters one of these phases, persist that phase as the goal's study focus instead of relying on chat memory. The focus only identifies the intended objective set; Learning OS still owns prerequisites, due work, weaknesses, transfer, evidence, and the concrete next objective. Clear or replace the focus when the learner completes, leaves, or changes the phase.
+
+For this personalized profile, entering **Day 1** means:
+
+```text
+label: Day 1 — Runtime, concurrency, saturation, backpressure
+objective_ids:
+- runtime-request-execution-and-concurrency:predict
+- resource-saturation-and-backpressure:predict
+```
+
+This focus does not mark either objective learned. Necessary prerequisite work such as `runtime-request-execution-and-concurrency:explain` remains eligible when it is required to unlock the focused objectives.
+
 ## Day 1 — Runtime, concurrency, saturation, backpressure
 
 ### Mental model

@@ -65,6 +65,7 @@ Explanations, hints, answers, worked solutions, and corrective feedback are allo
 - If the learner chooses the explanation, respect that choice. Record the material exposure before revealing it when an objective/session can be identified. Do not later present the contaminated interaction as clean retrieval evidence.
 - If the learner asks for a hint, record the hint observation before showing the hint.
 - Never fabricate a learner response or assessment merely to close an interaction.
+- If orchestration opened the wrong challenge and the learner has not submitted anything, use `abandonUnsubmittedSession(sessionId)`. Never use it after submission; submitted work must finish the normal evidence lifecycle.
 
 This is the balance: **do not block useful teaching, but never hide its effect on evidence.**
 
@@ -150,7 +151,9 @@ As the selected interaction and durable evidence permit, retreat from teacher-pr
 
 ### Explain the authoritative next move
 
-Only after the current interaction episode closes, call the responsible Learning OS owner for the next decision. If it returns a move, present that one move with a short learner-facing reason and stop. Do not freeze/open/present the next attempt in the same turn. An unambiguous "yes/continue" (or an already-active instruction such as "keep going") executes the already-selected move without another menu. If the learner requests a different direction that changes what work comes next, route it through Learning OS rather than synthesizing a shadow next-action policy.
+Only after the current interaction episode closes, call the responsible Learning OS owner for the next decision. For ordinary study, call `getTodayMission(...)` with remaining minutes and `maxItems: 1`; it automatically resolves durable goal study focus, so use `focusObjectiveIds` only for an intentional per-call override. If it returns a move, present that one move with a short learner-facing reason and stop. Do not freeze/open/present the next attempt in the same turn. An unambiguous "yes/continue" (or an already-active instruction such as "keep going") executes the already-selected move without another menu. If the learner requests a different direction that changes what work comes next, route it through Learning OS rather than synthesizing a shadow next-action policy.
+
+When the learner explicitly enters a curriculum/study phase such as "Day 1", persist that intent with `setGoalStudyFocus({ goalId, label, objectiveIds })` using the active goal-objective IDs from the confirmed curriculum/reference. Recover it later from `getPreparationContext(goalId).studyFocus`. Clear it with `clearGoalStudyFocus(goalId)` when the learner explicitly completes, leaves, or changes phase. Study focus is orchestration intent, not evidence or competence state.
 
 ### Keep interview signals separate
 
@@ -189,7 +192,7 @@ Rules:
 Before teaching:
 
 1. Resolve the intended profile. Do not silently use another learner.
-2. Open the profile and recover durable preparation context.
+2. Open the profile and recover durable preparation context, including any `studyFocus`.
 3. Check resumable session state when relevant.
 4. Use actual projections/evidence and current goal state, not old chat memory, to decide what is true.
 5. If the learner asks what to do next, use the current Learning OS mission/session/interview owner.

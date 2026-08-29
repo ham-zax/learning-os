@@ -33,7 +33,7 @@ import type {
   InitialDiagnosticKind,
 } from "./types.js";
 
-const CURRENT_VERSION = 8;
+const CURRENT_VERSION = 9;
 
 // ─── Schema DDL ──────────────────────────────────────────────────────────────
 
@@ -1068,6 +1068,17 @@ const migrations: Migration[] = [
       })();
     },
   },
+  {
+    version: 9,
+    up: (db) => {
+      db.transaction(() => {
+        db.exec(`
+          ALTER TABLE goal_preparation ADD COLUMN active_focus_label TEXT;
+          ALTER TABLE goal_preparation ADD COLUMN active_focus_objective_ids TEXT NOT NULL DEFAULT '[]';
+        `);
+      })();
+    },
+  },
 ];
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -1353,6 +1364,56 @@ export function getGoalPreparation(
 ): GoalPreparation | undefined {
   const row = db.prepare(`SELECT * FROM goal_preparation WHERE goal_id = ?`).get(goalId);
   return row === undefined ? undefined : GoalPreparationSchema.parse(row);
+}
+
+export interface SetGoalStudyFocusInput {
+  goalId: string;
+  label?: string | null;
+  objectiveIds: readonly string[];
+}
+
+export function setGoalStudyFocus(
+  db: Database.Database,
+  input: SetGoalStudyFocusInput,
+): GoalPreparation {
+  const preparation = getGoalPreparation(db, input.goalId);
+  if (!preparation) {
+    throw new Error(`Goal preparation not found: ${input.goalId}`);
+  }
+  const objectiveIds = [...new Set(input.objectiveIds)];
+  if (objectiveIds.length === 0) {
+    throw new Error("Study focus requires at least one active goal objective");
+  }
+  const activeObjectiveIds = new Set(
+    getGoalObjectives(db, input.goalId).map((objective) => objective.objective_id),
+  );
+  for (const objectiveId of objectiveIds) {
+    if (!activeObjectiveIds.has(objectiveId)) {
+      throw new Error(`Study focus objective is not active for goal ${input.goalId}: ${objectiveId}`);
+    }
+  }
+  const label = input.label?.trim() || null;
+  db.prepare(
+    `UPDATE goal_preparation
+     SET active_focus_label = ?, active_focus_objective_ids = ?, updated_at = ?
+     WHERE goal_id = ?`,
+  ).run(label, JSON.stringify(objectiveIds), new Date().toISOString(), input.goalId);
+  return getGoalPreparation(db, input.goalId)!;
+}
+
+export function clearGoalStudyFocus(
+  db: Database.Database,
+  goalId: string,
+): GoalPreparation {
+  if (!getGoalPreparation(db, goalId)) {
+    throw new Error(`Goal preparation not found: ${goalId}`);
+  }
+  db.prepare(
+    `UPDATE goal_preparation
+     SET active_focus_label = NULL, active_focus_objective_ids = '[]', updated_at = ?
+     WHERE goal_id = ?`,
+  ).run(new Date().toISOString(), goalId);
+  return getGoalPreparation(db, goalId)!;
 }
 
 // ─── CRUD: Concepts ───────────────────────────────────────────────────────

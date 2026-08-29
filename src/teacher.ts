@@ -1,14 +1,17 @@
 import type Database from "better-sqlite3";
 import {
+  clearGoalStudyFocus,
   createSession,
   getGoalObjectives,
   setGoalObjective,
+  setGoalStudyFocus,
 } from "./db/database.js";
 import type {
   ChallengeSpecInput,
   DeliveryContext,
 } from "./db/types.js";
 import {
+  abandonUnsubmittedSession,
   completeSessionFeedback,
   createLearningObjective,
   finishSessionInteraction,
@@ -37,7 +40,7 @@ import type { ReviseEvidenceInput } from "./kernel/evidence.js";
 import type { AssessmentResultInput } from "./db/types.js";
 import { getTodayMission, resolveRequestedChallenge } from "./plan/today.js";
 import type { RequestedChallengeInput, TodayMissionInput } from "./plan/today.js";
-import type { SetGoalObjectiveInput } from "./db/database.js";
+import type { SetGoalObjectiveInput, SetGoalStudyFocusInput } from "./db/database.js";
 import {
   getDurablePreparationContext,
   listDurablePreparationContexts,
@@ -58,6 +61,8 @@ export function createTeacherKernel(db: Database.Database) {
     listPreparationContexts: () => listDurablePreparationContexts(db),
     getPreparationContext: (goalId: string) => getDurablePreparationContext(db, goalId),
     setGoalObjective: (input: SetGoalObjectiveInput) => setGoalObjective(db, input),
+    setGoalStudyFocus: (input: SetGoalStudyFocusInput) => setGoalStudyFocus(db, input),
+    clearGoalStudyFocus: (goalId: string) => clearGoalStudyFocus(db, goalId),
     getGoalObjectives: (goalId: string, includeInactive = false) =>
       getGoalObjectives(db, goalId, { includeInactive }),
     listCapabilities: () => listCapabilities(db),
@@ -83,6 +88,7 @@ export function createTeacherKernel(db: Database.Database) {
       reviseEvidence(db, evidenceEventId, input),
     listResumableSessions: (topicId?: string) => listResumableSessions(db, topicId),
     resumeSession: (sessionId: number) => resumeSession(db, sessionId),
+    abandonUnsubmittedSession: (sessionId: number) => abandonUnsubmittedSession(db, sessionId),
     finishSessionInteraction: (sessionId: number) => finishSessionInteraction(db, sessionId),
     completeSessionFeedback: (sessionId: number) => completeSessionFeedback(db, sessionId),
   };

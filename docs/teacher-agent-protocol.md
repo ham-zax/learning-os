@@ -153,7 +153,7 @@ Before teaching an existing learner:
 
 1. resolve the intended profile; do not silently switch learners;
 2. open the profile;
-3. recover durable preparation context and active goal;
+3. recover durable preparation context, including any `studyFocus`, and the active goal;
 4. inspect resumable session state when relevant;
 5. use persisted evidence/projections rather than old chat memory to decide what is true;
 6. use the current Learning OS owner to choose the next pedagogical action.
@@ -327,6 +327,7 @@ Important constraints:
 - Freeze criteria before the learner answers.
 - Do not invent new success criteria after seeing the response.
 - Never fabricate a learner response to close an attempt.
+- If orchestration opened the wrong challenge and the learner has not submitted anything, use `abandonUnsubmittedSession(sessionId)` instead of inventing work or leaving the accidental attempt resumable. Never use it after submission; submitted work must finish the normal evidence lifecycle.
 - Hints are recorded before they are shown.
 - Corrective explanations/answer reveals are recorded before they are shown.
 - After decisive exposure, do not present the exposed surface as fresh independent or transfer evidence. When Learning OS later selects a qualifying follow-up, use the changed surface it requires and no hint observations if independent evidence is intended.
@@ -338,7 +339,11 @@ Interview is only a delivery context. Do not run a separate generic ChatGPT inte
 
 ## Learner-facing next action
 
-After the current interaction episode has reached cognitive closure, use Learning OS to obtain the authoritative next move. For ordinary study orchestration, call `getTodayMission(...)` with the **current remaining session minutes** and `maxItems: 1`; if the learner or confirmed curriculum has an active soft focus, pass its active goal-objective IDs as `focusObjectiveIds`. Recompute this after every closed episode so the just-recorded evidence can change selection. A soft focus is request context only: never persist it as mastery/readiness, and never override a true prerequisite, due retrieval, recurring/retest weakness, or other higher-authority selector reason. Obtaining that recommendation is allowed before learner confirmation; opening another attempt is not. When a move is returned:
+After the current interaction episode has reached cognitive closure, use Learning OS to obtain the authoritative next move. For ordinary study orchestration, call `getTodayMission(...)` with the **current remaining session minutes** and `maxItems: 1`. The planner automatically resolves any durable goal study focus; pass `focusObjectiveIds` only for an intentional per-call override. Recompute after every closed episode so the just-recorded evidence can change selection.
+
+When the learner explicitly enters a curriculum/study phase such as "Day 1", persist that generic phase intent with `setGoalStudyFocus({ goalId, label, objectiveIds })`. Use the active goal-objective IDs supplied by the confirmed curriculum/reference; do not infer competence from the phase label. Keep the focus until the learner explicitly completes, leaves, or changes that phase, then call `clearGoalStudyFocus(goalId)`. A fresh teacher must recover this through `getPreparationContext(goalId).studyFocus`, not previous chat memory. Study focus is orchestration intent only: it never becomes readiness/evidence/FSRS state and does not override true prerequisites, due retrieval, recurring/retest weaknesses, required transfer, or other higher-authority selector reasons.
+
+Obtaining that recommendation is allowed before learner confirmation; opening another attempt is not. When a move is returned:
 
 1. state the important result briefly;
 2. express the selected move as one clear recommendation;

@@ -949,6 +949,34 @@ function setSessionToNextUnresolvedOrComplete(
   ).run(markEnded ? 1 : 0, now, sessionId);
 }
 
+export function abandonUnsubmittedSession(
+  db: Database.Database,
+  sessionId: number,
+): Session {
+  return db.transaction(() => {
+    const session = SessionSchema.parse(db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId));
+    if (session.active_attempt_id === null) {
+      throw new Error(`Session ${sessionId} has no active unsubmitted attempt to abandon`);
+    }
+    const attempt = getAttemptOrThrow(db, session.active_attempt_id);
+    if (attempt.submitted_at !== null) {
+      throw new Error(`Session ${sessionId} active attempt is already submitted`);
+    }
+    const unresolved = unresolvedAttemptsForSession(db, sessionId);
+    if (unresolved.verification.length > 0 || unresolved.assessment.length > 0) {
+      throw new Error(`Session ${sessionId} has submitted work that must finish its evidence lifecycle`);
+    }
+    db.prepare(
+      `UPDATE sessions
+       SET ended_at = COALESCE(ended_at, ?),
+           phase = 'complete', pending_action = 'none',
+           active_challenge_id = NULL, active_challenge_version = NULL, active_attempt_id = NULL
+       WHERE id = ?`,
+    ).run(new Date().toISOString(), sessionId);
+    return SessionSchema.parse(db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId));
+  })();
+}
+
 export function finishSessionInteraction(db: Database.Database, sessionId: number): void {
   const session = SessionSchema.parse(db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId));
   if (session.phase === "feedback" && session.pending_action === "present_feedback") {

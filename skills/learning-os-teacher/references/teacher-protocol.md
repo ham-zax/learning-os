@@ -49,7 +49,7 @@ select objective/task intent
 
 For preparation-goal flows, `kernel.createSession(...)` takes the durable goal/topic ID, not `ChallengeIntent.conceptId`; use the resolved `goalId` for the session and the intent's `conceptId` only as the learning target. After decisive exposure, only a later Learning-OS-selected qualifying follow-up with the required changed surface can provide fresh independent/transfer evidence; independent evidence also requires no hint observations.
 
-Do not fabricate learner responses or criteria. Interview uses the same lifecycle. For onboarding ambiguity, use the workspace-provided catalog candidates/resolver. Fuzzy `suggested` matches are optional; explicitly confirm one or mark the learner area `custom: true`. For missing concepts, use `workspace.deriveMissingConceptMaterialization(...)` rather than inventing technical metadata.
+Do not fabricate learner responses or criteria. If orchestration opened the wrong challenge and the learner has not submitted anything, use `abandonUnsubmittedSession(sessionId)`; never abandon submitted work instead of completing its evidence lifecycle. Interview uses the same lifecycle. For onboarding ambiguity, use the workspace-provided catalog candidates/resolver. Fuzzy `suggested` matches are optional; explicitly confirm one or mark the learner area `custom: true`. For missing concepts, use `workspace.deriveMissingConceptMaterialization(...)` rather than inventing technical metadata.
 
 ## Pedagogy for selected work
 
@@ -82,7 +82,9 @@ Key rules:
 - model answers/decisive walkthroughs: record exposure first and map them to already-frozen reasoning criteria;
 - variants must change a causal feature, not wording; transfer changes the surface without announcing the mapping.
 
-After the episode closes, ask the responsible Learning OS owner for the next decision. Present the returned move as one clear recommendation with a short learner-facing reason, then wait for unambiguous learner acceptance before opening the next attempt. Do not synthesize any follow-up when no authoritative next decision exists.
+After the episode closes, ask the responsible Learning OS owner for the next decision. For ordinary study, `getTodayMission(...)` automatically resolves durable goal study focus; use `focusObjectiveIds` only for an intentional per-call override. Present the returned move as one clear recommendation with a short learner-facing reason, then wait for unambiguous learner acceptance before opening the next attempt. Do not synthesize any follow-up when no authoritative next decision exists.
+
+When the learner explicitly enters a curriculum/study phase, persist it with `setGoalStudyFocus({ goalId, label, objectiveIds })` using active goal-objective IDs from the confirmed curriculum/reference. Recover it from `getPreparationContext(goalId).studyFocus` in fresh sessions and clear it with `clearGoalStudyFocus(goalId)` when the learner completes, leaves, or changes phase. Focus is orchestration intent, not competence evidence.
 
 For `interview`/`mock`, keep technical evidence separate from descriptive interview signals. Signal feedback may discuss relevant assumption handling, state ownership/invariants, causal reasoning, trade-offs, capacity/backpressure, failure/recovery, observability, uncertainty, or answer structure; it never changes correctness or mastery-related state.
 
