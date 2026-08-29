@@ -255,7 +255,7 @@ function reveal(label: string, content: string): void {
   }
 }
 
-type MaterialRevealRecorder = (sourceRef: string) => void;
+type MaterialRevealRecorder = (sourceRef: string, content: string) => void;
 
 function revealWithExposure(
   label: string,
@@ -264,7 +264,7 @@ function revealWithExposure(
   recordMaterialExposure: MaterialRevealRecorder,
 ): void {
   if (!content.trim()) return;
-  recordMaterialExposure(sourceRef);
+  recordMaterialExposure(sourceRef, content);
   reveal(label, content);
 }
 
@@ -276,7 +276,7 @@ function revealExtraSections(
   for (const heading of extraSectionHeadings(file)) {
     const content = file.sections[heading] ?? "";
     if (!content.trim()) continue;
-    recordMaterialExposure(`section:${heading}`);
+    recordMaterialExposure(`section:${heading}`, content);
     reveal(heading, content);
   }
 }
@@ -468,20 +468,22 @@ async function runSession(
       sessionState.sessionId,
     );
 
-    const recordLearnExposure: MaterialRevealRecorder = (sourceRef) => {
+    const recordLearnExposure: MaterialRevealRecorder = (sourceRef, content) => {
       recordExposure(db, sessionState.sessionId, {
         attemptId: opened.attempt.id,
         objectiveIds: [prepared.objectiveId],
         exposureType: "explanation_shown",
         sourceRef,
+        teachingMaterial: { content, format: "markdown" },
       });
     };
-    const recordPostResponseExposure: MaterialRevealRecorder = (sourceRef) => {
+    const recordPostResponseExposure: MaterialRevealRecorder = (sourceRef, content) => {
       recordExposure(db, sessionState.sessionId, {
         attemptId: opened.attempt.id,
         objectiveIds: [prepared.objectiveId],
         exposureType: "answer_revealed",
         sourceRef,
+        teachingMaterial: { content, format: "markdown" },
       });
     };
 
@@ -657,6 +659,7 @@ async function runCodingDrill(
     const llm = tryCreateLLM();
     info("\nSubmitting attempt; deterministic verification is separate from qualitative review.");
     const result = await submitCodingSolution(llm, db, state, code);
+    const formattedResult = formatCodingResult(result);
 
     if (result.verificationOutput || result.qualitativeFeedback) {
       recordExposure(db, state.sessionId, {
@@ -664,6 +667,7 @@ async function runCodingDrill(
         attemptId: result.attemptId,
         exposureType: "corrective_feedback_shown",
         sourceRef: "coding-post-submission-feedback",
+        teachingMaterial: { content: formattedResult, format: "text" },
       });
       if (result.qualitativeFeedback?.optimalSolution) {
         recordExposure(db, state.sessionId, {
@@ -671,11 +675,15 @@ async function runCodingDrill(
           attemptId: result.attemptId,
           exposureType: "solution_walkthrough",
           sourceRef: "coding-suggested-approach",
+          teachingMaterial: {
+            content: result.qualitativeFeedback.optimalSolution,
+            format: "text",
+          },
         });
       }
     }
 
-    console.log(formatCodingResult(result));
+    console.log(formattedResult);
     if (result.assessmentStatus === "recorded") {
       completeSessionFeedback(db, state.sessionId);
     } else {
@@ -728,15 +736,17 @@ async function runDesignDrill(
     const llm = tryCreateLLM();
     info("\nAttempt submitted; assessing the frozen rubric when a trusted evaluator is available.");
     const result = await assessDesignDrill(llm, db, currentState);
+    const formattedResult = formatDesignResult(result);
     if (result.assessmentStatus === "recorded" && (result.criteria.length > 0 || result.feedback)) {
       recordExposure(db, currentState.sessionId, {
         objectiveIds: [result.objectiveId],
         attemptId: result.attemptId,
         exposureType: "corrective_feedback_shown",
         sourceRef: "system-design-rubric-feedback",
+        teachingMaterial: { content: formattedResult, format: "text" },
       });
     }
-    console.log(formatDesignResult(result));
+    console.log(formattedResult);
     if (result.assessmentStatus === "recorded") {
       completeSessionFeedback(db, currentState.sessionId);
     } else {
@@ -1399,7 +1409,9 @@ program
           topicId,
           vaultPath: resolve(opts.obsidian),
         });
-        success(`Synced ${result.synced} concept(s) to ${result.outputPath}`);
+        success(
+          `Synced ${result.synced} concept(s) and ${result.revisionNotesSynced} revision note(s) to ${result.outputPath}`,
+        );
         return;
       }
 

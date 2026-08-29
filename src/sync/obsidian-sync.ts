@@ -10,6 +10,8 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { getConceptsByTopic, getTopic } from "../db/database.js";
 import type { Concept, DurabilityState, Readiness, TransferState } from "../db/types.js";
+import { listRevisionNotes } from "../revision-notes.js";
+import type { RevisionNoteSnapshot } from "../revision-notes.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -23,6 +25,7 @@ export interface ObsidianSyncOptions {
 
 export interface SyncResult {
   synced: number;
+  revisionNotesSynced: number;
   outputPath: string;
 }
 
@@ -55,7 +58,7 @@ export async function syncToObsidian(options: ObsidianSyncOptions): Promise<Sync
 
   const concepts = getConceptsByTopic(db, topicId);
   if (concepts.length === 0) {
-    return { synced: 0, outputPath: join(vaultPath, subfolder, topicId) };
+    return { synced: 0, revisionNotesSynced: 0, outputPath: join(vaultPath, subfolder, topicId) };
   }
 
   const outputDir = join(vaultPath, subfolder, topicId);
@@ -70,11 +73,32 @@ export async function syncToObsidian(options: ObsidianSyncOptions): Promise<Sync
     await writeFile(filePath, content, "utf-8");
   }
 
+  // Write profile-local revision-note snapshots that draw on this topic.
+  const conceptIds = new Set(concepts.map((concept) => concept.id));
+  const revisionNotes = listRevisionNotes(db).filter((note) =>
+    note.sourceRefs.conceptIds.some((conceptId) => conceptIds.has(conceptId)),
+  );
+  if (revisionNotes.length > 0) {
+    const revisionDir = join(outputDir, "_revision-notes");
+    await mkdir(revisionDir, { recursive: true });
+    for (const note of revisionNotes) {
+      await writeFile(
+        join(revisionDir, `${note.id}.md`),
+        buildRevisionNoteExport(note),
+        "utf-8",
+      );
+    }
+  }
+
   // Write a summary/index note
   const summaryContent = buildSummaryNote(topic.name, topicId, concepts, objectiveState);
   await writeFile(join(outputDir, "_index.md"), summaryContent, "utf-8");
 
-  return { synced: concepts.length, outputPath: outputDir };
+  return {
+    synced: concepts.length,
+    revisionNotesSynced: revisionNotes.length,
+    outputPath: outputDir,
+  };
 }
 
 /**
@@ -134,6 +158,21 @@ function loadObjectiveStateByConcept(
     result.set(row.concept_id, values);
   }
   return result;
+}
+
+function buildRevisionNoteExport(note: RevisionNoteSnapshot): string {
+  return [
+    "---",
+    `revision_note_id: "${note.id}"`,
+    `title: ${JSON.stringify(note.title)}`,
+    `generated_at: "${note.generatedAt}"`,
+    `stale: ${note.stale ? "true" : "false"}`,
+    `scope_kind: "${note.scope.kind}"`,
+    "---",
+    "",
+    note.markdown.trim(),
+    "",
+  ].join("\n");
 }
 
 function safeJsonParse(raw: unknown): string[] {

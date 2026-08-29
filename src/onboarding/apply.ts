@@ -3,6 +3,7 @@ import type Database from "better-sqlite3";
 import {
   createConcept,
   createTopic,
+  getActiveGoalStudyFocusEpisode,
   getConcept,
   getGoalObjectives,
   getGoalPreparation,
@@ -151,8 +152,11 @@ export interface DurablePreparationContext {
     minutesPerWeek: number | null;
   };
   studyFocus: {
+    episodeId: string;
     label: string | null;
     objectiveIds: string[];
+    resolvedObjectiveIds: string[];
+    openedAt: string;
   } | null;
   confirmedAt: string;
   objectives: DurablePreparationObjective[];
@@ -671,6 +675,7 @@ export function getDurablePreparationContext(
     (preparation.minutes_per_day !== null && preparation.days_per_week !== null
       ? preparation.minutes_per_day * preparation.days_per_week
       : null);
+  const activeFocus = getActiveGoalStudyFocusEpisode(db, goalId);
   return {
     goalId,
     goalName: goal.name,
@@ -685,11 +690,14 @@ export function getDurablePreparationContext(
       minutesPerWeek: effectiveMinutesPerWeek,
     },
     studyFocus:
-      preparation.active_focus_objective_ids.length === 0
+      activeFocus === undefined
         ? null
         : {
-            label: preparation.active_focus_label,
-            objectiveIds: [...preparation.active_focus_objective_ids],
+            episodeId: activeFocus.id,
+            label: activeFocus.label,
+            objectiveIds: [...activeFocus.target_objective_ids],
+            resolvedObjectiveIds: [...activeFocus.resolved_objective_ids],
+            openedAt: activeFocus.opened_at,
           },
     confirmedAt: preparation.confirmed_at,
     objectives,

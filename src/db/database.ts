@@ -4,6 +4,7 @@
  * Uses better-sqlite3 in WAL mode with PRAGMA user_version for migration tracking.
  */
 
+import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
@@ -13,6 +14,7 @@ import {
   GoalPreparationSchema,
   ReviewSchema,
   SessionSchema,
+  StudyFocusEpisodeSchema,
 } from "./types.js";
 import type {
   Topic,
@@ -28,12 +30,13 @@ import type {
   GoalImportance,
   GoalTargetReadiness,
   GoalPreparation,
+  StudyFocusEpisode,
   PreparationPurpose,
   PreparationStrategy,
   InitialDiagnosticKind,
 } from "./types.js";
 
-const CURRENT_VERSION = 9;
+const CURRENT_VERSION = 11;
 
 // ─── Schema DDL ──────────────────────────────────────────────────────────────
 
@@ -1079,6 +1082,170 @@ const migrations: Migration[] = [
       })();
     },
   },
+  {
+    version: 10,
+    up: (db) => {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE teaching_artifacts (
+            id             TEXT PRIMARY KEY,
+            content        TEXT NOT NULL,
+            content_format TEXT NOT NULL CHECK (content_format IN ('text', 'markdown')),
+            created_at     TEXT NOT NULL
+          );
+
+          ALTER TABLE exposure_events ADD COLUMN teaching_artifact_id TEXT
+            REFERENCES teaching_artifacts(id) ON DELETE RESTRICT;
+
+          CREATE INDEX idx_exposure_events_teaching_artifact
+            ON exposure_events(teaching_artifact_id);
+
+          CREATE TRIGGER teaching_artifacts_no_update
+          BEFORE UPDATE ON teaching_artifacts
+          BEGIN
+            SELECT RAISE(ABORT, 'teaching artifacts are immutable');
+          END;
+
+          CREATE TRIGGER teaching_artifacts_no_delete
+          BEFORE DELETE ON teaching_artifacts
+          BEGIN
+            SELECT RAISE(ABORT, 'teaching artifacts are immutable');
+          END;
+
+          CREATE TABLE revision_notes (
+            id                TEXT PRIMARY KEY,
+            scope_kind        TEXT NOT NULL CHECK (
+              scope_kind IN ('profile', 'goal', 'concept', 'objective', 'session', 'current_focus')
+            ),
+            scope_json        TEXT NOT NULL,
+            title             TEXT NOT NULL,
+            markdown          TEXT NOT NULL,
+            source_state_json TEXT NOT NULL,
+            source_refs_json  TEXT NOT NULL,
+            generated_at      TEXT NOT NULL
+          );
+
+          CREATE INDEX idx_revision_notes_generated
+            ON revision_notes(generated_at, id);
+
+          CREATE TRIGGER revision_notes_no_update
+          BEFORE UPDATE ON revision_notes
+          BEGIN
+            SELECT RAISE(ABORT, 'revision note snapshots are immutable');
+          END;
+
+          CREATE TRIGGER revision_notes_no_delete
+          BEFORE DELETE ON revision_notes
+          BEGIN
+            SELECT RAISE(ABORT, 'revision note snapshots are immutable');
+          END;
+        `);
+      })();
+    },
+  },
+  {
+    version: 11,
+    up: (db) => {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE study_focus_episodes (
+            id                          TEXT PRIMARY KEY,
+            goal_id                     TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            label                       TEXT,
+            target_objective_ids        TEXT NOT NULL,
+            resolved_objective_ids      TEXT NOT NULL,
+            opened_at                   TEXT NOT NULL,
+            closed_at                   TEXT
+          );
+
+          CREATE INDEX idx_study_focus_episodes_goal_time
+            ON study_focus_episodes(goal_id, opened_at, id);
+          CREATE UNIQUE INDEX idx_study_focus_episodes_active_goal
+            ON study_focus_episodes(goal_id)
+            WHERE closed_at IS NULL;
+
+          INSERT INTO study_focus_episodes (
+            id, goal_id, label, target_objective_ids, resolved_objective_ids,
+            opened_at, closed_at
+          )
+          SELECT
+            'focus-' || lower(hex(randomblob(16))),
+            goal_id,
+            active_focus_label,
+            active_focus_objective_ids,
+            active_focus_objective_ids,
+            updated_at,
+            NULL
+          FROM goal_preparation
+          WHERE active_focus_objective_ids <> '[]';
+
+          DROP TRIGGER revision_notes_no_update;
+          DROP TRIGGER revision_notes_no_delete;
+          DROP INDEX idx_revision_notes_generated;
+          ALTER TABLE revision_notes RENAME TO revision_notes_v10;
+
+          CREATE TABLE revision_notes (
+            id                TEXT PRIMARY KEY,
+            scope_kind        TEXT NOT NULL CHECK (
+              scope_kind IN (
+                'profile', 'goal', 'concept', 'objective', 'session',
+                'current_focus', 'focus_episode'
+              )
+            ),
+            scope_json        TEXT NOT NULL,
+            title             TEXT NOT NULL,
+            markdown          TEXT NOT NULL,
+            source_state_json TEXT NOT NULL,
+            source_refs_json  TEXT NOT NULL,
+            generated_at      TEXT NOT NULL
+          );
+
+          INSERT INTO revision_notes (
+            id, scope_kind, scope_json, title, markdown,
+            source_state_json, source_refs_json, generated_at
+          )
+          SELECT
+            id, scope_kind, scope_json, title, markdown,
+            source_state_json, source_refs_json, generated_at
+          FROM revision_notes_v10;
+
+          DROP TABLE revision_notes_v10;
+
+          CREATE INDEX idx_revision_notes_generated
+            ON revision_notes(generated_at, id);
+
+          CREATE TRIGGER revision_notes_no_update
+          BEFORE UPDATE ON revision_notes
+          BEGIN
+            SELECT RAISE(ABORT, 'revision note snapshots are immutable');
+          END;
+
+          CREATE TRIGGER revision_notes_no_delete
+          BEFORE DELETE ON revision_notes
+          BEGIN
+            SELECT RAISE(ABORT, 'revision note snapshots are immutable');
+          END;
+        `);
+
+        const backfilled = db
+          .prepare(`SELECT id, goal_id, target_objective_ids FROM study_focus_episodes`)
+          .all() as Array<{ id: string; goal_id: string; target_objective_ids: string }>;
+        const updateResolved = db.prepare(
+          `UPDATE study_focus_episodes SET resolved_objective_ids = ? WHERE id = ?`,
+        );
+        for (const episode of backfilled) {
+          const targets = JSON.parse(episode.target_objective_ids) as unknown;
+          if (!Array.isArray(targets) || targets.some((value) => typeof value !== "string")) {
+            throw new Error(`Invalid backfilled study focus targets: ${episode.id}`);
+          }
+          updateResolved.run(
+            JSON.stringify(resolveGoalStudyFocusObjectiveClosure(db, episode.goal_id, targets)),
+            episode.id,
+          );
+        }
+      })();
+    },
+  },
 ];
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -1366,15 +1533,118 @@ export function getGoalPreparation(
   return row === undefined ? undefined : GoalPreparationSchema.parse(row);
 }
 
-export interface SetGoalStudyFocusInput {
+export interface PersistGoalStudyFocusInput {
   goalId: string;
   label?: string | null;
   objectiveIds: readonly string[];
+  resolvedObjectiveIds: readonly string[];
+}
+
+export function getStudyFocusEpisode(
+  db: Database.Database,
+  episodeId: string,
+): StudyFocusEpisode | undefined {
+  const row = db.prepare(`SELECT * FROM study_focus_episodes WHERE id = ?`).get(episodeId);
+  return row === undefined ? undefined : StudyFocusEpisodeSchema.parse(row);
+}
+
+export function getActiveGoalStudyFocusEpisode(
+  db: Database.Database,
+  goalId: string,
+): StudyFocusEpisode | undefined {
+  const row = db
+    .prepare(
+      `SELECT * FROM study_focus_episodes
+       WHERE goal_id = ? AND closed_at IS NULL
+       ORDER BY opened_at DESC, id DESC
+       LIMIT 1`,
+    )
+    .get(goalId);
+  return row === undefined ? undefined : StudyFocusEpisodeSchema.parse(row);
+}
+
+export function listGoalStudyFocusEpisodes(
+  db: Database.Database,
+  goalId: string,
+): StudyFocusEpisode[] {
+  return StudyFocusEpisodeSchema.array().parse(
+    db
+      .prepare(
+        `SELECT * FROM study_focus_episodes
+         WHERE goal_id = ?
+         ORDER BY opened_at DESC, id DESC`,
+      )
+      .all(goalId),
+  );
+}
+
+function sameIds(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((value) => rightSet.has(value));
+}
+
+export function resolveGoalStudyFocusObjectiveClosure(
+  db: Database.Database,
+  goalId: string,
+  focusObjectiveIds: readonly string[],
+  prerequisiteCapabilityId = "explain",
+): string[] {
+  const objectiveIds = [...new Set(focusObjectiveIds)];
+  if (objectiveIds.length === 0) {
+    throw new Error("Study focus requires at least one active goal objective");
+  }
+  const activeObjectiveIds = new Set(
+    getGoalObjectives(db, goalId).map((objective) => objective.objective_id),
+  );
+  for (const objectiveId of objectiveIds) {
+    if (!activeObjectiveIds.has(objectiveId)) {
+      throw new Error(`Study focus objective is not active for goal ${goalId}: ${objectiveId}`);
+    }
+  }
+
+  const result = [...objectiveIds];
+  const resultSet = new Set(result);
+  const visitedConcepts = new Set<string>();
+  const queue: string[] = [];
+  const objectiveConcept = db.prepare(`SELECT concept_id FROM learning_objectives WHERE id = ?`);
+  for (const objectiveId of objectiveIds) {
+    const row = objectiveConcept.get(objectiveId) as { concept_id: string } | undefined;
+    if (row) queue.push(row.concept_id);
+  }
+
+  const conceptPrerequisites = db.prepare(`SELECT prerequisites FROM concepts WHERE id = ?`);
+  const prerequisiteObjective = db.prepare(
+    `SELECT id FROM learning_objectives WHERE concept_id = ? AND capability_id = ?`,
+  );
+  while (queue.length > 0) {
+    const conceptId = queue.shift()!;
+    if (visitedConcepts.has(conceptId)) continue;
+    visitedConcepts.add(conceptId);
+    const row = conceptPrerequisites.get(conceptId) as { prerequisites: string } | undefined;
+    if (!row) continue;
+    const prerequisites = JSON.parse(row.prerequisites) as unknown;
+    if (!Array.isArray(prerequisites) || prerequisites.some((value) => typeof value !== "string")) {
+      throw new Error(`Concept ${conceptId} has invalid prerequisites`);
+    }
+    for (const prerequisiteConceptId of prerequisites) {
+      const objective = prerequisiteObjective.get(
+        prerequisiteConceptId,
+        prerequisiteCapabilityId,
+      ) as { id: string } | undefined;
+      if (objective && !resultSet.has(objective.id)) {
+        resultSet.add(objective.id);
+        result.push(objective.id);
+      }
+      queue.push(prerequisiteConceptId);
+    }
+  }
+  return result;
 }
 
 export function setGoalStudyFocus(
   db: Database.Database,
-  input: SetGoalStudyFocusInput,
+  input: PersistGoalStudyFocusInput,
 ): GoalPreparation {
   const preparation = getGoalPreparation(db, input.goalId);
   if (!preparation) {
@@ -1392,13 +1662,66 @@ export function setGoalStudyFocus(
       throw new Error(`Study focus objective is not active for goal ${input.goalId}: ${objectiveId}`);
     }
   }
+
+  const resolvedObjectiveIds = [...new Set(input.resolvedObjectiveIds)];
+  if (resolvedObjectiveIds.length === 0) {
+    throw new Error("Study focus requires at least one resolved objective");
+  }
+  for (const objectiveId of objectiveIds) {
+    if (!resolvedObjectiveIds.includes(objectiveId)) {
+      throw new Error(`Resolved study focus is missing target objective: ${objectiveId}`);
+    }
+  }
+  const objectiveExists = db.prepare(`SELECT 1 FROM learning_objectives WHERE id = ?`);
+  for (const objectiveId of resolvedObjectiveIds) {
+    if (!objectiveExists.get(objectiveId)) {
+      throw new Error(`Resolved study focus objective not found: ${objectiveId}`);
+    }
+  }
+
   const label = input.label?.trim() || null;
-  db.prepare(
-    `UPDATE goal_preparation
-     SET active_focus_label = ?, active_focus_objective_ids = ?, updated_at = ?
-     WHERE goal_id = ?`,
-  ).run(label, JSON.stringify(objectiveIds), new Date().toISOString(), input.goalId);
-  return getGoalPreparation(db, input.goalId)!;
+  return db.transaction(() => {
+    const now = new Date().toISOString();
+    const activeEpisode = getActiveGoalStudyFocusEpisode(db, input.goalId);
+    if (
+      activeEpisode &&
+      activeEpisode.label === label &&
+      sameIds(activeEpisode.target_objective_ids, objectiveIds)
+    ) {
+      db.prepare(
+        `UPDATE goal_preparation
+         SET active_focus_label = ?, active_focus_objective_ids = ?, updated_at = ?
+         WHERE goal_id = ?`,
+      ).run(label, JSON.stringify(objectiveIds), now, input.goalId);
+      return getGoalPreparation(db, input.goalId)!;
+    }
+
+    if (activeEpisode) {
+      db.prepare(
+        `UPDATE study_focus_episodes SET closed_at = ? WHERE id = ? AND closed_at IS NULL`,
+      ).run(now, activeEpisode.id);
+    }
+
+    db.prepare(
+      `INSERT INTO study_focus_episodes (
+         id, goal_id, label, target_objective_ids, resolved_objective_ids,
+         opened_at, closed_at
+       ) VALUES (?, ?, ?, ?, ?, ?, NULL)`,
+    ).run(
+      `focus-${randomUUID()}`,
+      input.goalId,
+      label,
+      JSON.stringify(objectiveIds),
+      JSON.stringify(resolvedObjectiveIds),
+      now,
+    );
+    db.prepare(
+      `UPDATE goal_preparation
+       SET active_focus_label = ?, active_focus_objective_ids = ?, updated_at = ?
+       WHERE goal_id = ?`,
+    ).run(label, JSON.stringify(objectiveIds), now, input.goalId);
+    return getGoalPreparation(db, input.goalId)!;
+  })();
 }
 
 export function clearGoalStudyFocus(
@@ -1408,12 +1731,21 @@ export function clearGoalStudyFocus(
   if (!getGoalPreparation(db, goalId)) {
     throw new Error(`Goal preparation not found: ${goalId}`);
   }
-  db.prepare(
-    `UPDATE goal_preparation
-     SET active_focus_label = NULL, active_focus_objective_ids = '[]', updated_at = ?
-     WHERE goal_id = ?`,
-  ).run(new Date().toISOString(), goalId);
-  return getGoalPreparation(db, goalId)!;
+  return db.transaction(() => {
+    const now = new Date().toISOString();
+    const activeEpisode = getActiveGoalStudyFocusEpisode(db, goalId);
+    if (activeEpisode) {
+      db.prepare(
+        `UPDATE study_focus_episodes SET closed_at = ? WHERE id = ? AND closed_at IS NULL`,
+      ).run(now, activeEpisode.id);
+    }
+    db.prepare(
+      `UPDATE goal_preparation
+       SET active_focus_label = NULL, active_focus_objective_ids = '[]', updated_at = ?
+       WHERE goal_id = ?`,
+    ).run(now, goalId);
+    return getGoalPreparation(db, goalId)!;
+  })();
 }
 
 // ─── CRUD: Concepts ───────────────────────────────────────────────────────

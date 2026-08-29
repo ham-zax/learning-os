@@ -154,7 +154,7 @@ A correct transfer event may also count toward independent readiness.
 
 ### Durability
 
-Durability must be provable from durable interaction history. The kernel records material objective-specific re-exposure such as explanations, answer reveals, worked examples, corrective feedback, and solution walkthroughs in append-only `exposure_events`.
+Durability must be provable from durable interaction history. The kernel records material objective-specific re-exposure such as explanations, answer reveals, worked examples, corrective feedback, and solution walkthroughs in append-only `exposure_events`. New exposure writes also persist the learner-visible material as an immutable `teaching_artifact`; that artifact is interaction provenance for faithful later reconstruction/revision, not evidence and not an additional durability signal beyond its linked exposure event.
 
 For a new attempt, the kernel computes the delay anchor as the latest prior memory contact for that objective: `COALESCE(submitted_at, started_at)` for any prior attempt whose frozen challenge targeted the objective, or a material exposure event, whichever is later. An abandoned opened attempt therefore still counts as contact. A prior attempt remains a memory contact even if its assessment is later invalidated.
 

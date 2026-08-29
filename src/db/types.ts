@@ -95,6 +95,20 @@ export const ExposureType = z.enum([
 ]);
 export type ExposureType = z.infer<typeof ExposureType>;
 
+export const TeachingArtifactFormat = z.enum(["text", "markdown"]);
+export type TeachingArtifactFormat = z.infer<typeof TeachingArtifactFormat>;
+
+export const RevisionNoteScopeKind = z.enum([
+  "profile",
+  "goal",
+  "concept",
+  "objective",
+  "session",
+  "current_focus",
+  "focus_episode",
+]);
+export type RevisionNoteScopeKind = z.infer<typeof RevisionNoteScopeKind>;
+
 export const Readiness = z.enum(["unknown", "exposed", "guided", "independent"]);
 export type Readiness = z.infer<typeof Readiness>;
 
@@ -386,6 +400,17 @@ export const GoalPreparationSchema = z.object({
 });
 export type GoalPreparation = z.infer<typeof GoalPreparationSchema>;
 
+export const StudyFocusEpisodeSchema = z.object({
+  id: z.string(),
+  goal_id: z.string(),
+  label: z.string().nullable().default(null),
+  target_objective_ids: jsonArrayOfStrings,
+  resolved_objective_ids: jsonArrayOfStrings,
+  opened_at: z.string(),
+  closed_at: z.string().nullable().default(null),
+});
+export type StudyFocusEpisode = z.infer<typeof StudyFocusEpisodeSchema>;
+
 export const ObjectiveProjectionSchema = z.object({
   objective_id: z.string(),
   readiness: Readiness,
@@ -571,6 +596,14 @@ export const HintObservationSchema = z.object({
 });
 export type HintObservation = z.infer<typeof HintObservationSchema>;
 
+export const TeachingArtifactSchema = z.object({
+  id: z.string(),
+  content: z.string(),
+  content_format: TeachingArtifactFormat,
+  created_at: z.string(),
+});
+export type TeachingArtifact = z.infer<typeof TeachingArtifactSchema>;
+
 export const ExposureEventSchema = z.object({
   seq: z.number().int(),
   objective_id: z.string(),
@@ -580,9 +613,22 @@ export const ExposureEventSchema = z.object({
   attempt_id: z.number().int().nullable().default(null),
   exposure_type: ExposureType,
   source_ref: z.string().nullable().default(null),
+  teaching_artifact_id: z.string().nullable().default(null),
   occurred_at: z.string(),
 });
 export type ExposureEvent = z.infer<typeof ExposureEventSchema>;
+
+export const RevisionNoteSchema = z.object({
+  id: z.string(),
+  scope_kind: RevisionNoteScopeKind,
+  scope_json: jsonRecord,
+  title: z.string(),
+  markdown: z.string(),
+  source_state_json: jsonRecord,
+  source_refs_json: jsonRecord,
+  generated_at: z.string(),
+});
+export type RevisionNote = z.infer<typeof RevisionNoteSchema>;
 
 // ─── evidence / correction / misconception state ───────────────────────────
 
@@ -690,6 +736,7 @@ export const schemas = {
   learning_objectives: LearningObjectiveSchema,
   goal_objectives: GoalObjectiveSchema,
   goal_preparation: GoalPreparationSchema,
+  study_focus_episodes: StudyFocusEpisodeSchema,
   objective_projections: ObjectiveProjectionSchema,
   sessions: SessionSchema,
   reviews: ReviewSchema,
@@ -701,7 +748,9 @@ export const schemas = {
   challenge_criteria: ChallengeCriterionRowSchema,
   attempts: AttemptSchema,
   hint_observations: HintObservationSchema,
+  teaching_artifacts: TeachingArtifactSchema,
   exposure_events: ExposureEventSchema,
+  revision_notes: RevisionNoteSchema,
   evidence_events: EvidenceEventSchema,
   evidence_revisions: EvidenceRevisionSchema,
   misconceptions: MisconceptionSchema,

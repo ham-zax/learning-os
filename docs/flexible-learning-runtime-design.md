@@ -362,15 +362,18 @@ The Backend Systems seven-day blueprint says Day 1 focuses on runtime/concurrenc
 
 This is a real planning gap, not a teacher-prompt problem.
 
-The implemented boundary stores a generic active study focus on `goal_preparation`:
+The implemented boundary keeps the current focus projection on `goal_preparation` and preserves each explicit phase as a durable `study_focus_episode`:
 
 ```text
 goalId
-activeFocusLabel
-activeFocusObjectiveIds
+focusEpisodeId
+label
+targetObjectiveIds
+resolvedObjectiveIds
+openedAt / closedAt
 ```
 
-The focus survives teacher replacement and is recovered through `getPreparationContext(goalId).studyFocus`. `getTodayMission(...)` uses it automatically unless the caller deliberately supplies a per-call `focusObjectiveIds` override.
+The episode survives teacher replacement and phase changes. `getPreparationContext(goalId).studyFocus` exposes the active episode; `listGoalStudyFocusEpisodes(goalId)` exposes closed phases. `getTodayMission(...)` still uses the current focus projection automatically unless the caller deliberately supplies a per-call `focusObjectiveIds` override.
 
 An active study focus:
 
@@ -379,9 +382,10 @@ An active study focus:
 - never bypasses true prerequisites;
 - still allows higher-authority Learning OS reasons such as due retrieval, recurring/retest weakness, required transfer, and contradictory evidence;
 - does not imply mastery when the focus ends;
-- can be changed or cleared without rewriting evidence.
+- can be changed or cleared without rewriting evidence;
+- preserves the resolved prerequisite/foundation closure and phase window so later artifacts such as revision notes can recover what that phase meant after another phase becomes active.
 
-This remains a generic focus mechanism rather than a hard-coded `day_1` field.
+This remains a generic focus mechanism rather than a hard-coded `day_1` field. Focus history is orchestration provenance, not a curriculum/mastery scheduler.
 
 ## P13. Prompt-only pedagogy is not reliably executed
 

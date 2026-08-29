@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import {
   AttemptSchema,
@@ -13,6 +14,7 @@ import {
   LearningObjectiveSchema,
   ObjectiveProjectionSchema,
   SessionSchema,
+  TeachingArtifactFormat,
 } from "../db/types.js";
 import type {
   Attempt,
@@ -63,6 +65,10 @@ export interface RecordExposureInput {
   objectiveIds: string[];
   exposureType: ExposureEvent["exposure_type"];
   sourceRef?: string;
+  teachingMaterial: {
+    content: string;
+    format?: "text" | "markdown";
+  };
 }
 
 export interface ResumableAttempt {
@@ -662,6 +668,9 @@ export function recordExposure(
   input: RecordExposureInput,
 ): ExposureEvent[] {
   const exposureType = ExposureType.parse(input.exposureType);
+  if (!input.teachingMaterial) {
+    throw new Error("Exposure requires learner-visible teaching material");
+  }
   if (input.objectiveIds.length === 0) {
     throw new Error("Exposure must name at least one learning objective");
   }
@@ -704,6 +713,14 @@ export function recordExposure(
     }
 
     const occurredAt = new Date().toISOString();
+    const content = requireNonEmpty(input.teachingMaterial.content, "Teaching artifact content");
+    const format = TeachingArtifactFormat.parse(input.teachingMaterial.format ?? "markdown");
+    const teachingArtifactId = randomUUID();
+    db.prepare(
+      `INSERT INTO teaching_artifacts (id, content, content_format, created_at)
+       VALUES (?, ?, ?, ?)`,
+    ).run(teachingArtifactId, content, format, occurredAt);
+
     const insert = db.prepare(
       `INSERT INTO exposure_events (
          objective_id,
@@ -713,8 +730,9 @@ export function recordExposure(
          attempt_id,
          exposure_type,
          source_ref,
+         teaching_artifact_id,
          occurred_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
 
     const events: ExposureEvent[] = [];
@@ -727,6 +745,7 @@ export function recordExposure(
         input.attemptId ?? null,
         exposureType,
         input.sourceRef ?? null,
+        teachingArtifactId,
         occurredAt,
       );
       const row = db

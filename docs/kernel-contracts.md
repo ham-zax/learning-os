@@ -112,7 +112,25 @@ Confirmed goal-level preparation context that must survive replacement of the co
 | `created_at` | timestamp | Persistence creation time. |
 | `updated_at` | timestamp | Planning-metadata update time. |
 
-`active_focus_label` and `active_focus_objective_ids` are learner-intent/orchestration metadata. `setGoalStudyFocus(...)` persists an explicit curriculum/session focus so a replacement teacher can recover it; `clearGoalStudyFocus(...)` removes it when the learner completes, leaves, or changes that phase. Focus never grants readiness, changes evidence, activates/deactivates goal objectives, or alters FSRS state.
+`active_focus_label` and `active_focus_objective_ids` are the current-focus projection used by orchestration. `setGoalStudyFocus(...)` also opens or reuses a durable `study_focus_episode`; `clearGoalStudyFocus(...)` closes that episode before clearing the projection. Focus never grants readiness, changes evidence, activates/deactivates goal objectives, or alters FSRS state.
+
+### `study_focus_episodes`
+
+Durable history of explicit curriculum/study phases. An episode preserves what a phase meant even after another phase becomes active.
+
+| Column | Type | Rule |
+| --- | --- | --- |
+| `id` | text PK | Stable focus-episode ID. |
+| `goal_id` | FK | Goal whose learner intent created the focus. |
+| `label` | text/null | Learner-facing phase label such as `Day 1`. |
+| `target_objective_ids` | JSON/text | Active goal objectives explicitly named by the curriculum/focus. |
+| `resolved_objective_ids` | JSON/text | Snapshot of targets plus their prerequisite/foundation objective closure. |
+| `opened_at` | timestamp | Focus activation time. |
+| `closed_at` | timestamp/null | Set once when the learner completes, leaves, or replaces the focus. |
+
+At most one episode may be active for a goal. Replacing focus closes the prior episode and opens another; clearing focus closes the active episode. Repeating the same active focus is idempotent. Migration backfills any already-active focus into an episode and resolves its prerequisite/foundation objective closure immediately, preserving the original focus activation timestamp.
+
+Focus episodes are orchestration/history metadata, not competence state. `getPreparationContext(goalId).studyFocus` exposes the active episode ID, target IDs, resolved objective IDs, and activation time. `listGoalStudyFocusEpisodes(goalId)` and `getStudyFocusEpisode(id)` expose historical phases to a fresh teacher without chat memory.
 
 Do not persist raw resumes, job descriptions, chat transcripts, provider identifiers, or the full draft proposal here. Resume/JD/self-report claims may shape this confirmed plan but cannot create evidence, review events/cards, misconceptions, or non-unknown objective projections.
 
@@ -177,6 +195,19 @@ For each objective-specific `EvidenceEvent.hint_level`, use the highest relevant
 
 If no relevant hint observation exists, the objective-specific hint level is L0.
 
+### `teaching_artifacts`
+
+Immutable profile-local material actually shown by the teacher. Store concise learner-visible explanations, worked examples, corrective feedback, answer reveals, or walkthroughs here instead of provider chat transcripts.
+
+| Column | Type | Rule |
+| --- | --- | --- |
+| `id` | text PK | Stable artifact ID. |
+| `content` | text | Exact or intentionally concise learner-visible material. |
+| `content_format` | enum/text | `text` or `markdown`. |
+| `created_at` | timestamp | Kernel-assigned persistence time. |
+
+Teaching artifacts are interaction provenance, not evidence. They are immutable and cannot grant readiness, transfer, durability, weakness changes, or FSRS state.
+
 ### `exposure_events`
 
 Append-only durable record of material re-exposure. This stream exists so delayed-retrieval claims do not depend on chat memory.
@@ -190,10 +221,30 @@ Append-only durable record of material re-exposure. This stream exists so delaye
 | `challenge_version` | text/integer/null | Exact challenge version when applicable. |
 | `attempt_id` | FK/null | Related attempt when feedback/solution follows an attempt. |
 | `exposure_type` | enum/text | `explanation_shown`, `answer_revealed`, `worked_example_shown`, `corrective_feedback_shown`, or `solution_walkthrough`. |
-| `source_ref` | text/null | Optional durable reference to the shown material. |
+| `source_ref` | text/null | Optional durable reference to the source of the shown material. |
+| `teaching_artifact_id` | FK/null | Immutable learner-visible material. Null only for historical exposure rows created before teaching-artifact persistence existed. |
 | `occurred_at` | timestamp | Kernel-assigned commit time immediately before the learner receives the material; callers do not supply it. |
 
-Record an exposure only when the shown material meaningfully refreshes the target mechanism, answer, or solution. Generic praise, navigation, or a prompt that does not reveal the target does not count.
+Record an exposure only when the shown material meaningfully refreshes the target mechanism, answer, or solution. Generic praise, navigation, or a prompt that does not reveal the target does not count. New exposure writes must persist the teaching artifact in the same transaction as the exposure rows; historical rows without an artifact remain valid provenance but do not support claims about the exact material shown.
+
+### `revision_notes`
+
+Profile-local generated study snapshots. They are explicitly derived artifacts, not learner truth.
+
+| Column | Type | Rule |
+| --- | --- | --- |
+| `id` | text PK | Stable generated-note ID. |
+| `scope_kind` | enum/text | `profile`, `goal`, `concept`, `objective`, `session`, `current_focus`, or `focus_episode`. |
+| `scope_json` | JSON/text | Normalized authoritative scope used for derivation. |
+| `title` | text | Learner-facing note title. |
+| `markdown` | text | Persisted generated revision artifact. |
+| `source_state_json` | JSON/text | Source high-water values used to detect later relevant learner-state changes. |
+| `source_refs_json` | JSON/text | Attempts, evidence, exposures, teaching artifacts, challenges, concepts, and knowledge references used by the bounded context. |
+| `generated_at` | timestamp | Snapshot generation time. |
+
+Regeneration creates a new snapshot from a fresh `RevisionNoteContext`; old snapshots remain readable and become stale when relevant source high-water values change. `current_focus` is a request alias: context derivation resolves it to the active stable `focus_episode`, so a saved Day 1 note still refers to that Day 1 episode after Day 2 becomes active. Focus-episode contexts use the episode's resolved objective snapshot and activation/closure window, so prerequisite work performed during that phase is eligible without pulling later work from another phase.
+
+`saveRevisionNote(...)` re-derives the complete canonical context at the same scope/window and rejects modified or stale caller context. The persisted source state and source references always come from that kernel-derived context, never caller-supplied provenance fields. Generating, reading, or exporting a note never changes evidence, projections, weaknesses, review cards, or FSRS.
 
 ### `evidence_events`
 
@@ -837,12 +888,15 @@ recordExposure(
     attemptId?,
     objectiveIds: [...],
     exposureType,
-    sourceRef?
+    sourceRef?,
+    teachingMaterial: { content, format? }
   }
 )
 ```
 
-Call this before showing an explanation, answer, worked example, corrective feedback, or solution walkthrough that materially refreshes the listed objectives. The kernel assigns `occurred_at` from its own clock and persists one `exposure_event` per objective. If `attemptId` is present, the kernel validates that the scoped objectives belong to the frozen challenge targets. Post-attempt feedback therefore resets the future durability delay without changing the retrieval validity of the already-submitted attempt.
+Prepare the exact learner-visible material first, then call this immediately before showing it. In one transaction the kernel stores one immutable `teaching_artifact` and links every objective-specific `exposure_event` to it. The kernel assigns `occurred_at` from its own clock. If `attemptId` is present, the kernel validates that the scoped objectives belong to the frozen challenge targets. Post-attempt feedback therefore resets future durability delay without changing retrieval validity of the already-submitted attempt.
+
+Old exposure rows may have no teaching artifact. Treat them as proof that an exposure occurred, not proof of the exact wording/content that was shown.
 
 ### 6. Submit learner work
 
@@ -908,6 +962,27 @@ complete
 ```
 
 A fresh compatible agent must be able to resume solely from persisted kernel state. Replacing ChatGPT with another teacher must not require learner-state migration or recovery of the previous provider's private conversation history.
+
+### 10. Derive and persist personalized revision notes
+
+```text
+getRevisionNoteContext({ scope, maxInteractions? })
+→ bounded RevisionNoteContext
+
+saveRevisionNote({ context, markdown, title? })
+→ persisted revision-note snapshot
+
+getRevisionNote(noteId)
+listRevisionNotes()
+```
+
+Supported scopes are provider-neutral and authoritative: profile, goal, concept, objective, session, current durable study focus, and a stable historical `focus_episode`. `current_focus` resolves the active episode and returns that stable episode scope. A fresh teacher can use `listGoalStudyFocusEpisodes(goalId)` to resolve a prior curriculum phase by its persisted label/ID; no day label or objective mapping is hard-coded in the note system.
+
+`RevisionNoteContext` is a bounded read model over frozen challenge surfaces, actual learner responses, effective evidence/rationale/errors, current weaknesses/projections, hints, exposure provenance, available teaching artifacts, and concept/knowledge references. Focus-episode contexts use the episode's resolved target/prerequisite snapshot and its activation/closure window. The context includes source high-water metadata and limitations when historical exposure material cannot be recovered. It must not read provider conversation history.
+
+The teacher may turn this context into concise learner-facing Markdown and persist it with `saveRevisionNote`. Save re-derives the complete canonical context at the original `maxInteractions` bound and rejects any modified or stale context. The kernel persists provenance from that re-derived context rather than caller-provided `sourceRefs`. Reading a saved snapshot reports whether its authoritative sources have changed since generation.
+
+A revision note is not evidence. If displaying its answer-bearing content during an active assessable interaction constitutes teaching exposure, use the normal `recordExposure(...)` lifecycle immediately before display; never count note viewing as retrieval evidence by itself.
 
 ## V1 stop line
 

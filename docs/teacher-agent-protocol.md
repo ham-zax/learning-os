@@ -171,7 +171,7 @@ The teacher may choose explanation style, challenge wording, questioning strateg
 These rules are learner-facing execution boundaries, not new kernel state:
 
 1. **Visible teaching is the teaching.** Hidden reasoning, tool output, drafts, or planned wording do not count as learner-visible explanation and must never justify a `*_shown` exposure event.
-2. **Couple exposure to delivery.** Construct the exact answer-bearing material first, record the matching hint/exposure immediately before learner-visible emission, then emit it without unrelated tool/state work in between. Never record exposure for material that is not actually shown.
+2. **Couple exposure to delivery.** Construct the exact answer-bearing material first, pass that material to `recordExposure(...)` so Learning OS persists the immutable teaching artifact and exposure together, then emit it immediately without unrelated tool/state work in between. Never record exposure for material that is not actually shown.
 3. **Stop after a real question.** When asking the learner to predict, explain, trace, design, debug, implement, or reconstruct, end the learner-visible turn after that prompt. Do not append hints, solution fragments, or the next teaching move.
 4. **Clarify without contaminating the target.** A brief definition or clarification may occur during an active attempt when it does not reveal target reasoning. Do not record it as a hint/exposure or target weakness. If the clarification would reveal target reasoning, use the normal hint/exposure lifecycle instead.
 5. **Teach when interrogation has stopped being useful.** If the learner says "I don't know" or a foundational gap is already clear, do not keep probing advanced criteria merely to accumulate failures. Finish the honest assessment, teach the minimum missing model, then ask for reconstruction.
@@ -341,7 +341,7 @@ Interview is only a delivery context. Do not run a separate generic ChatGPT inte
 
 After the current interaction episode has reached cognitive closure, use Learning OS to obtain the authoritative next move. For ordinary study orchestration, call `getTodayMission(...)` with the **current remaining session minutes** and `maxItems: 1`. The planner automatically resolves any durable goal study focus; pass `focusObjectiveIds` only for an intentional per-call override. Recompute after every closed episode so the just-recorded evidence can change selection.
 
-When the learner explicitly enters a curriculum/study phase such as "Day 1", persist that generic phase intent with `setGoalStudyFocus({ goalId, label, objectiveIds })`. Use the active goal-objective IDs supplied by the confirmed curriculum/reference; do not infer competence from the phase label. Keep the focus until the learner explicitly completes, leaves, or changes that phase, then call `clearGoalStudyFocus(goalId)`. A fresh teacher must recover this through `getPreparationContext(goalId).studyFocus`, not previous chat memory. Study focus is orchestration intent only: it never becomes readiness/evidence/FSRS state and does not override true prerequisites, due retrieval, recurring/retest weaknesses, required transfer, or other higher-authority selector reasons.
+When the learner explicitly enters a curriculum/study phase such as "Day 1", persist that generic phase intent with `setGoalStudyFocus({ goalId, label, objectiveIds })`. Use the active goal-objective IDs supplied by the confirmed curriculum/reference; do not infer competence from the phase label. Learning OS snapshots the resolved prerequisite/foundation closure in a stable study-focus episode. Keep the focus until the learner explicitly completes, leaves, or changes that phase, then call `clearGoalStudyFocus(goalId)`, which closes the episode rather than deleting its history. A fresh teacher recovers the active episode through `getPreparationContext(goalId).studyFocus` and historical phases through `listGoalStudyFocusEpisodes(goalId)`, never previous chat memory. Study focus is orchestration intent only: it never becomes readiness/evidence/FSRS state and does not override true prerequisites, due retrieval, recurring/retest weaknesses, required transfer, or other higher-authority selector reasons.
 
 Obtaining that recommendation is allowed before learner confirmation; opening another attempt is not. When a move is returned:
 
@@ -354,6 +354,28 @@ Obtaining that recommendation is allowed before learner confirmation; opening an
 If the learner gives an unambiguous confirmation, execute that already-selected move without asking again. An existing instruction such as "keep going" may serve as that confirmation until the learner pauses or redirects. If the learner requests explanation, another example, a pause, or a different direction, preserve agency and exposure semantics; route any request that changes what work comes next through the responsible Learning OS owner.
 
 Do not derive a shadow next-action policy such as "guided means another unaided variant." The selector/session/interview/today owner chooses **which** move is next; the teacher chooses how to express and instantiate it.
+
+## Personalized revision notes
+
+When the learner asks for a revision note from prior Learning OS work, derive it from public profile-local state rather than chat memory:
+
+```text
+resolve requested scope
+→ kernel.getRevisionNoteContext({ scope })
+→ write concise personalized Markdown from that context
+→ kernel.saveRevisionNote({ context, markdown })
+→ show the persisted snapshot
+```
+
+Supported generic scopes include profile, goal, concept, objective, session, `current_focus`, and historical `focus_episode`. `current_focus` resolves to the active stable episode. For a request such as “make my Day 1 note” after Day 1 has closed, use `listGoalStudyFocusEpisodes(goalId)` to resolve the persisted phase label/ID, then request the corresponding `focus_episode`; never hard-code curriculum day names or objective sets in the note generator.
+
+Use only context-supported sections. Prefer the learner's actual weak points, observed errors, challenge examples, corrected mental models, and short recall prompts over reproducing an entire lesson. Do not surface readiness enums, evidence IDs, attempt IDs, scheduler internals, or database details in ordinary learner-facing prose. Pass the returned `RevisionNoteContext` to `saveRevisionNote(...)` unchanged except for the generated Markdown/title; the kernel rejects modified or stale context and owns persisted provenance.
+
+Historical exposure rows may report `materialStatus: historical_unavailable`. In that case, do not claim to recover the exact prior explanation. You may synthesize a useful explanation from effective evidence, frozen challenge/rubric information, and reusable concept references, but keep that distinction truthful.
+
+Persist generated notes as derived snapshots. A stale note remains readable; regenerate from a fresh `RevisionNoteContext` when newer relevant source state exists. Creating, reading, or exporting a note never changes mastery-related state.
+
+If showing a revision note overlaps an active assessable objective and reveals answer-bearing material, record the note Markdown with the normal exposure lifecycle immediately before display. Viewing a note is teaching exposure when applicable, never retrieval evidence by itself.
 
 ## Interview signal feedback
 

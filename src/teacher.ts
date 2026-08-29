@@ -3,6 +3,9 @@ import {
   clearGoalStudyFocus,
   createSession,
   getGoalObjectives,
+  getStudyFocusEpisode,
+  listGoalStudyFocusEpisodes,
+  resolveGoalStudyFocusObjectiveClosure,
   setGoalObjective,
   setGoalStudyFocus,
 } from "./db/database.js";
@@ -40,11 +43,27 @@ import type { ReviseEvidenceInput } from "./kernel/evidence.js";
 import type { AssessmentResultInput } from "./db/types.js";
 import { getTodayMission, resolveRequestedChallenge } from "./plan/today.js";
 import type { RequestedChallengeInput, TodayMissionInput } from "./plan/today.js";
-import type { SetGoalObjectiveInput, SetGoalStudyFocusInput } from "./db/database.js";
+import type { SetGoalObjectiveInput } from "./db/database.js";
 import {
   getDurablePreparationContext,
   listDurablePreparationContexts,
 } from "./onboarding/apply.js";
+import {
+  getRevisionNote,
+  getRevisionNoteContext,
+  listRevisionNotes,
+  saveRevisionNote,
+} from "./revision-notes.js";
+import type {
+  RevisionNoteContextInput,
+  SaveRevisionNoteInput,
+} from "./revision-notes.js";
+
+export interface SetGoalStudyFocusInput {
+  goalId: string;
+  label?: string | null;
+  objectiveIds: readonly string[];
+}
 
 /**
  * Bind the provider-neutral Learning OS kernel to one database handle.
@@ -61,14 +80,29 @@ export function createTeacherKernel(db: Database.Database) {
     listPreparationContexts: () => listDurablePreparationContexts(db),
     getPreparationContext: (goalId: string) => getDurablePreparationContext(db, goalId),
     setGoalObjective: (input: SetGoalObjectiveInput) => setGoalObjective(db, input),
-    setGoalStudyFocus: (input: SetGoalStudyFocusInput) => setGoalStudyFocus(db, input),
+    setGoalStudyFocus: (input: SetGoalStudyFocusInput) =>
+      setGoalStudyFocus(db, {
+        ...input,
+        resolvedObjectiveIds: resolveGoalStudyFocusObjectiveClosure(
+          db,
+          input.goalId,
+          input.objectiveIds,
+        ),
+      }),
     clearGoalStudyFocus: (goalId: string) => clearGoalStudyFocus(db, goalId),
+    getStudyFocusEpisode: (episodeId: string) => getStudyFocusEpisode(db, episodeId),
+    listGoalStudyFocusEpisodes: (goalId: string) => listGoalStudyFocusEpisodes(db, goalId),
     getGoalObjectives: (goalId: string, includeInactive = false) =>
       getGoalObjectives(db, goalId, { includeInactive }),
     listCapabilities: () => listCapabilities(db),
     createLearningObjective: (input: LearningObjectiveInput) =>
       createLearningObjective(db, input),
     getLearningObjective: (objectiveId: string) => getLearningObjective(db, objectiveId),
+    getRevisionNoteContext: (input: RevisionNoteContextInput) =>
+      getRevisionNoteContext(db, input),
+    saveRevisionNote: (input: SaveRevisionNoteInput) => saveRevisionNote(db, input),
+    getRevisionNote: (noteId: string) => getRevisionNote(db, noteId),
+    listRevisionNotes: () => listRevisionNotes(db),
     createSession: (topicId: string, mode: DeliveryContext) =>
       createSession(db, { topicId, mode }),
     getChallenge: (challengeId: string, version: number) =>

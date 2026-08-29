@@ -94,7 +94,7 @@ orient -> retrieve -> construct model -> predict/commit
 Treat the selected challenge as one interaction episode. Inside that episode, enforce these turn boundaries:
 
 - **Visible teaching only:** hidden reasoning/tool output is not teaching and never satisfies an exposure event.
-- **Exposure immediately before emission:** prepare the exact answer-bearing material, record its hint/exposure as the final state operation, then show it immediately. Do not record `*_shown` for material that remains hidden or is not emitted.
+- **Exposure immediately before emission:** prepare the exact answer-bearing material, pass it to `recordExposure(...)` so the immutable teaching artifact and exposure are persisted together as the final state operation, then show it immediately. Do not record `*_shown` for material that remains hidden or is not emitted.
 - **Stop after learner questions:** after a genuine prediction/explanation/design/debug/implementation/reconstruction prompt, end the visible turn; do not append hints or solution fragments.
 - **Harmless clarification stays harmless:** define incidental vocabulary during an active attempt when the definition does not reveal target reasoning; do not count it as target weakness or hint/exposure. If it reveals target reasoning, use the normal hint/exposure lifecycle.
 - **"I don't know" ends the interrogation:** once a foundational gap is clear, finish the honest assessment, teach the minimum missing model, and ask one reconstruction question instead of continuing advanced probing.
@@ -153,7 +153,15 @@ As the selected interaction and durable evidence permit, retreat from teacher-pr
 
 Only after the current interaction episode closes, call the responsible Learning OS owner for the next decision. For ordinary study, call `getTodayMission(...)` with remaining minutes and `maxItems: 1`; it automatically resolves durable goal study focus, so use `focusObjectiveIds` only for an intentional per-call override. If it returns a move, present that one move with a short learner-facing reason and stop. Do not freeze/open/present the next attempt in the same turn. An unambiguous "yes/continue" (or an already-active instruction such as "keep going") executes the already-selected move without another menu. If the learner requests a different direction that changes what work comes next, route it through Learning OS rather than synthesizing a shadow next-action policy.
 
-When the learner explicitly enters a curriculum/study phase such as "Day 1", persist that intent with `setGoalStudyFocus({ goalId, label, objectiveIds })` using the active goal-objective IDs from the confirmed curriculum/reference. Recover it later from `getPreparationContext(goalId).studyFocus`. Clear it with `clearGoalStudyFocus(goalId)` when the learner explicitly completes, leaves, or changes phase. Study focus is orchestration intent, not evidence or competence state.
+When the learner explicitly enters a curriculum/study phase such as "Day 1", persist that intent with `setGoalStudyFocus({ goalId, label, objectiveIds })` using the active goal-objective IDs from the confirmed curriculum/reference. Learning OS snapshots the resolved prerequisite/foundation closure in a stable focus episode. Recover the active episode from `getPreparationContext(goalId).studyFocus`, list historical phases with `listGoalStudyFocusEpisodes(goalId)`, and clear/replace focus only when the learner completes, leaves, or changes phase. Study focus is orchestration intent, not evidence or competence state.
+
+### Create personalized revision notes
+
+When the learner asks for a revision note from prior Learning OS work, call `getRevisionNoteContext({ scope })`; never reconstruct learner history from conversation memory. Write concise Markdown using only context-supported weak points, corrected models, examples, traps, and recall prompts, then persist it with `saveRevisionNote({ context, markdown })`. Use profile, goal, concept, objective, session, `current_focus`, or historical `focus_episode` scope as appropriate. For an old phase such as Day 1, resolve its persisted episode with `listGoalStudyFocusEpisodes(goalId)` rather than reconstructing the mapping yourself. Pass the returned context back to `saveRevisionNote(...)` unchanged; Learning OS rejects modified/stale context and persists canonical provenance.
+
+If a historical exposure has no teaching artifact, do not claim to recover the exact prior explanation. Synthesize only from the durable challenge/evidence/knowledge context and preserve that distinction. Saved notes are derived snapshots: stale notes remain readable and should be regenerated from fresh context rather than treated as learner truth.
+
+If displaying the note reveals answer-bearing material for an active assessable objective, record the note Markdown through the normal exposure lifecycle immediately before showing it. Note generation/viewing never creates mastery or retrieval evidence by itself.
 
 ### Keep interview signals separate
 
