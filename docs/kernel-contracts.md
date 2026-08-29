@@ -124,7 +124,7 @@ Durable history of explicit curriculum/study phases. An episode preserves what a
 | `opened_at` | timestamp | Focus activation time. |
 | `closed_at` | timestamp/null | Set once when the learner completes, leaves, or replaces the focus. |
 
-At most one episode may be active for a goal. `setGoalStudyFocus(...)` opens or reuses that episode; replacing focus closes the prior episode and opens another; `clearGoalStudyFocus(...)` closes the active episode. Repeating the same active focus is idempotent. Migration backfills any already-active legacy focus into an episode and resolves its prerequisite/foundation objective closure immediately, preserving the original focus activation timestamp.
+At most one episode may be active for a goal. `setGoalStudyFocus(...)` opens or reuses that episode; replacing focus closes the prior episode and opens another; `clearGoalStudyFocus(...)` closes the active episode. Repeating the same active focus is idempotent. Pre-v13 focus/revision schemas are intentionally unsupported; recreate those learner profiles instead of upgrading them.
 
 `study_focus_episodes` is the single runtime owner of curriculum/session focus. Focus episodes are orchestration/history metadata, not competence state. `getPreparationContext(goalId).studyFocus` exposes the active episode ID, target IDs, resolved objective IDs, and activation time. `getTodayMission(...)` reads that active episode automatically unless the caller supplies an intentional per-call override. `listGoalStudyFocusEpisodes(goalId)` and `getStudyFocusEpisode(id)` expose historical phases to a fresh teacher without chat memory.
 

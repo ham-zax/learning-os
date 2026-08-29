@@ -36,7 +36,7 @@ import type {
   InitialDiagnosticKind,
 } from "./types.js";
 
-const CURRENT_VERSION = 12;
+const CURRENT_SCHEMA_VERSION = 13;
 
 // ─── Schema DDL ──────────────────────────────────────────────────────────────
 
@@ -1072,18 +1072,7 @@ const migrations: Migration[] = [
     },
   },
   {
-    version: 9,
-    up: (db) => {
-      db.transaction(() => {
-        db.exec(`
-          ALTER TABLE goal_preparation ADD COLUMN active_focus_label TEXT;
-          ALTER TABLE goal_preparation ADD COLUMN active_focus_objective_ids TEXT NOT NULL DEFAULT '[]';
-        `);
-      })();
-    },
-  },
-  {
-    version: 10,
+    version: CURRENT_SCHEMA_VERSION,
     up: (db) => {
       db.transaction(() => {
         db.exec(`
@@ -1112,50 +1101,14 @@ const migrations: Migration[] = [
             SELECT RAISE(ABORT, 'teaching artifacts are immutable');
           END;
 
-          CREATE TABLE revision_notes (
-            id                TEXT PRIMARY KEY,
-            scope_kind        TEXT NOT NULL CHECK (
-              scope_kind IN ('profile', 'goal', 'concept', 'objective', 'session', 'current_focus')
-            ),
-            scope_json        TEXT NOT NULL,
-            title             TEXT NOT NULL,
-            markdown          TEXT NOT NULL,
-            source_state_json TEXT NOT NULL,
-            source_refs_json  TEXT NOT NULL,
-            generated_at      TEXT NOT NULL
-          );
-
-          CREATE INDEX idx_revision_notes_generated
-            ON revision_notes(generated_at, id);
-
-          CREATE TRIGGER revision_notes_no_update
-          BEFORE UPDATE ON revision_notes
-          BEGIN
-            SELECT RAISE(ABORT, 'revision note snapshots are immutable');
-          END;
-
-          CREATE TRIGGER revision_notes_no_delete
-          BEFORE DELETE ON revision_notes
-          BEGIN
-            SELECT RAISE(ABORT, 'revision note snapshots are immutable');
-          END;
-        `);
-      })();
-    },
-  },
-  {
-    version: 11,
-    up: (db) => {
-      db.transaction(() => {
-        db.exec(`
           CREATE TABLE study_focus_episodes (
-            id                          TEXT PRIMARY KEY,
-            goal_id                     TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
-            label                       TEXT,
-            target_objective_ids        TEXT NOT NULL,
-            resolved_objective_ids      TEXT NOT NULL,
-            opened_at                   TEXT NOT NULL,
-            closed_at                   TEXT
+            id                     TEXT PRIMARY KEY,
+            goal_id                TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            label                  TEXT,
+            target_objective_ids   TEXT NOT NULL,
+            resolved_objective_ids TEXT NOT NULL,
+            opened_at              TEXT NOT NULL,
+            closed_at              TEXT
           );
 
           CREATE INDEX idx_study_focus_episodes_goal_time
@@ -1163,26 +1116,6 @@ const migrations: Migration[] = [
           CREATE UNIQUE INDEX idx_study_focus_episodes_active_goal
             ON study_focus_episodes(goal_id)
             WHERE closed_at IS NULL;
-
-          INSERT INTO study_focus_episodes (
-            id, goal_id, label, target_objective_ids, resolved_objective_ids,
-            opened_at, closed_at
-          )
-          SELECT
-            'focus-' || lower(hex(randomblob(16))),
-            goal_id,
-            active_focus_label,
-            active_focus_objective_ids,
-            active_focus_objective_ids,
-            updated_at,
-            NULL
-          FROM goal_preparation
-          WHERE active_focus_objective_ids <> '[]';
-
-          DROP TRIGGER revision_notes_no_update;
-          DROP TRIGGER revision_notes_no_delete;
-          DROP INDEX idx_revision_notes_generated;
-          ALTER TABLE revision_notes RENAME TO revision_notes_v10;
 
           CREATE TABLE revision_notes (
             id                TEXT PRIMARY KEY,
@@ -1200,17 +1133,6 @@ const migrations: Migration[] = [
             generated_at      TEXT NOT NULL
           );
 
-          INSERT INTO revision_notes (
-            id, scope_kind, scope_json, title, markdown,
-            source_state_json, source_refs_json, generated_at
-          )
-          SELECT
-            id, scope_kind, scope_json, title, markdown,
-            source_state_json, source_refs_json, generated_at
-          FROM revision_notes_v10;
-
-          DROP TABLE revision_notes_v10;
-
           CREATE INDEX idx_revision_notes_generated
             ON revision_notes(generated_at, id);
 
@@ -1225,34 +1147,6 @@ const migrations: Migration[] = [
           BEGIN
             SELECT RAISE(ABORT, 'revision note snapshots are immutable');
           END;
-        `);
-
-        const backfilled = db
-          .prepare(`SELECT id, goal_id, target_objective_ids FROM study_focus_episodes`)
-          .all() as Array<{ id: string; goal_id: string; target_objective_ids: string }>;
-        const updateResolved = db.prepare(
-          `UPDATE study_focus_episodes SET resolved_objective_ids = ? WHERE id = ?`,
-        );
-        for (const episode of backfilled) {
-          const targets = JSON.parse(episode.target_objective_ids) as unknown;
-          if (!Array.isArray(targets) || targets.some((value) => typeof value !== "string")) {
-            throw new Error(`Invalid backfilled study focus targets: ${episode.id}`);
-          }
-          updateResolved.run(
-            JSON.stringify(resolveGoalStudyFocusObjectiveClosure(db, episode.goal_id, targets)),
-            episode.id,
-          );
-        }
-      })();
-    },
-  },
-  {
-    version: 12,
-    up: (db) => {
-      db.transaction(() => {
-        db.exec(`
-          ALTER TABLE goal_preparation DROP COLUMN active_focus_label;
-          ALTER TABLE goal_preparation DROP COLUMN active_focus_objective_ids;
         `);
       })();
     },
@@ -1299,6 +1193,11 @@ export function createDatabase(dbPath: string): Database.Database {
  */
 export function migrate(db: Database.Database): void {
   const currentVersion = db.pragma("user_version", { simple: true }) as number;
+  if (currentVersion >= 9 && currentVersion < CURRENT_SCHEMA_VERSION) {
+    throw new Error(
+      `Unsupported pre-v${CURRENT_SCHEMA_VERSION} learner database. Recreate the learner profile instead of upgrading it.`,
+    );
+  }
 
   for (const migration of migrations) {
     if (migration.version > currentVersion) {
