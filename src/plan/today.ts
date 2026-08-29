@@ -1,5 +1,10 @@
 import type Database from "better-sqlite3";
-import { getGoalObjectives, getGoalPreparation, getTopic } from "../db/database.js";
+import {
+  getActiveGoalStudyFocusEpisode,
+  getGoalObjectives,
+  getGoalPreparation,
+  getTopic,
+} from "../db/database.js";
 import type {
   DeliveryContext,
   GoalObjective,
@@ -613,9 +618,9 @@ export function getTodayMission(
   const eligibleRetestKeys = new Set(input.retestEligibleWeaknessKeys ?? []);
   const goalObjectives = getGoalObjectives(db, input.goalId);
   const activeObjectiveIds = new Set(goalObjectives.map((config) => config.objective_id));
-  const preparation = getGoalPreparation(db, input.goalId);
+  const activeFocus = getActiveGoalStudyFocusEpisode(db, input.goalId);
   const focusTargetObjectiveIds = new Set(
-    input.focusObjectiveIds ?? preparation?.active_focus_objective_ids ?? [],
+    input.focusObjectiveIds ?? activeFocus?.target_objective_ids ?? [],
   );
   for (const objectiveId of focusTargetObjectiveIds) {
     if (!activeObjectiveIds.has(objectiveId)) {

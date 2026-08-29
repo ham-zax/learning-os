@@ -106,13 +106,9 @@ Confirmed goal-level preparation context that must survive replacement of the co
 | `minutes_per_day` | integer/null | Normal per-day orchestration budget; does not affect FSRS. |
 | `days_per_week` | integer/null | Optional availability context, 1–7. |
 | `minutes_per_week` | integer/null | Optional weekly orchestration budget. |
-| `active_focus_label` | text/null | Optional learner-facing label for the current curriculum/study phase. |
-| `active_focus_objective_ids` | JSON/text | Active goal-objective IDs that define the current study focus; empty means no durable focus. |
 | `confirmed_at` | timestamp | Explicit learner-confirmation time. |
 | `created_at` | timestamp | Persistence creation time. |
 | `updated_at` | timestamp | Planning-metadata update time. |
-
-`active_focus_label` and `active_focus_objective_ids` are the current-focus projection used by orchestration. `setGoalStudyFocus(...)` also opens or reuses a durable `study_focus_episode`; `clearGoalStudyFocus(...)` closes that episode before clearing the projection. Focus never grants readiness, changes evidence, activates/deactivates goal objectives, or alters FSRS state.
 
 ### `study_focus_episodes`
 
@@ -128,9 +124,9 @@ Durable history of explicit curriculum/study phases. An episode preserves what a
 | `opened_at` | timestamp | Focus activation time. |
 | `closed_at` | timestamp/null | Set once when the learner completes, leaves, or replaces the focus. |
 
-At most one episode may be active for a goal. Replacing focus closes the prior episode and opens another; clearing focus closes the active episode. Repeating the same active focus is idempotent. Migration backfills any already-active focus into an episode and resolves its prerequisite/foundation objective closure immediately, preserving the original focus activation timestamp.
+At most one episode may be active for a goal. `setGoalStudyFocus(...)` opens or reuses that episode; replacing focus closes the prior episode and opens another; `clearGoalStudyFocus(...)` closes the active episode. Repeating the same active focus is idempotent. Migration backfills any already-active legacy focus into an episode and resolves its prerequisite/foundation objective closure immediately, preserving the original focus activation timestamp.
 
-Focus episodes are orchestration/history metadata, not competence state. `getPreparationContext(goalId).studyFocus` exposes the active episode ID, target IDs, resolved objective IDs, and activation time. `listGoalStudyFocusEpisodes(goalId)` and `getStudyFocusEpisode(id)` expose historical phases to a fresh teacher without chat memory.
+`study_focus_episodes` is the single runtime owner of curriculum/session focus. Focus episodes are orchestration/history metadata, not competence state. `getPreparationContext(goalId).studyFocus` exposes the active episode ID, target IDs, resolved objective IDs, and activation time. `getTodayMission(...)` reads that active episode automatically unless the caller supplies an intentional per-call override. `listGoalStudyFocusEpisodes(goalId)` and `getStudyFocusEpisode(id)` expose historical phases to a fresh teacher without chat memory.
 
 Do not persist raw resumes, job descriptions, chat transcripts, provider identifiers, or the full draft proposal here. Resume/JD/self-report claims may shape this confirmed plan but cannot create evidence, review events/cards, misconceptions, or non-unknown objective projections.
 
@@ -839,7 +835,7 @@ getTodayMission({
 
 `availableMinutes` is the outer daily budget on the first call and the current remaining session budget on later episode-boundary replans. A compatible episode-by-episode teacher should pass `maxItems: 1`, execute and close that selected episode, persist resulting evidence, then call again with the new remaining budget so selection sees current projections rather than a stale full-session script.
 
-When `focusObjectiveIds` is omitted, `getTodayMission(...)` resolves the durable goal study focus from `goal_preparation`. Supplying `focusObjectiveIds` is a per-call override and does not rewrite the durable focus.
+When `focusObjectiveIds` is omitted, `getTodayMission(...)` resolves the durable goal study focus from the active `study_focus_episode`. Supplying `focusObjectiveIds` is a per-call override and does not rewrite the durable focus.
 
 An active study focus prefers its objective set and the prerequisite/foundation closure needed to unlock that set. It prevents unrelated pending baseline diagnostics from winning merely because every goal objective is globally active. Higher-authority selection policy still escapes the focus: due retrieval, recurring/retest weakness, required transfer, prerequisite blocking, importance/urgency, recent contradictory evidence, and blocking misconceptions retain their existing authority. Focus never changes evidence, readiness, transfer, durability, review cards, prerequisites, or goal-objective activation.
 

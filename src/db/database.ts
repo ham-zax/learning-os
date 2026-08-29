@@ -36,7 +36,7 @@ import type {
   InitialDiagnosticKind,
 } from "./types.js";
 
-const CURRENT_VERSION = 11;
+const CURRENT_VERSION = 12;
 
 // ─── Schema DDL ──────────────────────────────────────────────────────────────
 
@@ -1246,6 +1246,17 @@ const migrations: Migration[] = [
       })();
     },
   },
+  {
+    version: 12,
+    up: (db) => {
+      db.transaction(() => {
+        db.exec(`
+          ALTER TABLE goal_preparation DROP COLUMN active_focus_label;
+          ALTER TABLE goal_preparation DROP COLUMN active_focus_objective_ids;
+        `);
+      })();
+    },
+  },
 ];
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -1533,11 +1544,10 @@ export function getGoalPreparation(
   return row === undefined ? undefined : GoalPreparationSchema.parse(row);
 }
 
-export interface PersistGoalStudyFocusInput {
+export interface SetGoalStudyFocusInput {
   goalId: string;
   label?: string | null;
   objectiveIds: readonly string[];
-  resolvedObjectiveIds: readonly string[];
 }
 
 export function getStudyFocusEpisode(
@@ -1584,7 +1594,7 @@ function sameIds(left: readonly string[], right: readonly string[]): boolean {
   return left.every((value) => rightSet.has(value));
 }
 
-export function resolveGoalStudyFocusObjectiveClosure(
+function resolveGoalStudyFocusObjectiveClosure(
   db: Database.Database,
   goalId: string,
   focusObjectiveIds: readonly string[],
@@ -1644,107 +1654,69 @@ export function resolveGoalStudyFocusObjectiveClosure(
 
 export function setGoalStudyFocus(
   db: Database.Database,
-  input: PersistGoalStudyFocusInput,
-): GoalPreparation {
-  const preparation = getGoalPreparation(db, input.goalId);
-  if (!preparation) {
+  input: SetGoalStudyFocusInput,
+): StudyFocusEpisode {
+  if (!getGoalPreparation(db, input.goalId)) {
     throw new Error(`Goal preparation not found: ${input.goalId}`);
   }
   const objectiveIds = [...new Set(input.objectiveIds)];
-  if (objectiveIds.length === 0) {
-    throw new Error("Study focus requires at least one active goal objective");
-  }
-  const activeObjectiveIds = new Set(
-    getGoalObjectives(db, input.goalId).map((objective) => objective.objective_id),
+  const resolvedObjectiveIds = resolveGoalStudyFocusObjectiveClosure(
+    db,
+    input.goalId,
+    objectiveIds,
   );
-  for (const objectiveId of objectiveIds) {
-    if (!activeObjectiveIds.has(objectiveId)) {
-      throw new Error(`Study focus objective is not active for goal ${input.goalId}: ${objectiveId}`);
-    }
-  }
-
-  const resolvedObjectiveIds = [...new Set(input.resolvedObjectiveIds)];
-  if (resolvedObjectiveIds.length === 0) {
-    throw new Error("Study focus requires at least one resolved objective");
-  }
-  for (const objectiveId of objectiveIds) {
-    if (!resolvedObjectiveIds.includes(objectiveId)) {
-      throw new Error(`Resolved study focus is missing target objective: ${objectiveId}`);
-    }
-  }
-  const objectiveExists = db.prepare(`SELECT 1 FROM learning_objectives WHERE id = ?`);
-  for (const objectiveId of resolvedObjectiveIds) {
-    if (!objectiveExists.get(objectiveId)) {
-      throw new Error(`Resolved study focus objective not found: ${objectiveId}`);
-    }
-  }
-
   const label = input.label?.trim() || null;
+
   return db.transaction(() => {
-    const now = new Date().toISOString();
     const activeEpisode = getActiveGoalStudyFocusEpisode(db, input.goalId);
     if (
       activeEpisode &&
       activeEpisode.label === label &&
       sameIds(activeEpisode.target_objective_ids, objectiveIds)
     ) {
-      db.prepare(
-        `UPDATE goal_preparation
-         SET active_focus_label = ?, active_focus_objective_ids = ?, updated_at = ?
-         WHERE goal_id = ?`,
-      ).run(label, JSON.stringify(objectiveIds), now, input.goalId);
-      return getGoalPreparation(db, input.goalId)!;
+      return activeEpisode;
     }
 
+    const now = new Date().toISOString();
     if (activeEpisode) {
       db.prepare(
         `UPDATE study_focus_episodes SET closed_at = ? WHERE id = ? AND closed_at IS NULL`,
       ).run(now, activeEpisode.id);
     }
 
+    const id = `focus-${randomUUID()}`;
     db.prepare(
       `INSERT INTO study_focus_episodes (
          id, goal_id, label, target_objective_ids, resolved_objective_ids,
          opened_at, closed_at
        ) VALUES (?, ?, ?, ?, ?, ?, NULL)`,
     ).run(
-      `focus-${randomUUID()}`,
+      id,
       input.goalId,
       label,
       JSON.stringify(objectiveIds),
       JSON.stringify(resolvedObjectiveIds),
       now,
     );
-    db.prepare(
-      `UPDATE goal_preparation
-       SET active_focus_label = ?, active_focus_objective_ids = ?, updated_at = ?
-       WHERE goal_id = ?`,
-    ).run(label, JSON.stringify(objectiveIds), now, input.goalId);
-    return getGoalPreparation(db, input.goalId)!;
+    return getStudyFocusEpisode(db, id)!;
   })();
 }
 
 export function clearGoalStudyFocus(
   db: Database.Database,
   goalId: string,
-): GoalPreparation {
+): StudyFocusEpisode | undefined {
   if (!getGoalPreparation(db, goalId)) {
     throw new Error(`Goal preparation not found: ${goalId}`);
   }
   return db.transaction(() => {
-    const now = new Date().toISOString();
     const activeEpisode = getActiveGoalStudyFocusEpisode(db, goalId);
-    if (activeEpisode) {
-      db.prepare(
-        `UPDATE study_focus_episodes SET closed_at = ? WHERE id = ? AND closed_at IS NULL`,
-      ).run(now, activeEpisode.id);
-    }
+    if (!activeEpisode) return undefined;
+    const now = new Date().toISOString();
     db.prepare(
-      `UPDATE goal_preparation
-       SET active_focus_label = NULL, active_focus_objective_ids = '[]', updated_at = ?
-       WHERE goal_id = ?`,
-    ).run(now, goalId);
-    return getGoalPreparation(db, goalId)!;
+      `UPDATE study_focus_episodes SET closed_at = ? WHERE id = ? AND closed_at IS NULL`,
+    ).run(now, activeEpisode.id);
+    return getStudyFocusEpisode(db, activeEpisode.id)!;
   })();
 }
 

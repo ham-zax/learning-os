@@ -362,7 +362,7 @@ The Backend Systems seven-day blueprint says Day 1 focuses on runtime/concurrenc
 
 This is a real planning gap, not a teacher-prompt problem.
 
-The implemented boundary keeps the current focus projection on `goal_preparation` and preserves each explicit phase as a durable `study_focus_episode`:
+The implemented boundary stores each explicit phase directly as a durable `study_focus_episode`:
 
 ```text
 goalId
@@ -373,7 +373,7 @@ resolvedObjectiveIds
 openedAt / closedAt
 ```
 
-The episode survives teacher replacement and phase changes. `getPreparationContext(goalId).studyFocus` exposes the active episode; `listGoalStudyFocusEpisodes(goalId)` exposes closed phases. `getTodayMission(...)` still uses the current focus projection automatically unless the caller deliberately supplies a per-call `focusObjectiveIds` override.
+The episode survives teacher replacement and phase changes. `getPreparationContext(goalId).studyFocus` exposes the active episode; `listGoalStudyFocusEpisodes(goalId)` exposes closed phases. `getTodayMission(...)` reads the active episode automatically unless the caller deliberately supplies a per-call `focusObjectiveIds` override.
 
 An active study focus:
 

@@ -392,8 +392,6 @@ export const GoalPreparationSchema = z.object({
   minutes_per_day: z.number().int().positive().nullable().default(null),
   days_per_week: z.number().int().min(1).max(7).nullable().default(null),
   minutes_per_week: z.number().int().positive().nullable().default(null),
-  active_focus_label: z.string().nullable().default(null),
-  active_focus_objective_ids: jsonArrayOfStrings.default([]),
   confirmed_at: z.string(),
   created_at: z.string(),
   updated_at: z.string(),

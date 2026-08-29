@@ -5,7 +5,6 @@ import {
   getGoalObjectives,
   getStudyFocusEpisode,
   listGoalStudyFocusEpisodes,
-  resolveGoalStudyFocusObjectiveClosure,
   setGoalObjective,
   setGoalStudyFocus,
 } from "./db/database.js";
@@ -43,7 +42,7 @@ import type { ReviseEvidenceInput } from "./kernel/evidence.js";
 import type { AssessmentResultInput } from "./db/types.js";
 import { getTodayMission, resolveRequestedChallenge } from "./plan/today.js";
 import type { RequestedChallengeInput, TodayMissionInput } from "./plan/today.js";
-import type { SetGoalObjectiveInput } from "./db/database.js";
+import type { SetGoalObjectiveInput, SetGoalStudyFocusInput } from "./db/database.js";
 import {
   getDurablePreparationContext,
   listDurablePreparationContexts,
@@ -58,12 +57,6 @@ import type {
   RevisionNoteContextInput,
   SaveRevisionNoteInput,
 } from "./revision-notes.js";
-
-export interface SetGoalStudyFocusInput {
-  goalId: string;
-  label?: string | null;
-  objectiveIds: readonly string[];
-}
 
 /**
  * Bind the provider-neutral Learning OS kernel to one database handle.
@@ -80,15 +73,7 @@ export function createTeacherKernel(db: Database.Database) {
     listPreparationContexts: () => listDurablePreparationContexts(db),
     getPreparationContext: (goalId: string) => getDurablePreparationContext(db, goalId),
     setGoalObjective: (input: SetGoalObjectiveInput) => setGoalObjective(db, input),
-    setGoalStudyFocus: (input: SetGoalStudyFocusInput) =>
-      setGoalStudyFocus(db, {
-        ...input,
-        resolvedObjectiveIds: resolveGoalStudyFocusObjectiveClosure(
-          db,
-          input.goalId,
-          input.objectiveIds,
-        ),
-      }),
+    setGoalStudyFocus: (input: SetGoalStudyFocusInput) => setGoalStudyFocus(db, input),
     clearGoalStudyFocus: (goalId: string) => clearGoalStudyFocus(db, goalId),
     getStudyFocusEpisode: (episodeId: string) => getStudyFocusEpisode(db, episodeId),
     listGoalStudyFocusEpisodes: (goalId: string) => listGoalStudyFocusEpisodes(db, goalId),
