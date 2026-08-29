@@ -257,6 +257,17 @@ function diagnosticBlocksTransfer(state: GoalObjectiveState): boolean {
   return state.diagnosticPending && state.initialDiagnosticKind !== "transfer_check";
 }
 
+function transferEligibleNow(state: GoalObjectiveState): boolean {
+  return (
+    state.config.require_transfer &&
+    state.transferState !== "demonstrated" &&
+    readinessMeets(state.readiness, state.config.target_readiness) &&
+    !state.recentFailure &&
+    !activeWeakness(state) &&
+    !diagnosticBlocksTransfer(state)
+  );
+}
+
 function candidateFor(
   state: GoalObjectiveState,
   urgency: number,
@@ -268,12 +279,7 @@ function candidateFor(
     importance: state.config.importance,
     urgency,
     transfer:
-      !options.suppressTransfer &&
-      !diagnosticBlocksTransfer(state) &&
-      state.config.require_transfer &&
-      state.transferState !== "demonstrated"
-        ? "required"
-        : "none",
+      !options.suppressTransfer && transferEligibleNow(state) ? "required" : "none",
     retestEligibleWeaknessKeys: options.suppressRetest
       ? []
       : eligibleResolvedWeaknesses(state, eligibleRetestKeys),
@@ -752,12 +758,7 @@ export function getTodayMission(
     (deadlineAt !== null ||
       input.transferDeliveryContext === "interview" ||
       input.transferDeliveryContext === "mock");
-  const transferStates = states.filter(
-    (state) =>
-      state.config.require_transfer &&
-      state.transferState !== "demonstrated" &&
-      !diagnosticBlocksTransfer(state),
-  );
+  const transferStates = states.filter(transferEligibleNow);
   const transferPreview =
     transferPressure && transferStates.length > 0 && items.length < itemLimit
       ? selectFittingIntent(

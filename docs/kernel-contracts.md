@@ -148,7 +148,7 @@ Rebuildable current summary for fast reads.
 | `projector_version` | text | Projection-rule version. |
 | `rebuilt_at` | timestamp | Projection build time. |
 
-`transfer_state` and `durability_state` are orthogonal to readiness. They are not later rungs in a single irreversible ladder.
+`transfer_state` and `durability_state` are orthogonal to readiness. They are not later rungs in a single irreversible ladder. For ordinary daily orchestration, however, a goal's required transfer is a completion requirement rather than an immediate-priority flag: transfer becomes selection-eligible only after the objective currently meets that goal's readiness target, has no recent qualifying failure, has no active unresolved weakness, and is not blocked by a pending non-transfer diagnostic.
 
 A convenience display label may map the projection to `unknown`, `exposed`, `guided`, `independent`, `transferable`, or `durable`, but that label is not authoritative storage.
 
@@ -837,7 +837,7 @@ getTodayMission({
 
 When `focusObjectiveIds` is omitted, `getTodayMission(...)` resolves the durable goal study focus from the active `study_focus_episode`. Supplying `focusObjectiveIds` is a per-call override and does not rewrite the durable focus.
 
-An active study focus prefers its objective set and the prerequisite/foundation closure needed to unlock that set. It prevents unrelated pending baseline diagnostics from winning merely because every goal objective is globally active. Higher-authority selection policy still escapes the focus: due retrieval, recurring/retest weakness, required transfer, prerequisite blocking, importance/urgency, recent contradictory evidence, and blocking misconceptions retain their existing authority. Focus never changes evidence, readiness, transfer, durability, review cards, prerequisites, or goal-objective activation.
+An active study focus prefers its objective set and the prerequisite/foundation closure needed to unlock that set. It prevents unrelated pending baseline diagnostics from winning merely because every goal objective is globally active. Higher-authority selection policy still escapes the focus: due retrieval, recurring/retest weakness, prerequisite blocking, importance/urgency, recent contradictory evidence, blocking misconceptions, and required transfer once that transfer is actually selection-eligible retain their existing authority. Focus never changes evidence, readiness, transfer, durability, review cards, prerequisites, or goal-objective activation.
 
 Long `design` and `implementation` episodes require at least 10 remaining minutes before the planner will start them; if they do not fit, the planner may select a shorter eligible objective or leave the remaining budget intentionally unallocated. These are session-budget guards, not FSRS semantics.
 
