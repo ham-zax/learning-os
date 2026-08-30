@@ -61,6 +61,8 @@ import {
   listRevisionNotes,
   saveRevisionNote,
 } from "./revision-notes.js";
+import { getStudyContinuation } from "./study/continuation.js";
+import type { StudyContinuationInput } from "./study/continuation.js";
 import type {
   RevisionNoteContextInput,
   SaveRevisionNoteInput,
@@ -71,10 +73,12 @@ import type {
  *
  * ChatGPT is the preferred V1 teacher client, but nothing in this contract
  * depends on provider conversation IDs, transcripts, or tool state. A fresh
- * compatible teacher can continue from getTodayMission() + resumeSession().
+ * compatible teacher can continue from getStudyContinuation().
  */
 export function createTeacherKernel(db: Database.Database) {
   return {
+    getStudyContinuation: (input: StudyContinuationInput) =>
+      getStudyContinuation(db, input),
     getTodayMission: (input: TodayMissionInput) => getTodayMission(db, input),
     resolveRequestedChallenge: (input: RequestedChallengeInput) =>
       resolveRequestedChallenge(db, input),
