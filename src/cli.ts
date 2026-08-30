@@ -10,6 +10,7 @@
  *   tutor gaps                 Show skill gaps from job-hunter
  *   tutor interview <topic>    Start interview drill
  *   tutor goal <topic>         Configure/list active goal objectives
+ *   tutor continue <topic>     Resume work or select one next action
  *   tutor today <topic>        Build today's evidence-driven mission
  *   tutor onboard              Structured offline onboarding fallback
  *   tutor profile <command>    Create/list/select learner profiles
@@ -95,6 +96,7 @@ import { generateQuizBatch } from "./session/modes/quiz.js";
 import type { ConceptMap, ConceptProposal, ConceptFile } from "./knowledge/types.js";
 import { DeliveryContext, GoalImportance, GoalTargetReadiness } from "./db/types.js";
 import { runOfflineOnboarding } from "./onboarding/cli.js";
+import { getStudyContinuation } from "./study/continuation.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -892,6 +894,117 @@ program
       process.exitCode = 1;
     }
   });
+
+program
+  .command("continue")
+  .description("Resume unfinished work or select the next study action")
+  .argument("<goal>", "Goal/topic ID")
+  .option("-m, --minutes <n>", "Remaining active-study minutes")
+  .option("--context <context>", "Override the main delivery context")
+  .option("--transfer-context <context>", "Override the transfer delivery context")
+  .option(
+    "--retest <weakness-key>",
+    "Make a resolved weakness eligible for retest (repeatable)",
+    (value: string, previous: string[]) => [...previous, value],
+    [] as string[],
+  )
+  .option("--json", "Emit one machine-readable JSON value")
+  .action(
+    (
+      goal: string,
+      opts: {
+        minutes?: string;
+        context?: string;
+        transferContext?: string;
+        retest: string[];
+        json?: boolean;
+      },
+    ) => {
+      const db = openCliDatabase();
+      try {
+        const availableMinutes = opts.minutes === undefined
+          ? undefined
+          : Number(opts.minutes);
+        if (
+          availableMinutes !== undefined &&
+          (!Number.isInteger(availableMinutes) || availableMinutes <= 0)
+        ) {
+          throw new Error("Available minutes must be a positive integer");
+        }
+        const mainDeliveryContext = opts.context === undefined
+          ? undefined
+          : DeliveryContext.parse(opts.context);
+        const transferDeliveryContext = opts.transferContext === undefined
+          ? undefined
+          : DeliveryContext.parse(opts.transferContext);
+        const continuation = getStudyContinuation(db, {
+          goalId: goal,
+          now: new Date().toISOString(),
+          availableMinutes,
+          retestEligibleWeaknessKeys: opts.retest,
+          mainDeliveryContext,
+          transferDeliveryContext,
+        });
+
+        if (opts.json) {
+          console.log(JSON.stringify(continuation));
+          return;
+        }
+
+        switch (continuation.kind) {
+          case "resume": {
+            header("Resume Study");
+            console.log(`  Session: ${continuation.session.session.id}`);
+            console.log(`  Phase: ${continuation.session.phase}`);
+            console.log(`  Pending action: ${continuation.session.pendingAction}`);
+            if (continuation.session.activeChallenge) {
+              console.log(`  Challenge: ${continuation.session.activeChallenge.publicPrompt}`);
+            }
+            if (continuation.additionalResumableSessionIds.length > 0) {
+              console.log(
+                `  Other open sessions: ${continuation.additionalResumableSessionIds.join(", ")}`,
+              );
+            }
+            break;
+          }
+          case "needs_budget": {
+            warn("Remaining active-study minutes are unknown.");
+            if (continuation.suggestedMinutes !== null) {
+              info(
+                `Configured daily suggestion: ${continuation.suggestedMinutes} minutes ` +
+                  "(not assumed remaining).",
+              );
+            }
+            console.log(`Run: tutor continue ${goal} --minutes <n>`);
+            break;
+          }
+          case "recommend": {
+            header("Recommended Next Action");
+            console.log(
+              `  ${continuation.item.kind.toUpperCase()} ` +
+                `${continuation.item.minutes}m  ${continuation.item.objectiveId}`,
+            );
+            console.log(`  ${continuation.item.reason}`);
+            info("No attempt has been opened; accept the recommendation before starting it.");
+            break;
+          }
+          case "no_action": {
+            if (continuation.mission.blocked.length > 0) {
+              warn("No action is available because goal work is prerequisite-blocked.");
+            } else {
+              success("No goal work is currently actionable.");
+            }
+            break;
+          }
+        }
+      } catch (err) {
+        error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+      } finally {
+        db.close();
+      }
+    },
+  );
 
 // tutor <topic> — auto-detect mode
 program
