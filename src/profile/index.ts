@@ -52,6 +52,24 @@ interface ProfilePaths {
   legacyDatabasePath: string;
 }
 
+interface WalCheckpointResult {
+  busy: number;
+  log: number;
+  checkpointed: number;
+}
+
+interface IntegrityCheckResult {
+  integrity_check: string;
+}
+
+export interface ProfileCheckpoint {
+  profile: LearnerProfile;
+  databasePath: string;
+  integrity: "ok";
+  walFramesCheckpointed: number;
+  walFramesRemaining: number;
+}
+
 function profilePaths(options: ProfileStoreOptions = {}): ProfilePaths {
   const dataDir = resolve(options.dataDir ?? "data");
   const profilesDir = join(dataDir, "profiles");
@@ -95,6 +113,12 @@ function managedProfileDirectory(paths: ProfilePaths, profileId: string): string
 
 function managedDatabasePath(paths: ProfilePaths, profileId: string): string {
   return join(managedProfileDirectory(paths, profileId), "tutor.db");
+}
+
+function databasePathForProfile(paths: ProfilePaths, profile: LearnerProfile): string {
+  return profile.source === "legacy"
+    ? paths.legacyDatabasePath
+    : managedDatabasePath(paths, profile.id);
 }
 
 function emptyRegistry(): ProfileRegistry {
@@ -401,12 +425,50 @@ export function openProfileDatabase(
 ): Database.Database {
   const paths = profilePaths(options);
   const profile = resolveProfile(profileId, options);
-  const dbPath =
-    profile.source === "legacy"
-      ? paths.legacyDatabasePath
-      : managedDatabasePath(paths, profile.id);
+  const dbPath = databasePathForProfile(paths, profile);
   if (!existsSync(dbPath)) {
     throw new Error(`Profile database is missing: ${profile.id}`);
   }
   return createDatabase(dbPath);
+}
+
+export function checkpointProfileDatabase(
+  profileId?: string,
+  options: ProfileStoreOptions = {},
+): ProfileCheckpoint {
+  const paths = profilePaths(options);
+  const profile = resolveProfile(profileId, options);
+  const databasePath = databasePathForProfile(paths, profile);
+  if (!existsSync(databasePath)) {
+    throw new Error(`Profile database is missing: ${profile.id}`);
+  }
+
+  const db = createDatabase(databasePath);
+  try {
+    const [checkpoint] = db.pragma("wal_checkpoint(TRUNCATE)") as WalCheckpointResult[];
+    if (!checkpoint || checkpoint.busy !== 0) {
+      throw new Error(`Profile database checkpoint is busy: ${profile.id}`);
+    }
+    const walFramesRemaining = Math.max(0, checkpoint.log - checkpoint.checkpointed);
+    if (walFramesRemaining !== 0) {
+      throw new Error(
+        `Profile database still has ${walFramesRemaining} WAL frame(s): ${profile.id}`,
+      );
+    }
+
+    const integrityRows = db.pragma("integrity_check") as IntegrityCheckResult[];
+    if (integrityRows.length !== 1 || integrityRows[0]?.integrity_check !== "ok") {
+      throw new Error(`Profile database integrity check failed: ${profile.id}`);
+    }
+
+    return {
+      profile,
+      databasePath,
+      integrity: "ok",
+      walFramesCheckpointed: checkpoint.checkpointed,
+      walFramesRemaining,
+    };
+  } finally {
+    db.close();
+  }
 }
