@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented through the learner-facing contract and episode-aware orchestration waves on `main` (`9ef1040` and `4e520748`). Later live use demonstrated that curriculum-phase focus also needs durable orchestration ownership, so active study focus now belongs to `goal_preparation`. The pure `TurnDirective` helper remains skipped; response-segment, reconstruction-checkpoint, and preference persistence remain evidence-gated.
+Implemented through the learner-facing contract and episode-aware orchestration waves on `main` (`9ef1040` and `4e520748`). Later live use demonstrated that curriculum-phase focus also needs durable orchestration ownership, so active and historical study focus now belongs to `study_focus_episodes`. The pure `TurnDirective` helper and response-segment persistence remain skipped. Later fresh-teacher use supplied the missing evidence for two Wave 4 items: a durable reconstruction checkpoint now prevents marked causal repair from closing early, and a small profile-local interaction preference store carries explicit speech/atomic-question settings across teachers.
 
 This design is based on two live Backend Systems learner sessions, the current Learning OS implementation, and the learner's prior systems-first mentor material.
 
@@ -233,7 +233,7 @@ A future adapter may couple persistence and rendering more strongly if live use 
 - reconstructs the corrected model in their own words; or
 - explicitly declines reconstruction.
 
-The current `feedback / present_feedback` session phase can own this first wave. Do not call `completeSessionFeedback()` merely because corrective text was generated.
+The `feedback / present_feedback` session phase remains the owner. Mark answer-bearing causal/foundational repair with `recordExposure(..., requireReconstruction: true)`. The kernel persists `reconstruction_status = required` and refuses `completeSessionFeedback()` until `resolveSessionReconstruction(...)` records reconstruction or explicit learner opt-out.
 
 ## P4. The next attempt opened before learner confirmation
 
@@ -445,11 +445,11 @@ If adaptive pacing is implemented, rebuild it from current evidence/session cont
 
 ## P17. The current teacher API does not record active learning time
 
-Sessions have `started_at`/`ended_at`, and attempts contain a `time_spent_seconds` column, but `SubmitAttemptInput` does not currently accept time spent.
+Sessions have `started_at`/`ended_at`, and attempts contain `time_spent_seconds`. The public attempt/feedback lifecycle now accepts optional `activeTimeSeconds` so a client or learner report can persist reliable active effort when it exists.
 
-Wall-clock session duration is not the same as active study time: the learner may leave a tab open, take a break, or return later.
+Wall-clock session duration is not the same as active study time: the learner may leave a tab open, take a break, or return later. Planner task minutes are reservation estimates, not consumed time.
 
-Use explicit learner budget as authority and treat wall elapsed time as advisory until active-time telemetry has a reliable owner.
+Use the explicit remaining active-study budget as authority. Subtract only reliable measured/reported active time; when it is unknown, do not substitute wall elapsed time or the task estimate.
 
 ## P18. FSRS is being asked the wrong question if used for lesson length
 
@@ -496,7 +496,7 @@ Examples:
 
 These may improve teaching but must never initialize readiness.
 
-Persist only explicit stable preferences if cross-session continuity materially improves. Keep scope explicit: turn, session, project, learning profile, or global.
+Fresh-teacher use demonstrated that a small profile-level subset materially improves continuity. Persist only explicit `input_mode` and `question_chunking` preferences; keep repair-before-transition, concise refinement, and active-time semantics as system rules rather than preferences.
 
 ## P21. Context should be selected, not accumulated
 
@@ -1030,16 +1030,15 @@ Day 2 database correctness / connection pressure
 
 Treat this as **study focus**, not a hard prerequisite chain or competence state.
 
-Persist explicit phase intent on the existing goal-preparation orchestration owner so a fresh teacher can recover it without chat memory. The selector still owns the exact objective: focused targets and the prerequisite/foundation closure needed to unlock them are preferred, while higher-authority rules can escape the focus.
+Persist explicit phase intent in `study_focus_episodes` so a fresh teacher can recover it without chat memory. The planner owns the focus envelope around selector candidates: focused targets and the prerequisite/foundation closure needed to unlock them remain the main forward-progress pool, while only explicit higher-authority exceptions can escape it.
 
-A focus policy allows escape for:
+A focus policy allows:
 
-- true prerequisite blockers and their foundation work;
-- due retrieval;
-- recurring weakness/retest;
-- required transfer or contradictory evidence;
-- learner-requested redirection;
-- deadline/importance pressure.
+- true prerequisite blockers and their foundation work inside the focus closure;
+- unrelated routine due retrieval only as a bounded warm-up, never as the sole `maxItems: 1` move ahead of focus work;
+- recurring/retest weakness or a blocking misconception to interrupt when warranted;
+- required transfer only once it is actually selection-eligible;
+- learner-requested redirection.
 
 This provides continuity without making the curriculum brittle or creating a second scheduler.
 
@@ -1165,9 +1164,9 @@ If speech-mode challenge chunking must survive fresh-agent restarts mid-attempt,
 
 Only then consider append-only learner-response segments tied to the attempt. Do not add them solely for conversational convenience.
 
-### 5. Scoped stable preferences only if required
+### 5. Scoped stable preferences — implemented after restart evidence
 
-Persist only the small set that materially improves fresh-session behavior.
+Persist only explicit profile-local `input_mode` and `question_chunking`. Do not expand this into a general personality/profile system.
 
 ## Do not add yet
 
@@ -1286,11 +1285,12 @@ Keep FSRS unchanged unless retrieval scheduling itself is shown to be wrong.
 
 ## Wave 4 — persistence only for restart gaps
 
-Only if live use shows fresh-agent continuity failures during multi-turn episodes:
+Fresh-agent continuity failures now justify:
 
-- response segments;
-- small scoped preferences;
-- durable reconstruction checkpoint.
+- small scoped interaction preferences;
+- a durable reconstruction checkpoint.
+
+Response segments remain deferred until an actual mid-attempt restart needs partial learner-response persistence.
 
 # Bottom line
 

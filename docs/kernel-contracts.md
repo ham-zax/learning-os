@@ -130,6 +130,14 @@ At most one episode may be active for a goal. `setGoalStudyFocus(...)` opens or 
 
 Do not persist raw resumes, job descriptions, chat transcripts, provider identifiers, or the full draft proposal here. Resume/JD/self-report claims may shape this confirmed plan but cannot create evidence, review events/cards, misconceptions, or non-unknown objective projections.
 
+### `sessions` repair checkpoint
+
+`reconstruction_status` is profile-local interaction state with values `not_required`, `required`, `completed`, or `opted_out`. It is not evidence or mastery. When answer-bearing feedback repairs a causal/foundational error, `recordExposure(..., requireReconstruction: true)` marks the current feedback episode `required` in the same transaction as the exposure. `completeSessionFeedback(...)` must refuse to close that episode until `resolveSessionReconstruction(...)` records either learner reconstruction or explicit opt-out. A replacement teacher therefore cannot lose an unfinished repair merely because the provider conversation changed.
+
+### `interaction_preferences`
+
+A single optional profile-local row stores only explicit stable interaction preferences currently needed for fresh-teacher continuity: `input_mode` (`default` or `speech_to_text`) and `question_chunking` (`default` or `atomic`). The row records `source = learner_explicit` and `updated_at`. Absence of a row means default behavior. Preferences never change evidence, readiness, weaknesses, transfer, durability, review timing, or selection. System invariants such as repair-before-transition and active-time accounting are not preferences.
+
 ### `objective_projections`
 
 Rebuildable current summary for fast reads.
@@ -164,6 +172,7 @@ Expected additions or equivalent fields:
 | `challenge_version` | text/integer | Exact persisted challenge version delivered. |
 | `response_text` | text/null | Learner answer when text-based. |
 | `artifact_ref_json` | JSON/text/null | File/commit/diff/runtime artifact reference. |
+| `time_spent_seconds` | integer/null | Reliable active learner/episode time when supplied by the caller; null means unknown. Never derive it from wall-clock session duration or the challenge planning estimate. |
 | `started_at` | timestamp | Attempt start. |
 | `submitted_at` | timestamp/null | Submission time. |
 
@@ -221,7 +230,7 @@ Append-only durable record of material re-exposure. This stream exists so delaye
 | `teaching_artifact_id` | FK/null | Immutable learner-visible material. Null only for historical exposure rows created before teaching-artifact persistence existed. |
 | `occurred_at` | timestamp | Kernel-assigned commit time immediately before the learner receives the material; callers do not supply it. |
 
-Record an exposure only when the shown material meaningfully refreshes the target mechanism, answer, or solution. Generic praise, navigation, or a prompt that does not reveal the target does not count. New exposure writes must persist the teaching artifact in the same transaction as the exposure rows; historical rows without an artifact remain valid provenance but do not support claims about the exact material shown.
+Record an exposure only when the shown material meaningfully refreshes the target mechanism, answer, or solution. Generic praise, navigation, or a prompt that does not reveal the target does not count. Articulation-only feedback that improves wording, terminology, brevity, or structure without adding missing target reasoning is also not an exposure; if the refinement supplies a missing causal link or model answer, use the normal exposure lifecycle. New exposure writes must persist the teaching artifact in the same transaction as the exposure rows; historical rows without an artifact remain valid provenance but do not support claims about the exact material shown.
 
 ### `revision_notes`
 
@@ -833,11 +842,11 @@ getTodayMission({
 → DailyMission
 ```
 
-`availableMinutes` is the outer daily budget on the first call and the current remaining session budget on later episode-boundary replans. A compatible episode-by-episode teacher should pass `maxItems: 1`, execute and close that selected episode, persist resulting evidence, then call again with the new remaining budget so selection sees current projections rather than a stale full-session script.
+`availableMinutes` is the caller's remaining **active-study** budget. `DailyMissionItem.minutes` and `plannedMinutes` are capacity/reservation estimates only; they are not elapsed time and must never be automatically deducted from a later call. A compatible episode-by-episode teacher should pass `maxItems: 1`, execute and close that selected episode, then subtract only reliable active time (for example client-measured or learner-reported `activeTimeSeconds`) before replanning. If active time is unknown, do not substitute wall-clock time or the planner estimate; carry the remaining budget forward or ask only when the budget decision materially depends on it.
 
 When `focusObjectiveIds` is omitted, `getTodayMission(...)` resolves the durable goal study focus from the active `study_focus_episode`. Supplying `focusObjectiveIds` is a per-call override and does not rewrite the durable focus.
 
-An active study focus prefers its objective set and the prerequisite/foundation closure needed to unlock that set. It prevents unrelated pending baseline diagnostics from winning merely because every goal objective is globally active. Higher-authority selection policy still escapes the focus: due retrieval, recurring/retest weakness, prerequisite blocking, importance/urgency, recent contradictory evidence, blocking misconceptions, and required transfer once that transfer is actually selection-eligible retain their existing authority. Focus never changes evidence, readiness, transfer, durability, review cards, prerequisites, or goal-objective activation.
+An active study focus owns the main forward-progress envelope: its objective set plus the prerequisite/foundation closure needed to unlock that set. Unrelated routine due retrieval may appear only as a bounded warm-up; on episode-by-episode `maxItems: 1` calls it must not consume the sole slot ahead of focused main work. Unrelated work may displace the focus only for a deliberately higher-authority exception such as a blocking misconception, recurring/retest weakness, an explicitly eligible weakness retest, or required transfer once transfer is actually selection-eligible. True prerequisites remain eligible through the focused prerequisite/foundation closure. Focus never changes evidence, readiness, transfer, durability, review cards, prerequisites, or goal-objective activation.
 
 Long `design` and `implementation` episodes require at least 10 remaining minutes before the planner will start them; if they do not fit, the planner may select a shorter eligible objective or leave the remaining budget intentionally unallocated. These are session-budget guards, not FSRS semantics.
 
@@ -890,15 +899,17 @@ recordExposure(
 )
 ```
 
-Prepare the exact learner-visible material first, then call this immediately before showing it. In one transaction the kernel stores one immutable `teaching_artifact` and links every objective-specific `exposure_event` to it. The kernel assigns `occurred_at` from its own clock. If `attemptId` is present, the kernel validates that the scoped objectives belong to the frozen challenge targets. Post-attempt feedback therefore resets future durability delay without changing retrieval validity of the already-submitted attempt.
+Prepare the exact learner-visible material first, then call this immediately before showing it. In one transaction the kernel stores one immutable `teaching_artifact` and links every objective-specific `exposure_event` to it. The kernel assigns `occurred_at` from its own clock. If `attemptId` is present, the kernel validates that the scoped objectives belong to the frozen challenge targets. Set `requireReconstruction: true` only when this answer-bearing feedback is repairing a causal/foundational gap that must remain open for learner reconstruction; the kernel persists that session checkpoint atomically. Post-attempt feedback resets future durability delay without changing retrieval validity of the already-submitted attempt.
 
 Old exposure rows may have no teaching artifact. Treat them as proof that an exposure occurred, not proof of the exact wording/content that was shown.
 
 ### 6. Submit learner work
 
 ```text
-submitAttempt(attemptId, responseText?, artifactRef?)
+submitAttempt(attemptId, { responseText?, artifactRef?, activeTimeSeconds? })
 ```
+
+`activeTimeSeconds` is optional and records only reliable active effort known at submission time. Omit it when unknown; do not calculate it from `submitted_at - started_at`. A later feedback/reconstruction closure may replace it with a more complete reliable episode total.
 
 For executable work, the agent runs the frozen verifier through the local environment and preserves command/output or equivalent deterministic artifact evidence.
 
@@ -937,7 +948,14 @@ resumeSession(sessionId)
 → phase
 → pending_action
 → active challenge/attempt
+→ reconstructionRequired
 → unresolved verification or assessment step
+
+completeSessionFeedback(sessionId, { activeTimeSeconds? })
+→ closes feedback only when reconstruction is not required
+
+resolveSessionReconstruction(sessionId, { outcome: completed | opted_out, activeTimeSeconds? })
+→ resolves the durable repair checkpoint and closes the episode
 
 abandonUnsubmittedSession(sessionId)
 → completed session

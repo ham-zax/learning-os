@@ -12,6 +12,8 @@ import {
   AttemptSchema,
   GoalObjectiveSchema,
   GoalPreparationSchema,
+  InteractionInputMode,
+  QuestionChunking,
   ReviewSchema,
   SessionSchema,
   StudyFocusEpisodeSchema,
@@ -36,7 +38,7 @@ import type {
   InitialDiagnosticKind,
 } from "./types.js";
 
-const CURRENT_SCHEMA_VERSION = 13;
+const CURRENT_SCHEMA_VERSION = 14;
 
 // ─── Schema DDL ──────────────────────────────────────────────────────────────
 
@@ -1072,7 +1074,7 @@ const migrations: Migration[] = [
     },
   },
   {
-    version: CURRENT_SCHEMA_VERSION,
+    version: 13,
     up: (db) => {
       db.transaction(() => {
         db.exec(`
@@ -1151,6 +1153,27 @@ const migrations: Migration[] = [
       })();
     },
   },
+  {
+    version: 14,
+    up: (db) => {
+      db.transaction(() => {
+        db.exec(`
+          ALTER TABLE sessions ADD COLUMN reconstruction_status TEXT NOT NULL DEFAULT 'not_required'
+            CHECK (reconstruction_status IN ('not_required', 'required', 'completed', 'opted_out'));
+
+          CREATE TABLE interaction_preferences (
+            singleton          INTEGER PRIMARY KEY CHECK (singleton = 1),
+            input_mode         TEXT NOT NULL DEFAULT 'default'
+              CHECK (input_mode IN ('default', 'speech_to_text')),
+            question_chunking  TEXT NOT NULL DEFAULT 'default'
+              CHECK (question_chunking IN ('default', 'atomic')),
+            source             TEXT NOT NULL CHECK (source = 'learner_explicit'),
+            updated_at         TEXT NOT NULL
+          );
+        `);
+      })();
+    },
+  },
 ];
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -1193,9 +1216,9 @@ export function createDatabase(dbPath: string): Database.Database {
  */
 export function migrate(db: Database.Database): void {
   const currentVersion = db.pragma("user_version", { simple: true }) as number;
-  if (currentVersion >= 9 && currentVersion < CURRENT_SCHEMA_VERSION) {
+  if (currentVersion >= 9 && currentVersion < 13) {
     throw new Error(
-      `Unsupported pre-v${CURRENT_SCHEMA_VERSION} learner database. Recreate the learner profile instead of upgrading it.`,
+      `Unsupported learner database schema v${currentVersion}. Recreate the learner profile instead of upgrading it.`,
     );
   }
 
@@ -1205,6 +1228,73 @@ export function migrate(db: Database.Database): void {
       db.pragma(`user_version = ${migration.version}`);
     }
   }
+}
+
+export interface InteractionPreferences {
+  inputMode: InteractionInputMode;
+  questionChunking: QuestionChunking;
+  source: "default" | "learner_explicit";
+  updatedAt: string | null;
+}
+
+export interface SetInteractionPreferencesInput {
+  inputMode?: InteractionInputMode;
+  questionChunking?: QuestionChunking;
+}
+
+export function getInteractionPreferences(db: Database.Database): InteractionPreferences {
+  const row = db
+    .prepare(`SELECT input_mode, question_chunking, source, updated_at
+              FROM interaction_preferences WHERE singleton = 1`)
+    .get() as
+    | {
+        input_mode: InteractionInputMode;
+        question_chunking: QuestionChunking;
+        source: "learner_explicit";
+        updated_at: string;
+      }
+    | undefined;
+  if (!row) {
+    return {
+      inputMode: "default",
+      questionChunking: "default",
+      source: "default",
+      updatedAt: null,
+    };
+  }
+  return {
+    inputMode: row.input_mode,
+    questionChunking: row.question_chunking,
+    source: row.source,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function setInteractionPreferences(
+  db: Database.Database,
+  input: SetInteractionPreferencesInput,
+): InteractionPreferences {
+  if (input.inputMode === undefined && input.questionChunking === undefined) {
+    throw new Error("At least one interaction preference must be supplied");
+  }
+  const current = getInteractionPreferences(db);
+  const inputMode = input.inputMode === undefined
+    ? current.inputMode
+    : InteractionInputMode.parse(input.inputMode);
+  const questionChunking = input.questionChunking === undefined
+    ? current.questionChunking
+    : QuestionChunking.parse(input.questionChunking);
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO interaction_preferences (singleton, input_mode, question_chunking, source, updated_at)
+     VALUES (1, ?, ?, 'learner_explicit', ?)
+     ON CONFLICT(singleton) DO UPDATE SET
+       input_mode = excluded.input_mode,
+       question_chunking = excluded.question_chunking,
+       source = excluded.source,
+       updated_at = excluded.updated_at`,
+  ).run(inputMode, questionChunking, now);
+  return getInteractionPreferences(db);
 }
 
 // ─── CRUD: Topics ─────────────────────────────────────────────────────────

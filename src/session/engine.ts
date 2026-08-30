@@ -65,7 +65,7 @@ export interface SessionSummary {
   submittedAttempts: number;
   assessedAttempts: number;
   pendingAssessmentAttempts: number;
-  duration: number; // seconds
+  duration: number; // advisory wall elapsed seconds; never active-study budget consumption
 }
 
 // ─── Defaults ────────────────────────────────────────────────────────────────

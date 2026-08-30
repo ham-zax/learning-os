@@ -5,6 +5,7 @@ import {
   getGoalObjectives,
   getStudyFocusEpisode,
   listGoalStudyFocusEpisodes,
+  setInteractionPreferences,
   setGoalObjective,
   setGoalStudyFocus,
 } from "./db/database.js";
@@ -25,13 +26,16 @@ import {
   recordExposure,
   recordHintUse,
   registerChallenge,
+  resolveSessionReconstruction,
   resumeSession,
   submitAttempt,
 } from "./kernel/foundation.js";
 import type {
+  CompleteSessionFeedbackInput,
   LearningObjectiveInput,
   RecordExposureInput,
   RecordHintUseInput,
+  ResolveSessionReconstructionInput,
   SubmitAttemptInput,
 } from "./kernel/foundation.js";
 import {
@@ -42,7 +46,11 @@ import type { ReviseEvidenceInput } from "./kernel/evidence.js";
 import type { AssessmentResultInput } from "./db/types.js";
 import { getTodayMission, resolveRequestedChallenge } from "./plan/today.js";
 import type { RequestedChallengeInput, TodayMissionInput } from "./plan/today.js";
-import type { SetGoalObjectiveInput, SetGoalStudyFocusInput } from "./db/database.js";
+import type {
+  SetGoalObjectiveInput,
+  SetGoalStudyFocusInput,
+  SetInteractionPreferencesInput,
+} from "./db/database.js";
 import {
   getDurablePreparationContext,
   listDurablePreparationContexts,
@@ -72,6 +80,8 @@ export function createTeacherKernel(db: Database.Database) {
       resolveRequestedChallenge(db, input),
     listPreparationContexts: () => listDurablePreparationContexts(db),
     getPreparationContext: (goalId: string) => getDurablePreparationContext(db, goalId),
+    setInteractionPreferences: (input: SetInteractionPreferencesInput) =>
+      setInteractionPreferences(db, input),
     setGoalObjective: (input: SetGoalObjectiveInput) => setGoalObjective(db, input),
     setGoalStudyFocus: (input: SetGoalStudyFocusInput) => setGoalStudyFocus(db, input),
     clearGoalStudyFocus: (goalId: string) => clearGoalStudyFocus(db, goalId),
@@ -109,7 +119,10 @@ export function createTeacherKernel(db: Database.Database) {
     resumeSession: (sessionId: number) => resumeSession(db, sessionId),
     abandonUnsubmittedSession: (sessionId: number) => abandonUnsubmittedSession(db, sessionId),
     finishSessionInteraction: (sessionId: number) => finishSessionInteraction(db, sessionId),
-    completeSessionFeedback: (sessionId: number) => completeSessionFeedback(db, sessionId),
+    completeSessionFeedback: (sessionId: number, input: CompleteSessionFeedbackInput = {}) =>
+      completeSessionFeedback(db, sessionId, input),
+    resolveSessionReconstruction: (sessionId: number, input: ResolveSessionReconstructionInput) =>
+      resolveSessionReconstruction(db, sessionId, input),
   };
 }
 

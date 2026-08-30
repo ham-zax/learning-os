@@ -98,7 +98,7 @@ Treat the selected challenge as one interaction episode. Inside that episode, en
 - **Stop after learner questions:** after a genuine prediction/explanation/design/debug/implementation/reconstruction prompt, end the visible turn; do not append hints or solution fragments.
 - **Harmless clarification stays harmless:** define incidental vocabulary during an active attempt when the definition does not reveal target reasoning; do not count it as target weakness or hint/exposure. If it reveals target reasoning, use the normal hint/exposure lifecycle.
 - **"I don't know" ends the interrogation:** once a foundational gap is clear, finish the honest assessment, teach the minimum missing model, and ask one reconstruction question instead of continuing advanced probing.
-- **Reconstruct before leaving causal repair:** after answer-bearing repair of a causal/foundational failure, keep the episode open until learner reconstruction or explicit opt-out.
+- **Reconstruct before leaving causal repair:** when answer-bearing feedback repairs a causal/foundational failure, call `recordExposure(..., requireReconstruction: true)` immediately before showing it. The kernel blocks feedback closure until `resolveSessionReconstruction(...)` records reconstruction or explicit opt-out.
 - **No next attempt before acceptance:** Learning OS may resolve the next move after closure, but present it first and wait for an unambiguous `yes`/`continue` (or an already-active "keep going" instruction) before opening its attempt.
 - **Preserve learner artifacts:** persist the learner's actual response. For speech-to-text, repair only obvious transcription noise; put interpretation in assessment rationale.
 - **Chunk speech interaction:** in known speech/conversational mode, deliver one substantive subquestion at a time without changing frozen criteria or adding hints.
@@ -139,6 +139,12 @@ expected result
 
 If an existing registered misconception definition matches, record its ID in assessment. Otherwise use a precise `observedErrors` category; never create a persistent misconception definition from conversation.
 
+### Refine strong answers without over-coaching
+
+After technical assessment, optionally tighten how the learner would express the same reasoning to a senior engineer/interviewer. If the answer is already close, make at most a small terminology/ordering correction. If it is correct but materially vague or rambling, give one concise stronger formulation. If a causal link is missing or the model is wrong, repair reasoning before polishing wording.
+
+Do not record articulation-only wording/structure refinement as exposure when it adds no missing target reasoning. If the refinement supplies a missing causal link, model answer, or other target mechanism, it is teaching exposure and uses the normal exposure/reconstruction lifecycle. This refinement never changes technical correctness or learner state.
+
 ### Withdraw scaffolding honestly
 
 ```text
@@ -151,9 +157,9 @@ As the selected interaction and durable evidence permit, retreat from teacher-pr
 
 ### Explain the authoritative next move
 
-Only after the current interaction episode closes, call the responsible Learning OS owner for the next decision. For ordinary study, call `getTodayMission(...)` with remaining minutes and `maxItems: 1`; it automatically resolves durable goal study focus, so use `focusObjectiveIds` only for an intentional per-call override. If it returns a move, present that one move with a short learner-facing reason and stop. Do not freeze/open/present the next attempt in the same turn. An unambiguous "yes/continue" (or an already-active instruction such as "keep going") executes the already-selected move without another menu. If the learner requests a different direction that changes what work comes next, route it through Learning OS rather than synthesizing a shadow next-action policy.
+Only after the current interaction episode closes, call the responsible Learning OS owner for the next decision. For ordinary study, call `getTodayMission(...)` with remaining **active-study** minutes and `maxItems: 1`; it automatically resolves durable goal study focus, so use `focusObjectiveIds` only for an intentional per-call override. Planner item minutes are capacity estimates, not consumed time. Reduce the remaining budget only from reliable client-measured or learner-reported active time; if unknown, do not subtract wall-clock time or the planned estimate. If it returns a move, present that one move with a short learner-facing reason and stop. Do not freeze/open/present the next attempt in the same turn. An unambiguous "yes/continue" (or an already-active instruction such as "keep going") executes the already-selected move without another menu. If the learner requests a different direction that changes what work comes next, route it through Learning OS rather than synthesizing a shadow next-action policy.
 
-When the learner explicitly enters a curriculum/study phase such as "Day 1", persist that intent with `setGoalStudyFocus({ goalId, label, objectiveIds })` using the active goal-objective IDs from the confirmed curriculum/reference. Learning OS snapshots the resolved prerequisite/foundation closure in a stable focus episode. Recover the active episode from `getPreparationContext(goalId).studyFocus`, list historical phases with `listGoalStudyFocusEpisodes(goalId)`, and clear/replace focus only when the learner completes, leaves, or changes phase. Calendar-day changes never close the episode. Study focus is orchestration intent, not evidence or competence state. Treat required transfer as a later goal-completion requirement, not a reason to escalate while readiness is still below target or a recent failure/unresolved weakness remains; ordinary daily orchestration gates that transition.
+When the learner explicitly enters a curriculum/study phase such as "Day 1", persist that intent with `setGoalStudyFocus({ goalId, label, objectiveIds })` using the active goal-objective IDs from the confirmed curriculum/reference. Learning OS snapshots the resolved prerequisite/foundation closure in a stable focus episode. Recover the active episode from `getPreparationContext(goalId).studyFocus`, list historical phases with `listGoalStudyFocusEpisodes(goalId)`, and clear/replace focus only when the learner completes, leaves, or changes phase. Calendar-day changes never close the episode. Study focus is orchestration intent, not evidence or competence state. Ordinary unrelated due work may appear only as a bounded warm-up and must not replace the focus main episode; on `maxItems: 1`, stay inside the focus envelope unless Learning OS returns a higher-authority exception such as a blocking misconception, recurring/retest weakness, eligible weakness retest, true prerequisite, or transfer that is actually selection-eligible. Treat required transfer as a later goal-completion requirement, not a reason to escalate while readiness is still below target or a recent failure/unresolved weakness remains.
 
 ### Create personalized revision notes
 
@@ -200,7 +206,7 @@ Rules:
 Before teaching:
 
 1. Resolve the intended profile. Do not silently use another learner.
-2. Open the profile and recover durable preparation context, including any `studyFocus`.
+2. Open the profile and recover durable preparation context, including any `studyFocus` and explicit interaction preferences. If the learner explicitly establishes or changes speech/atomic-question preferences, persist them with `setInteractionPreferences(...)`.
 3. Check resumable session state when relevant.
 4. Use actual projections/evidence and current goal state, not old chat memory, to decide what is true.
 5. If the learner asks what to do next, use the current Learning OS mission/session/interview owner.
@@ -224,8 +230,10 @@ Learning OS chooses objective/task intent
 → assess against frozen criteria
 → record assessment/evidence
 → if answer-bearing feedback is needed: record exposure immediately before visible reveal
+→ set `requireReconstruction: true` when that feedback repairs a causal/foundational gap
 → visibly explain/repair
-→ reconstruct after causal/foundational repair unless learner opts out
+→ learner reconstructs or explicitly opts out
+→ resolve the reconstruction checkpoint when required
 → close the interaction episode
 → ask Learning OS for the next decision
 → present it and wait for learner acceptance before opening its attempt
@@ -248,6 +256,8 @@ The learner should not feel like they are operating a database protocol.
 - Summarize a proposed plan in learner-facing language.
 - Ask one materially useful clarification at a time when practical.
 - Keep feedback focused on the current objective and observed work.
+- Treat speech-to-text and atomic-question preferences from preparation context as presentation constraints, never competence signals.
+- Persist `activeTimeSeconds` only when reliable active effort is known; never infer it from an open tab/session duration.
 - When the kernel blocks an action because of prerequisites, explain the blocker and the next evidence-producing step rather than weakening the rule.
 
 ## Never do these

@@ -53,6 +53,8 @@ export interface OpenedAttempt {
 export interface SubmitAttemptInput {
   responseText?: string;
   artifactRef?: Record<string, unknown>;
+  /** Reliable active learner time known so far; omit when unknown. */
+  activeTimeSeconds?: number;
 }
 
 export interface RecordHintUseInput {
@@ -69,6 +71,17 @@ export interface RecordExposureInput {
     content: string;
     format?: "text" | "markdown";
   };
+  /** Mark answer-bearing causal/foundational repair as requiring reconstruction before closure. */
+  requireReconstruction?: boolean;
+}
+
+export interface CompleteSessionFeedbackInput {
+  /** Total reliable active time for this interaction episode; omit when unknown. */
+  activeTimeSeconds?: number;
+}
+
+export interface ResolveSessionReconstructionInput extends CompleteSessionFeedbackInput {
+  outcome: "completed" | "opted_out";
 }
 
 export interface ResumableAttempt {
@@ -86,6 +99,7 @@ export interface ResumedSession {
   activeChallenge: ChallengeSpec | null;
   activeAttempt: Attempt | null;
   activeAttemptState: ResumableAttempt | null;
+  reconstructionRequired: boolean;
   unresolvedVerificationAttempts: ResumableAttempt[];
   unresolvedAssessmentAttempts: ResumableAttempt[];
 }
@@ -95,6 +109,27 @@ function requireNonEmpty(value: string, label: string): string {
     throw new Error(`${label} must not be empty`);
   }
   return value;
+}
+
+function validateActiveTimeSeconds(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error("activeTimeSeconds must be a non-negative integer when supplied");
+  }
+  return value;
+}
+
+function persistActiveTime(
+  db: Database.Database,
+  attemptId: number | null,
+  activeTimeSeconds: number | undefined,
+): void {
+  if (activeTimeSeconds === undefined) return;
+  if (attemptId === null) {
+    throw new Error("Active study time requires an active attempt");
+  }
+  db.prepare(`UPDATE attempts SET time_spent_seconds = ? WHERE id = ?`)
+    .run(activeTimeSeconds, attemptId);
 }
 
 function getFrozenChallengeOrThrow(
@@ -473,7 +508,8 @@ export function openAttempt(
              pending_action = 'collect_response',
              active_challenge_id = ?,
              active_challenge_version = ?,
-             active_attempt_id = ?
+             active_attempt_id = ?,
+             reconstruction_status = 'not_required'
          WHERE id = ?`,
       ).run(challenge.id, challenge.version, attempt.id, sessionId);
     }
@@ -500,16 +536,18 @@ export function submitAttempt(
       throw new Error(`Attempt is already submitted: ${attemptId}`);
     }
 
+    const activeTimeSeconds = validateActiveTimeSeconds(input.activeTimeSeconds);
     const submittedAt = new Date().toISOString();
     const update = db
       .prepare(
         `UPDATE attempts
-         SET response_text = ?, artifact_ref_json = ?, submitted_at = ?
+         SET response_text = ?, artifact_ref_json = ?, time_spent_seconds = ?, submitted_at = ?
          WHERE id = ? AND submitted_at IS NULL`,
       )
       .run(
         input.responseText ?? null,
         input.artifactRef === undefined ? null : JSON.stringify(input.artifactRef),
+        activeTimeSeconds ?? null,
         submittedAt,
         attemptId,
       );
@@ -677,6 +715,9 @@ export function recordExposure(
   if (new Set(input.objectiveIds).size !== input.objectiveIds.length) {
     throw new Error("Exposure objective scope contains duplicate objective IDs");
   }
+  if (input.requireReconstruction && (sessionId === null || input.attemptId === undefined)) {
+    throw new Error("Reconstruction-required exposure must identify its session and attempt");
+  }
 
   return db.transaction(() => {
     const objectiveExists = db.prepare(`SELECT 1 FROM learning_objectives WHERE id = ?`);
@@ -710,6 +751,17 @@ export function recordExposure(
       }
       challengeId = challenge.id;
       challengeVersion = challenge.version;
+      if (input.requireReconstruction) {
+        const session = SessionSchema.parse(
+          db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId!),
+        );
+        if (attempt.session_id !== sessionId || session.active_attempt_id !== attempt.id) {
+          throw new Error("Reconstruction-required exposure must target the active session attempt");
+        }
+        if (session.phase !== "feedback" || session.pending_action !== "present_feedback") {
+          throw new Error("Reconstruction can be required only during the feedback phase");
+        }
+      }
     }
 
     const occurredAt = new Date().toISOString();
@@ -752,6 +804,15 @@ export function recordExposure(
         .prepare(`SELECT * FROM exposure_events WHERE seq = ?`)
         .get(Number(info.lastInsertRowid));
       events.push(ExposureEventSchema.parse(row));
+    }
+    if (input.requireReconstruction) {
+      const update = db.prepare(
+        `UPDATE sessions SET reconstruction_status = 'required'
+         WHERE id = ? AND phase = 'feedback' AND active_attempt_id = ?`,
+      ).run(sessionId!, input.attemptId!);
+      if (update.changes !== 1) {
+        throw new Error("Could not persist reconstruction requirement for feedback episode");
+      }
     }
     return events;
   })();
@@ -884,12 +945,26 @@ function unresolvedAttemptsForSession(db: Database.Database, sessionId: number):
 export function advanceSessionToFeedback(db: Database.Database, attemptId: number): void {
   const attempt = getAttemptOrThrow(db, attemptId);
   if (attempt.session_id === null || attempt.challenge_id === null || attempt.challenge_version === null) return;
+  const session = SessionSchema.parse(
+    db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(attempt.session_id),
+  );
+  const reconstructionStatus =
+    session.active_attempt_id === attempt.id && session.reconstruction_status === "required"
+      ? "required"
+      : "not_required";
   db.prepare(
     `UPDATE sessions
      SET phase = 'feedback', pending_action = 'present_feedback',
-         active_challenge_id = ?, active_challenge_version = ?, active_attempt_id = ?
+         active_challenge_id = ?, active_challenge_version = ?, active_attempt_id = ?,
+         reconstruction_status = ?
      WHERE id = ?`,
-  ).run(attempt.challenge_id, attempt.challenge_version, attempt.id, attempt.session_id);
+  ).run(
+    attempt.challenge_id,
+    attempt.challenge_version,
+    attempt.id,
+    reconstructionStatus,
+    attempt.session_id,
+  );
 }
 
 export function syncSessionAfterEvidenceChange(db: Database.Database, attemptId: number): void {
@@ -904,7 +979,8 @@ export function syncSessionAfterEvidenceChange(db: Database.Database, attemptId:
   db.prepare(
     `UPDATE sessions
      SET phase = ?, pending_action = ?,
-         active_challenge_id = ?, active_challenge_version = ?, active_attempt_id = ?
+         active_challenge_id = ?, active_challenge_version = ?, active_attempt_id = ?,
+         reconstruction_status = 'not_required'
      WHERE id = ?`,
   ).run(
     awaitingVerification ? "awaiting_verification" : "awaiting_assessment",
@@ -944,7 +1020,8 @@ function setSessionToNextUnresolvedOrComplete(
       `UPDATE sessions
        SET ended_at = CASE WHEN ? THEN COALESCE(ended_at, ?) ELSE ended_at END,
            phase = ?, pending_action = ?,
-           active_challenge_id = ?, active_challenge_version = ?, active_attempt_id = ?
+           active_challenge_id = ?, active_challenge_version = ?, active_attempt_id = ?,
+           reconstruction_status = 'not_required'
        WHERE id = ?`,
     ).run(
       markEnded ? 1 : 0,
@@ -1006,8 +1083,50 @@ export function finishSessionInteraction(db: Database.Database, sessionId: numbe
   setSessionToNextUnresolvedOrComplete(db, sessionId, true);
 }
 
-export function completeSessionFeedback(db: Database.Database, sessionId: number): void {
-  setSessionToNextUnresolvedOrComplete(db, sessionId, true);
+export function completeSessionFeedback(
+  db: Database.Database,
+  sessionId: number,
+  input: CompleteSessionFeedbackInput = {},
+): void {
+  db.transaction(() => {
+    const session = SessionSchema.parse(db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId));
+    if (session.phase !== "feedback" || session.pending_action !== "present_feedback") {
+      throw new Error(`Session ${sessionId} is not awaiting feedback completion`);
+    }
+    if (session.reconstruction_status === "required") {
+      throw new Error(
+        `Session ${sessionId} requires learner reconstruction or explicit opt-out before feedback can close`,
+      );
+    }
+    persistActiveTime(
+      db,
+      session.active_attempt_id,
+      validateActiveTimeSeconds(input.activeTimeSeconds),
+    );
+    setSessionToNextUnresolvedOrComplete(db, sessionId, true);
+  })();
+}
+
+export function resolveSessionReconstruction(
+  db: Database.Database,
+  sessionId: number,
+  input: ResolveSessionReconstructionInput,
+): Session {
+  return db.transaction(() => {
+    const session = SessionSchema.parse(db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId));
+    if (session.phase !== "feedback" || session.pending_action !== "present_feedback") {
+      throw new Error(`Session ${sessionId} is not in feedback`);
+    }
+    if (session.reconstruction_status !== "required") {
+      throw new Error(`Session ${sessionId} does not require reconstruction`);
+    }
+    const activeTimeSeconds = validateActiveTimeSeconds(input.activeTimeSeconds);
+    persistActiveTime(db, session.active_attempt_id, activeTimeSeconds);
+    db.prepare(`UPDATE sessions SET reconstruction_status = ? WHERE id = ?`)
+      .run(input.outcome, sessionId);
+    setSessionToNextUnresolvedOrComplete(db, sessionId, true);
+    return SessionSchema.parse(db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId));
+  })();
 }
 
 export function resumeSession(db: Database.Database, sessionId: number): ResumedSession {
@@ -1062,6 +1181,7 @@ export function resumeSession(db: Database.Database, sessionId: number): Resumed
     activeChallenge,
     activeAttempt,
     activeAttemptState,
+    reconstructionRequired: session.reconstruction_status === "required",
     unresolvedVerificationAttempts: unresolved.verification,
     unresolvedAssessmentAttempts: unresolved.assessment,
   };

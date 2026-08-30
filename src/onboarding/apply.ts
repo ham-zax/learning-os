@@ -7,6 +7,7 @@ import {
   getConcept,
   getGoalObjectives,
   getGoalPreparation,
+  getInteractionPreferences,
   getTopic,
   setGoalObjective,
   setGoalPreparation,
@@ -158,6 +159,12 @@ export interface DurablePreparationContext {
     resolvedObjectiveIds: string[];
     openedAt: string;
   } | null;
+  interactionPreferences: {
+    inputMode: "default" | "speech_to_text";
+    questionChunking: "default" | "atomic";
+    source: "default" | "learner_explicit";
+    updatedAt: string | null;
+  };
   confirmedAt: string;
   objectives: DurablePreparationObjective[];
   prerequisiteDiagnosticGaps: PrerequisiteDiagnosticGap[];
@@ -676,6 +683,7 @@ export function getDurablePreparationContext(
       ? preparation.minutes_per_day * preparation.days_per_week
       : null);
   const activeFocus = getActiveGoalStudyFocusEpisode(db, goalId);
+  const interactionPreferences = getInteractionPreferences(db);
   return {
     goalId,
     goalName: goal.name,
@@ -699,6 +707,7 @@ export function getDurablePreparationContext(
             resolvedObjectiveIds: [...activeFocus.resolved_objective_ids],
             openedAt: activeFocus.opened_at,
           },
+    interactionPreferences,
     confirmedAt: preparation.confirmed_at,
     objectives,
     prerequisiteDiagnosticGaps: derivePrerequisiteDiagnosticGaps(

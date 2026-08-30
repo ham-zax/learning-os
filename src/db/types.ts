@@ -98,6 +98,20 @@ export type ExposureType = z.infer<typeof ExposureType>;
 export const TeachingArtifactFormat = z.enum(["text", "markdown"]);
 export type TeachingArtifactFormat = z.infer<typeof TeachingArtifactFormat>;
 
+export const ReconstructionStatus = z.enum([
+  "not_required",
+  "required",
+  "completed",
+  "opted_out",
+]);
+export type ReconstructionStatus = z.infer<typeof ReconstructionStatus>;
+
+export const InteractionInputMode = z.enum(["default", "speech_to_text"]);
+export type InteractionInputMode = z.infer<typeof InteractionInputMode>;
+
+export const QuestionChunking = z.enum(["default", "atomic"]);
+export type QuestionChunking = z.infer<typeof QuestionChunking>;
+
 export const RevisionNoteScopeKind = z.enum([
   "profile",
   "goal",
@@ -458,8 +472,18 @@ export const SessionSchema = z.object({
   active_challenge_id: z.string().nullable().default(null),
   active_challenge_version: z.number().int().positive().nullable().default(null),
   active_attempt_id: z.number().int().positive().nullable().default(null),
+  reconstruction_status: ReconstructionStatus.default("not_required"),
 });
 export type Session = z.infer<typeof SessionSchema>;
+
+export const InteractionPreferencesRowSchema = z.object({
+  singleton: z.literal(1),
+  input_mode: InteractionInputMode,
+  question_chunking: QuestionChunking,
+  source: z.literal("learner_explicit"),
+  updated_at: z.string(),
+});
+export type InteractionPreferencesRow = z.infer<typeof InteractionPreferencesRowSchema>;
 
 // ─── reviews ────────────────────────────────────────────────────────────────
 
@@ -737,6 +761,7 @@ export const schemas = {
   study_focus_episodes: StudyFocusEpisodeSchema,
   objective_projections: ObjectiveProjectionSchema,
   sessions: SessionSchema,
+  interaction_preferences: InteractionPreferencesRowSchema,
   reviews: ReviewSchema,
   synced_gaps: SyncedGapSchema,
   synced_signals: SyncedSignalSchema,

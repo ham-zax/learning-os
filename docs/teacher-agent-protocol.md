@@ -153,7 +153,7 @@ Before teaching an existing learner:
 
 1. resolve the intended profile; do not silently switch learners;
 2. open the profile;
-3. recover durable preparation context, including any `studyFocus`, and the active goal;
+3. recover durable preparation context, including any `studyFocus`, profile interaction preferences, and the active goal;
 4. inspect resumable session state when relevant;
 5. use persisted evidence/projections rather than old chat memory to decide what is true;
 6. use the current Learning OS owner to choose the next pedagogical action.
@@ -168,14 +168,14 @@ The teacher may choose explanation style, challenge wording, questioning strateg
 
 ### Interaction-episode invariants
 
-These rules are learner-facing execution boundaries, not new kernel state:
+These rules are learner-facing execution boundaries. Most remain teacher-owned; the reconstruction checkpoint is kernel-owned when a causal/foundational repair is explicitly marked:
 
 1. **Visible teaching is the teaching.** Hidden reasoning, tool output, drafts, or planned wording do not count as learner-visible explanation and must never justify a `*_shown` exposure event.
 2. **Couple exposure to delivery.** Construct the exact answer-bearing material first, pass that material to `recordExposure(...)` so Learning OS persists the immutable teaching artifact and exposure together, then emit it immediately without unrelated tool/state work in between. Never record exposure for material that is not actually shown.
 3. **Stop after a real question.** When asking the learner to predict, explain, trace, design, debug, implement, or reconstruct, end the learner-visible turn after that prompt. Do not append hints, solution fragments, or the next teaching move.
 4. **Clarify without contaminating the target.** A brief definition or clarification may occur during an active attempt when it does not reveal target reasoning. Do not record it as a hint/exposure or target weakness. If the clarification would reveal target reasoning, use the normal hint/exposure lifecycle instead.
 5. **Teach when interrogation has stopped being useful.** If the learner says "I don't know" or a foundational gap is already clear, do not keep probing advanced criteria merely to accumulate failures. Finish the honest assessment, teach the minimum missing model, then ask for reconstruction.
-6. **Reconstruct before transition after causal repair.** After answer-bearing repair of a causal/foundational error, keep the episode open until the learner reconstructs the corrected model or explicitly opts out. Generating corrective text is not cognitive closure.
+6. **Reconstruct before transition after causal repair.** After answer-bearing repair of a causal/foundational error, call `recordExposure(..., requireReconstruction: true)` immediately before the visible repair. The kernel then blocks `completeSessionFeedback(...)` until the learner reconstructs the corrected model or explicitly opts out through `resolveSessionReconstruction(...)`. Generating corrective text is not cognitive closure.
 7. **Do not open the next attempt before acceptance.** After episode closure, Learning OS may resolve the next move. Present that move in learner language, but do not freeze/open/present its attempt until the learner unambiguously accepts it (for example, "yes", "continue", or an equivalent prior instruction such as "keep going").
 8. **Preserve the learner response artifact.** Persist what the learner actually said or produced. For speech-to-text, repair only obvious transcription noise needed to recover the utterance; put teacher interpretation in assessment rationale rather than polishing the learner response.
 9. **Chunk speech/conversational challenges.** When speech-to-text or conversational chunking is known, deliver one substantive subquestion at a time while preserving the frozen criteria. Clarify material ambiguity before assessment; do not smuggle hints into the clarification.
@@ -188,7 +188,7 @@ These rules are learner-facing execution boundaries, not new kernel state:
 Choose pedagogy from information exposed through the public teacher boundary:
 
 - `ChallengeIntent`, including capability, task form, novelty, selected weakness, changed-surface requirement, and recent surfaces to avoid;
-- durable readiness, transfer, durability, diagnostic, and preparation information from `getPreparationContext(...)`;
+- durable readiness, transfer, durability, diagnostic, preparation, and explicit profile interaction preferences from `getPreparationContext(...)`;
 - current/resumed attempt hint and exposure provenance from `resumeSession(...)` when an attempt exists;
 - the authoritative mission/session/interview decision returned by Learning OS.
 
@@ -285,6 +285,17 @@ After an assessed causal failure:
 
 If the error matches an existing registered misconception definition, assessment may record that misconception ID. If it is a newly observed causal error without a registered misconception definition, record a precise `observedErrors` category instead. Do not invent a persistent misconception definition from conversation.
 
+### Post-answer technical communication refinement
+
+After the technical assessment, optionally improve how the learner would express the same reasoning to a senior engineer or interviewer. Keep this short and proportional:
+
+- if the answer is already close to a strong interview answer, make at most a small terminology/ordering correction and move on;
+- if the reasoning is technically correct but materially vague, rambling, or poorly structured, give one concise stronger formulation;
+- if a causal link is missing, repair that link before polishing wording;
+- if the mental model is wrong, repair the model rather than rewriting bad reasoning.
+
+Articulation-only feedback is non-authoritative presentation: it does not change correctness, evidence, readiness, weaknesses, transfer, durability, review timing, or FSRS. Do **not** call `recordExposure(...)` when the refinement merely restates reasoning the learner already demonstrated with better terminology or structure. If the proposed formulation adds missing target reasoning, a causal link, a model answer, or other material that refreshes the mechanism, treat that portion as teaching exposure and use the normal exposure/reconstruction lifecycle.
+
 ### Challenge authoring
 
 Build a concrete challenge only from the selected `ChallengeIntent` and preserve its objective, capability, task form, delivery context, novelty, weakness context, changed-surface requirement, recent-surface avoidance, and supplied time constraints.
@@ -312,8 +323,10 @@ Learning OS selects objective/task intent
 → assess against frozen criteria
 → record assessment/evidence
 → if answer-bearing feedback is needed: record exposure immediately before visible reveal
+→ for causal/foundational repair, set `requireReconstruction: true` on that exposure
 → visibly explain/repair
-→ require reconstruction after causal/foundational repair, unless learner explicitly opts out
+→ learner reconstructs or explicitly opts out
+→ resolve the reconstruction checkpoint when one was required
 → close the interaction episode
 → ask Learning OS for the next decision
 → present the selected move
@@ -339,9 +352,9 @@ Interview is only a delivery context. Do not run a separate generic ChatGPT inte
 
 ## Learner-facing next action
 
-After the current interaction episode has reached cognitive closure, use Learning OS to obtain the authoritative next move. For ordinary study orchestration, call `getTodayMission(...)` with the **current remaining session minutes** and `maxItems: 1`. The planner automatically resolves any durable goal study focus; pass `focusObjectiveIds` only for an intentional per-call override. Recompute after every closed episode so the just-recorded evidence can change selection.
+After the current interaction episode has reached cognitive closure, use Learning OS to obtain the authoritative next move. For ordinary study orchestration, call `getTodayMission(...)` with the **current remaining active-study minutes** and `maxItems: 1`. The planner's item `minutes` are reservation estimates, not consumed time. Reduce the remaining budget only from reliable active-time telemetry or a learner report; persist a reliable episode total with `completeSessionFeedback(..., { activeTimeSeconds })` or `resolveSessionReconstruction(..., { activeTimeSeconds })` when available. If active time is unknown, do not deduct wall-clock time or the planned estimate. The planner automatically resolves any durable goal study focus; pass `focusObjectiveIds` only for an intentional per-call override. Recompute after every closed episode so the just-recorded evidence can change selection.
 
-When the learner explicitly enters a curriculum/study phase such as "Day 1", persist that generic phase intent with `setGoalStudyFocus({ goalId, label, objectiveIds })`. Use the active goal-objective IDs supplied by the confirmed curriculum/reference; do not infer competence from the phase label. Learning OS snapshots the resolved prerequisite/foundation closure in a stable study-focus episode. Keep the focus until the learner explicitly completes, leaves, or changes that phase, then call `clearGoalStudyFocus(goalId)`, which closes the episode rather than deleting its history. Calendar-day changes never close a study-focus episode. A fresh teacher recovers the active episode through `getPreparationContext(goalId).studyFocus` and historical phases through `listGoalStudyFocusEpisodes(goalId)`, never previous chat memory. Study focus is orchestration intent only: it never becomes readiness/evidence/FSRS state and does not override true prerequisites, due retrieval, recurring/retest weaknesses, or other higher-authority selector reasons. Required transfer is a later completion requirement for ordinary daily orchestration and becomes transfer-eligible only after the current goal readiness target is met without recent failure or an active unresolved weakness.
+When the learner explicitly enters a curriculum/study phase such as "Day 1", persist that generic phase intent with `setGoalStudyFocus({ goalId, label, objectiveIds })`. Use the active goal-objective IDs supplied by the confirmed curriculum/reference; do not infer competence from the phase label. Learning OS snapshots the resolved prerequisite/foundation closure in a stable study-focus episode. Keep the focus until the learner explicitly completes, leaves, or changes that phase, then call `clearGoalStudyFocus(goalId)`, which closes the episode rather than deleting its history. Calendar-day changes never close a study-focus episode. A fresh teacher recovers the active episode through `getPreparationContext(goalId).studyFocus` and historical phases through `listGoalStudyFocusEpisodes(goalId)`, never previous chat memory. Study focus is orchestration intent only: it never becomes readiness/evidence/FSRS state. Ordinary unrelated due work may appear only as a bounded warm-up and must not replace the focus's main forward-progress episode; with `maxItems: 1`, the sole returned move stays inside the focus envelope unless Learning OS selects a higher-authority exception such as a blocking misconception, recurring/retest weakness, eligible weakness retest, true prerequisite, or transfer that is actually selection-eligible. Required transfer is a later completion requirement for ordinary daily orchestration and becomes transfer-eligible only after the current goal readiness target is met without recent failure or an active unresolved weakness.
 
 Obtaining that recommendation is allowed before learner confirmation; opening another attempt is not. When a move is returned:
 
@@ -396,6 +409,12 @@ Select only signals relevant to the challenge. Backend-oriented examples include
 - coherent answer structure.
 
 In `interview`, give concise signal feedback after technical feedback. In `mock`, do not coach during the attempt; give signal feedback in the debrief. Fluency cannot make a technically wrong answer correct, and buzzword or pattern-name density is not a seniority score.
+
+## Stable interaction preferences
+
+Persist only explicit profile-level preferences that materially improve fresh-teacher continuity. The current kernel stores `inputMode` and `questionChunking`; set them with `setInteractionPreferences(...)` when the learner explicitly establishes or changes them. `speech_to_text` plus `atomic` means interpret obvious transcription noise without polishing reasoning and deliver one substantive question at a time. Do not infer these preferences from one accidental message, and do not use them as competence evidence.
+
+Repair-before-transition, concise high-signal refinement, and active-time semantics are system behavior, not learner preferences. Do not make them optional by storing them as preference flags.
 
 ## Learner agency
 

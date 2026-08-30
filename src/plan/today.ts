@@ -39,7 +39,7 @@ export interface RequestedChallengeInput {
 
 export interface TodayMissionInput {
   goalId: string;
-  /** Outer daily budget on the first call; current remaining session budget when replanning. */
+  /** Remaining active-study budget. Planned item minutes are reservation estimates, not consumed time. */
   availableMinutes: number;
   now: string;
   /** Bound returned work for episode-by-episode orchestration. Pass 1 to request only the next move. */
@@ -59,6 +59,7 @@ export interface TodayMissionInput {
 export interface DailyMissionItem {
   kind: DailyMissionItemKind;
   objectiveId: string;
+  /** Estimated capacity reservation for planning; never authoritative elapsed study time. */
   minutes: number;
   reason: string;
   intent: ChallengeIntent;
@@ -85,6 +86,7 @@ type GoalObjectiveState = {
   initialDiagnosticKind: InitialDiagnosticKind | null;
   diagnosticPending: boolean;
   recentFailure: boolean;
+  blockingMisconceptionCount: number;
   dueAt: string | null;
   weaknesses: Array<{
     key: string;
@@ -163,6 +165,7 @@ function loadGoalObjectiveState(
               projection.durability_state,
               projection.last_qualifying_evidence_at,
               projection.recent_failure,
+              projection.blocking_misconception_count,
               card.due_at
        FROM objective_projections projection
        LEFT JOIN review_cards card ON card.objective_id = projection.objective_id
@@ -175,6 +178,7 @@ function loadGoalObjectiveState(
         durability_state: DurabilityState;
         last_qualifying_evidence_at: string | null;
         recent_failure: number;
+        blocking_misconception_count: number;
         due_at: string | null;
       }
     | undefined;
@@ -203,6 +207,7 @@ function loadGoalObjectiveState(
         ? row.transfer_state === "untested"
         : row.last_qualifying_evidence_at === null),
     recentFailure: row.recent_failure === 1,
+    blockingMisconceptionCount: row.blocking_misconception_count,
     dueAt: row.due_at,
     weaknesses,
   };
@@ -251,6 +256,20 @@ function isRelevant(
   eligibleRetestKeys: ReadonlySet<string>,
 ): boolean {
   return isDue(state, now) || needsForwardProgress(state, eligibleRetestKeys);
+}
+
+function canInterruptStudyFocus(
+  state: GoalObjectiveState,
+  eligibleRetestKeys: ReadonlySet<string>,
+): boolean {
+  return (
+    state.blockingMisconceptionCount > 0 ||
+    state.weaknesses.some(
+      (weakness) => weakness.lifecycle === "recurring" || weakness.lifecycle === "retest",
+    ) ||
+    eligibleResolvedWeaknesses(state, eligibleRetestKeys).length > 0 ||
+    transferEligibleNow(state)
+  );
 }
 
 function diagnosticBlocksTransfer(state: GoalObjectiveState): boolean {
@@ -660,10 +679,18 @@ export function getTodayMission(
   let remaining = input.availableMinutes;
 
   // Warm-up is intentionally bounded: routine due retrieval only, max 3 items / 5 minutes.
+  // With an active focus, unrelated overdue debt stays in this bounded lane even when that
+  // objective also needs ordinary forward progress; it does not displace the focus main block.
   let warmupBudget = Math.min(5, remaining);
-  const routineDue = states.filter(
-    (state) => isDue(state, now) && !needsForwardProgress(state, eligibleRetestKeys),
-  );
+  const routineDue = states.filter((state) => {
+    if (!isDue(state, now)) return false;
+    const outsideFocus =
+      focusTargetObjectiveIds.size > 0 &&
+      !preferredObjectiveIds.has(state.config.objective_id);
+    if (itemLimit === 1 && outsideFocus) return false;
+    if (!needsForwardProgress(state, eligibleRetestKeys)) return true;
+    return outsideFocus && !canInterruptStudyFocus(state, eligibleRetestKeys);
+  });
   const remainingDue = [...routineDue];
   while (
     remainingDue.length > 0 &&
@@ -776,9 +803,13 @@ export function getTodayMission(
   if (transferPreview) addBlocked(blocked, transferPreview.blocked);
 
   const forwardStates = states.filter((state) => needsForwardProgress(state, eligibleRetestKeys));
-  const preferredForwardStates =
+  const mainForwardStates =
     focusTargetObjectiveIds.size > 0
-      ? forwardStates
+      ? forwardStates.filter(
+          (state) =>
+            preferredObjectiveIds.has(state.config.objective_id) ||
+            canInterruptStudyFocus(state, eligibleRetestKeys),
+        )
       : pendingDiagnosticStates.length > 0
         ? pendingDiagnosticStates
         : forwardStates;
@@ -791,7 +822,7 @@ export function getTodayMission(
   ) {
     let result = selectFittingIntent(
       db,
-      preferredForwardStates,
+      mainForwardStates,
       input,
       now,
       deadlineAt,
@@ -803,7 +834,11 @@ export function getTodayMission(
       focusPlan.extraCandidates,
     );
     addBlocked(blocked, result.blocked);
-    if (!result.intent && preferredForwardStates !== forwardStates) {
+    if (
+      !result.intent &&
+      focusTargetObjectiveIds.size === 0 &&
+      mainForwardStates !== forwardStates
+    ) {
       result = selectFittingIntent(
         db,
         forwardStates,
@@ -826,7 +861,7 @@ export function getTodayMission(
     ) {
       result = selectFittingIntent(
         db,
-        forwardStates,
+        mainForwardStates,
         input,
         now,
         deadlineAt,
@@ -893,15 +928,19 @@ export function getTodayMission(
 
   // Small sessions still receive one useful item when a full main block is not possible.
   if (!plannedInitialDiagnostics && items.length === 0 && states.length > 0 && remaining > 0) {
-    const preferredSmallSessionStates =
+    const smallSessionStates =
       focusTargetObjectiveIds.size > 0
-        ? states
+        ? states.filter(
+            (state) =>
+              preferredObjectiveIds.has(state.config.objective_id) ||
+              canInterruptStudyFocus(state, eligibleRetestKeys),
+          )
         : pendingDiagnosticStates.length > 0
           ? pendingDiagnosticStates
           : states;
     let result = selectFittingIntent(
       db,
-      preferredSmallSessionStates,
+      smallSessionStates,
       input,
       now,
       deadlineAt,
@@ -913,7 +952,11 @@ export function getTodayMission(
       focusPlan.extraCandidates,
     );
     addBlocked(blocked, result.blocked);
-    if (!result.intent && preferredSmallSessionStates !== states) {
+    if (
+      !result.intent &&
+      focusTargetObjectiveIds.size === 0 &&
+      smallSessionStates !== states
+    ) {
       result = selectFittingIntent(
         db,
         states,
@@ -936,7 +979,7 @@ export function getTodayMission(
     ) {
       result = selectFittingIntent(
         db,
-        states,
+        smallSessionStates,
         input,
         now,
         deadlineAt,

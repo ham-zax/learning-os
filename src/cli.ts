@@ -522,7 +522,7 @@ async function runSession(
   console.log(`  Submitted attempts: ${summary.submittedAttempts}`);
   console.log(`  Assessed attempts: ${summary.assessedAttempts}`);
   console.log(`  Awaiting assessment: ${summary.pendingAssessmentAttempts}`);
-  console.log(`  Duration: ${Math.floor(summary.duration / 60)}m ${summary.duration % 60}s`);
+  console.log(`  Wall elapsed: ${Math.floor(summary.duration / 60)}m ${summary.duration % 60}s (not active study time)`);
 
   rl.close();
 }
