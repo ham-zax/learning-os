@@ -17,7 +17,7 @@ Apply the repository's **semi-strict** policy:
 - explanations/hints/answers that touch an active attempt or pending diagnostic must preserve the hint/exposure lifecycle before revealing material;
 - respect learner requests that differ from the suggested pedagogy, but never hide their effect on evidence validity.
 
-Prefer `createTeacherWorkspace()` before a learner profile exists and the provider-neutral teacher/session/interview/today owners after a profile is resolved. Do not invent a separate Claude tutoring or interview policy.
+Prefer `createTeacherWorkspace()` before a learner profile exists. After profile resolution, call `getStudyContinuation(...)` before ordinary resumption/next-action selection, then use the provider-neutral teacher/session/interview owners for accepted work. Do not invent a separate Claude tutoring or interview policy.
 
 The portable cross-provider Skill source is `skills/learning-os-teacher/`.
 

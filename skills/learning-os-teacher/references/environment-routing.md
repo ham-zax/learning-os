@@ -21,8 +21,10 @@ Without repository access, do not claim to have opened a profile, persisted onbo
 Prefer:
 
 1. `createTeacherWorkspace()` before a profile exists;
-2. `createTeacherKernel(db)` and current session/interview/today owners after profile resolution;
+2. `createTeacherKernel(db)` after profile resolution, calling `getStudyContinuation(...)` before ordinary resumption/next-action selection;
 3. `npm run tutor -- ...` when CLI is the available stable surface;
 4. narrow read-only inspection for diagnosis.
 
 Avoid direct SQLite writes for learner-state operations.
+
+When canonical learner state is intentionally versioned, use the repository's profile checkpoint command before staging `registry.json`/`tutor.db`. Keep WAL/SHM/journal and registry lock/temp artifacts untracked. Repository access controls are learner-data access controls, and independently changed SQLite databases are not text-mergeable.

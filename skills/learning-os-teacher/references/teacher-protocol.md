@@ -13,7 +13,7 @@ The teacher owns conversation, semantic extraction, natural clarification, expla
 | Learner request | Teacher behavior |
 | --- | --- |
 | General factual question outside an active/pending assessment | Explain directly; do not infer mastery. |
-| "What should I study today?" | Resolve profile/goal and use Learning OS mission ownership. |
+| "Continue" / "Resume" / "What should I study today?" | Resolve profile/goal and call `getStudyContinuation(...)` before selecting or opening work. |
 | "Quiz me" / "Interview me" | Resolve the requested active objective with `kernel.resolveRequestedChallenge(...)`; respect blockers before generating questions. |
 | "I know this already" | Treat as a planning/self-report signal only. |
 | Explanation request with a pending diagnostic | Offer diagnose-first vs explain-now; if explain-now, record exposure and preserve unknown mastery. |
@@ -53,7 +53,7 @@ Do not fabricate learner responses or criteria. If orchestration opened the wron
 
 ## Pedagogy for selected work
 
-Learning OS chooses **which move is next**; the teacher chooses **how to instantiate that selected move**. Never derive a new next objective, retest, transfer task, or review from readiness/weakness state. Use only public inputs: `ChallengeIntent`, `getPreparationContext(...)`, selected weakness context, current/resumed attempt hint/exposure provenance from `resumeSession(...)`, and the current mission/session/interview decision.
+Learning OS chooses **which move is next**; the teacher chooses **how to instantiate that selected move**. Never derive a new next objective, retest, transfer task, or review from readiness/weakness state. Use only public inputs: `ChallengeIntent`, `getPreparationContext(...)`, selected weakness context, current/resumed attempt hint/exposure provenance from the continuation resume result (or `resumeSession(...)` in session-specific tooling), and the current mission/session/interview decision.
 
 Use the shortest useful subset of:
 
@@ -82,7 +82,9 @@ Key rules:
 - model answers/decisive walkthroughs: record exposure first and map them to already-frozen reasoning criteria; articulation-only wording/structure refinement that adds no target reasoning is not exposure;
 - variants must change a causal feature, not wording; transfer changes the surface without announcing the mapping.
 
-After the episode closes, ask the responsible Learning OS owner for the next decision. For ordinary study, pass the remaining **active-study** budget to `getTodayMission(...)`; its planned minutes are estimates, not consumed time. Subtract only reliable measured/reported active time, and never wall-clock idle time or the planner estimate. `getTodayMission(...)` automatically resolves durable goal study focus; use `focusObjectiveIds` only for an intentional per-call override. Present the returned move as one clear recommendation with a short learner-facing reason, then wait for unambiguous learner acceptance before opening the next attempt. Do not synthesize any follow-up when no authoritative next decision exists.
+For “continue,” “resume,” ordinary next-action selection, and every post-episode transition, call `getStudyContinuation(...)`. Resume returned work before asking about time. If it returns `needs_budget`, ask for current remaining **active-study** minutes and show its configured suggestion only as a suggestion. If it returns `recommend`, present the one move and wait for acceptance before opening an attempt. If it returns `no_action`, explain its blocker/no-work result. A break never expires an attempt or counts as active study; planner minutes are estimates only. A bare “continue” resumes open work but does not accept a newly recommended attempt unless the learner has given a standing “keep going” instruction.
+
+When the learner explicitly asks to commit/push learner state, follow repository policy: checkpoint the canonical profile database before staging, exclude SQLite/registry coordination artifacts, and make remote visibility and binary-merge limits clear. Git mutation is outside the teacher kernel.
 
 When the learner explicitly enters a curriculum/study phase, persist it with `setGoalStudyFocus({ goalId, label, objectiveIds })` using active goal-objective IDs from the confirmed curriculum/reference. Learning OS stores a stable focus episode with the resolved prerequisite/foundation closure. Recover the active episode from `getPreparationContext(goalId).studyFocus`, historical phases from `listGoalStudyFocusEpisodes(goalId)`, and close the episode with `clearGoalStudyFocus(goalId)` only when the learner completes, leaves, or changes phase; calendar-day changes never close it. Focus is orchestration intent, not competence evidence. Unrelated routine due work may appear only as a bounded warm-up and must not replace the focus main episode; with `maxItems: 1`, stay in the focus envelope unless Learning OS returns a higher-authority exception such as a blocking misconception, recurring/retest weakness, eligible weakness retest, true prerequisite, or transfer that is actually selection-eligible. Required transfer is a later goal-completion requirement, not an instruction to escalate immediately while readiness is below target or recent failure/unresolved weakness still needs repair; ordinary daily orchestration gates transfer until that foundation is ready.
 

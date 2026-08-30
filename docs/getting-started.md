@@ -2,7 +2,7 @@
 
 Learning OS is a local-first learning product for technical study. The concrete product surface today is the CLI; a compatible AI teacher can use the same onboarding and learner-state APIs when it can run against this repository.
 
-This guide takes you from a fresh clone to an isolated learner profile and a first daily mission.
+This guide takes you from a fresh clone to an isolated learner profile, a resumable study action, and a safe learner-state checkpoint.
 
 ## 1. Install
 
@@ -152,6 +152,12 @@ Use a one-command override without changing the selected profile:
 npm run tutor -- --profile <profile-id> today <goal-id>
 ```
 
+For normal resumption/next-action use, prefer:
+
+```bash
+npm run tutor -- --profile <profile-id> continue <goal-id>
+```
+
 You can also create an empty profile without onboarding:
 
 ```bash
@@ -162,21 +168,36 @@ That command intentionally creates no mastery, curriculum, or goal by itself.
 
 If an older installation has `data/tutor.db`, Learning OS exposes it as a preserved legacy profile rather than copying or resetting it.
 
-## 5. Run today's mission
+## 5. Resume or choose one next action
 
-Confirmed onboarding prints the new goal ID. Use it with:
+Confirmed onboarding prints the new goal ID. Use the continuation entry point:
 
 ```bash
-npm run tutor -- today <goal-id>
+npm run tutor -- continue <goal-id>
 ```
 
-If onboarding recorded `minutesPerDay`, that becomes the default daily budget for the goal. When `minutesPerDay` and `daysPerWeek` are confirmed, Learning OS also persists their effective weekly capacity. If an integration supplies its own `minutesPerWeek`, it must agree with that product; conflicting availability remains a blocking onboarding question.
+Continuation follows one fixed order:
 
-Override it for one run:
+1. resume the newest unfinished session for the goal;
+2. when no work is open and remaining time is unknown, ask for it;
+3. with a supplied budget, return at most one recommendation;
+4. open no attempt until the learner accepts that recommendation.
+
+A break of two minutes, two hours, or longer does not expire an attempt. Wall elapsed time is not active-study time. Resumption therefore does not require a budget; after open work closes, supply the active-study minutes currently left:
+
+```bash
+npm run tutor -- continue <goal-id> --minutes 20
+```
+
+If onboarding recorded `minutesPerDay`, continuation may display it as a suggestion when the remaining budget is unknown. It does not assume that the configured daily amount is still available after earlier study.
+
+`tutor today` remains the lower-level bounded planner command. It requires or resolves a planning budget and may return multiple items unless its caller bounds the request:
 
 ```bash
 npm run tutor -- today <goal-id> --minutes 20
 ```
+
+When `minutesPerDay` and `daysPerWeek` are confirmed, Learning OS also persists their effective weekly capacity. If an integration supplies its own `minutesPerWeek`, it must agree with that product; conflicting availability remains a blocking onboarding question.
 
 The daily planner uses current learner state rather than the original onboarding claims. It considers active goal objectives, due review cards, weaknesses, prerequisite blockers, deadline urgency, and recent challenge history.
 
@@ -230,14 +251,29 @@ See [Customizing Learning OS](customization.md) to add your own topic manifests 
 
 If there is no `config.json`, the CLI defaults to 30 minutes and `./knowledge`. The offline `tutor onboard` flow currently scans the repository `./knowledge` catalog directly.
 
-A goal-specific onboarding daily budget takes precedence over the global `daily_minutes` value for `tutor today`. An explicit `--minutes` takes precedence over both.
+A goal-specific onboarding daily budget takes precedence over the global `daily_minutes` value for `tutor today`. An explicit `--minutes` takes precedence over both. `tutor continue` treats the goal budget as a suggestion only and asks for current remaining time before planning new work.
 
-## 9. Where your data lives
+## 9. Checkpoint and version learner state
+
+Canonical managed learner state may be committed to this repository. Flush the profile's WAL and verify integrity before staging it:
+
+```bash
+npm run tutor -- profile checkpoint <profile-id>
+git add data/profiles/registry.json data/profiles/<profile-id>/tutor.db
+git commit -m "data: checkpoint learner progress"
+git push
+```
+
+The checkpoint command changes only SQLite state; it does not stage, commit, or push. Keep `*.db-wal`, `*.db-shm`, `*.db-journal`, and registry lock/temp artifacts out of Git.
+
+The canonical database contains learner responses, goals, evidence, exposure history, and scheduling state. Pushing it makes that state available to repository readers. Use one canonical writer: independently modified SQLite files on multiple branches or machines cannot be safely text-merged.
+
+## 10. Where your data lives
 
 ```text
 learning-os/
 ├── knowledge/              # reusable, versioned curriculum
-├── data/                   # ignored local learner data
+├── data/                   # canonical profile files may be versioned
 │   └── profiles/
 │       ├── registry.json
 │       └── <profile-id>/
@@ -249,9 +285,9 @@ Do not put private learner history into `knowledge/`. It is repository content i
 
 Confirmed onboarding persists structured preparation context needed to resume later. It does not persist raw resumes, raw job descriptions, chat transcripts, provider message IDs, or API keys as learner state.
 
-## 10. What to expect from the developer preview
+## 11. What to expect from the developer preview
 
-The implemented core is real: profile isolation, confirmed onboarding, objective-level evidence, weakness projection, FSRS scheduling, challenge selection, interviews, resumable sessions, and `tutor today` all share one learner-state model.
+The implemented core is real: profile isolation, confirmed onboarding, objective-level evidence, weakness projection, FSRS scheduling, challenge selection, interviews, resume-first continuation, profile checkpointing, and `tutor today` all share one learner-state model.
 
 The product is not yet a hosted consumer application. Expect a local CLI and code-level teacher integration rather than account management, web UI, or a built-in LLM client for onboarding.
 

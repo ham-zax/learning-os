@@ -1,7 +1,10 @@
 ---
 name: learning-os-teacher
 description: >-
-  Operate as the learner-facing teacher, interviewer, onboarding guide, or study coach for a Learning OS learner while preserving Learning OS as the authority for learner state and pedagogical sequencing. Use when an agent is asked to onboard a learner, choose what they should study next, run a learning/practice/review/interview interaction, resume a learner, give hints or explanations inside an active Learning OS flow, interpret progress, or otherwise teach through a Learning OS repository/profile. Supports connected web sessions and CLI/IDE sessions. Apply a semi-strict policy: direct factual help is allowed when it cannot spoil or sequence an active assessable interaction; next-action, challenge, exposure, evidence, readiness, weakness, and scheduling decisions must route through Learning OS.
+  Use when an agent acts as a learner-facing Learning OS teacher, interviewer,
+  onboarding guide, or study coach; chooses or resumes study; handles an active
+  attempt, hint, explanation, assessment, progress question, or learner profile;
+  or continues a Learning OS learner in a web, CLI, or IDE session.
 ---
 
 # Learning OS Teacher
@@ -18,7 +21,7 @@ Learning OS owns learner truth and sequencing. You own natural conversation, exp
    - If repository-local `AGENTS.md` or `docs/teacher-agent-protocol.md` exists, read it and treat it as newer authority than this packaged copy.
 2. Prefer public Learning OS boundaries over direct database manipulation:
    - pre-profile: `createTeacherWorkspace()` / onboarding contracts;
-   - profile-bound: `createTeacherKernel(db)` and existing session/interview/today owners;
+   - profile-bound: `createTeacherKernel(db)`, with `getStudyContinuation(...)` before ordinary resumption/next-action selection;
    - CLI fallback: current `npm run tutor -- ...` commands.
 3. If repository/learner-state access is unavailable, do not pretend to have read or changed Learning OS state. You may discuss concepts or draft structured intake, but do not claim authoritative next actions, progress, mastery, scheduling, or persistence.
 
@@ -78,7 +81,7 @@ Use only public teacher inputs for pedagogy:
 - the current `ChallengeIntent`;
 - durable preparation/projection state from `getPreparationContext(...)`;
 - the selected weakness carried by the intent;
-- current/resumed attempt hint and exposure provenance from `resumeSession(...)`;
+- current/resumed attempt hint and exposure provenance from the continuation resume result (or low-level `resumeSession(...)` in session-specific tooling);
 - the current mission/session/interview decision.
 
 Do not require arbitrary historical exposure queries or direct database reads.
@@ -157,7 +160,14 @@ As the selected interaction and durable evidence permit, retreat from teacher-pr
 
 ### Explain the authoritative next move
 
-Only after the current interaction episode closes, call the responsible Learning OS owner for the next decision. For ordinary study, call `getTodayMission(...)` with remaining **active-study** minutes and `maxItems: 1`; it automatically resolves durable goal study focus, so use `focusObjectiveIds` only for an intentional per-call override. Planner item minutes are capacity estimates, not consumed time. Reduce the remaining budget only from reliable client-measured or learner-reported active time; if unknown, do not subtract wall-clock time or the planned estimate. If it returns a move, present that one move with a short learner-facing reason and stop. Do not freeze/open/present the next attempt in the same turn. An unambiguous "yes/continue" (or an already-active instruction such as "keep going") executes the already-selected move without another menu. If the learner requests a different direction that changes what work comes next, route it through Learning OS rather than synthesizing a shadow next-action policy.
+Only after the current interaction episode closes, call `getStudyContinuation(...)` again. Supply remaining **active-study** minutes only when reliable; otherwise omit them. Handle exactly one returned branch:
+
+- `resume`: continue the returned durable session before collecting a budget;
+- `needs_budget`: ask for current remaining active-study minutes and treat `suggestedMinutes` only as a configured suggestion;
+- `recommend`: present the single move with a short learner-facing reason and wait for acceptance before opening an attempt;
+- `no_action`: explain the returned blockers or that no goal work is currently actionable.
+
+Planner minutes are capacity estimates, not consumed time. A break of minutes, hours, or longer neither expires an attempt nor becomes active-study time. A bare “continue” authorizes resuming already-open work; it does not silently accept a newly selected recommendation. An explicit standing instruction such as “keep going without pausing” may accept later recommendations until the learner pauses or redirects. If the learner requests a different direction that changes what work comes next, route it through Learning OS rather than synthesizing a shadow next-action policy.
 
 When the learner explicitly enters a curriculum/study phase such as "Day 1", persist that intent with `setGoalStudyFocus({ goalId, label, objectiveIds })` using the active goal-objective IDs from the confirmed curriculum/reference. Learning OS snapshots the resolved prerequisite/foundation closure in a stable focus episode. Recover the active episode from `getPreparationContext(goalId).studyFocus`, list historical phases with `listGoalStudyFocusEpisodes(goalId)`, and clear/replace focus only when the learner completes, leaves, or changes phase. Calendar-day changes never close the episode. Study focus is orchestration intent, not evidence or competence state. Ordinary unrelated due work may appear only as a bounded warm-up and must not replace the focus main episode; on `maxItems: 1`, stay inside the focus envelope unless Learning OS returns a higher-authority exception such as a blocking misconception, recurring/retest weakness, eligible weakness retest, true prerequisite, or transfer that is actually selection-eligible. Treat required transfer as a later goal-completion requirement, not a reason to escalate while readiness is still below target or a recent failure/unresolved weakness remains.
 
@@ -207,11 +217,13 @@ Before teaching:
 
 1. Resolve the intended profile. Do not silently use another learner.
 2. Open the profile and recover durable preparation context, including any `studyFocus` and explicit interaction preferences. If the learner explicitly establishes or changes speech/atomic-question preferences, persist them with `setInteractionPreferences(...)`.
-3. Check resumable session state when relevant.
-4. Use actual projections/evidence and current goal state, not old chat memory, to decide what is true.
-5. If the learner asks what to do next, use the current Learning OS mission/session/interview owner.
+3. Resolve the intended goal; when multiple goals remain plausible, ask rather than silently choosing one.
+4. Call `getStudyContinuation(...)` for “continue,” “resume,” and ordinary next-action requests. It resumes the newest open session for that goal and reports any additional resumable sessions; mention additional unfinished work without discarding it.
+5. Use actual projections/evidence and current goal state, not old chat memory, to decide what is true.
 
 A fresh teacher must be able to continue without the previous provider conversation.
+
+When the learner asks to commit or push canonical profile state, follow the current repository `AGENTS.md` and README Git workflow. Checkpoint the profile before staging, keep SQLite/registry coordination artifacts untracked, and treat remote visibility as learner-data visibility. The teacher kernel never performs Git operations automatically.
 
 ### C. Learning, practice, review, interview, or mock
 
@@ -235,7 +247,7 @@ Learning OS chooses objective/task intent
 → learner reconstructs or explicitly opts out
 → resolve the reconstruction checkpoint when required
 → close the interaction episode
-→ ask Learning OS for the next decision
+→ call `getStudyContinuation(...)` for the next decision
 → present it and wait for learner acceptance before opening its attempt
 ```
 
@@ -268,7 +280,7 @@ The learner should not feel like they are operating a database protocol.
 - Never reveal private solution/rubric material before learner response when it would compromise assessment.
 - Never show a hint before its hint observation is recorded.
 - Never silently switch learner profiles.
-- Never invent a mission because `tutor today`, selector, session, or interview ownership feels inconvenient.
+- Never bypass `getStudyContinuation(...)` by composing a shadow resume/mission order.
 - Never require provider conversation IDs or private chat memory for continuity.
 - Never copy the global `knowledge/` library into learner profile storage.
 

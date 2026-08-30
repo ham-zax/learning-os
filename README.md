@@ -28,7 +28,7 @@ Different objectives can start differently. One topic may need `learn`, another 
 
 - **Planning is not mastery.** Resume/JD/self-report information can change priority and starting strategy, but it does not create readiness, transfer, durability, evidence, or review cards.
 - **Capabilities are tracked separately.** Being able to explain transactions does not imply you can debug a race condition or design a safe retry path.
-- **Each learner is isolated.** Managed profiles use separate SQLite databases under ignored local `data/`.
+- **Each learner is isolated.** Managed profiles use separate SQLite databases under `data/`; this repository may version those canonical files intentionally.
 - **Curriculum is reusable.** Markdown and topic manifests under `knowledge/` are shared source material, not duplicated into every learner profile.
 - **Scheduling and teaching have different owners.** FSRS decides when retrieval is useful; Learning OS decides what objective and task form should come next.
 - **The teacher is replaceable.** ChatGPT can be the conversational layer, but learner truth lives in the local kernel rather than provider memory.
@@ -62,17 +62,19 @@ The CLI will collect the minimum structured information it needs, show the propo
 
 After confirmation it prints the new profile ID, goal ID, number of activated objectives, and the next action.
 
-Then ask what to do today:
+Then ask Learning OS to resume unfinished work or choose one next action:
 
 ```bash
-npm run tutor -- today <goal-id>
+npm run tutor -- continue <goal-id>
 ```
 
-If onboarding recorded a normal daily study budget, `today` uses it by default. Override it for one session with:
+If nothing is open, continuation asks for the active-study time you actually have left. Supply it with:
 
 ```bash
-npm run tutor -- today <goal-id> --minutes 20
+npm run tutor -- continue <goal-id> --minutes 20
 ```
+
+A break of two minutes, two hours, or longer does not expire an attempt. Open work resumes before budget collection or new planning. Wall-clock break time is never counted as study time.
 
 ### Option B: use a compatible AI teacher
 
@@ -108,7 +110,7 @@ data/
         └── tutor.db
 ```
 
-`data/` is ignored by Git. There is no automatic shared default learner. The registry contains profile metadata and the selected profile; mastery, goals, sessions, evidence, weaknesses, review cards, and resumable state remain inside that profile's SQLite database.
+There is no automatic shared default learner. The registry contains profile metadata and the selected profile; mastery, goals, sessions, evidence, weaknesses, review cards, and resumable state remain inside that profile's SQLite database. Canonical `registry.json` and `tutor.db` files may be committed deliberately; transient SQLite and registry coordination files are ignored.
 
 Useful commands:
 
@@ -117,10 +119,26 @@ npm run tutor -- profile create "Alice"
 npm run tutor -- profile list
 npm run tutor -- profile show
 npm run tutor -- profile use alice
-npm run tutor -- --profile alice today <goal-id>
+npm run tutor -- --profile alice continue <goal-id>
+npm run tutor -- profile checkpoint alice
 ```
 
 An existing pre-profile `data/tutor.db` is preserved as a legacy profile instead of being copied into new learners.
+
+### Save learner state to Git
+
+After study, checkpoint SQLite before staging the canonical profile:
+
+```bash
+npm run tutor -- profile checkpoint <profile-id>
+git add data/profiles/registry.json data/profiles/<profile-id>/tutor.db
+git commit -m "data: checkpoint learner progress"
+git push
+```
+
+The checkpoint truncates the WAL, verifies database integrity, and leaves Git untouched. Never stage `tutor.db-wal`, `tutor.db-shm`, `tutor.db-journal`, or registry lock/temp artifacts.
+
+This workflow can send learner responses, goals, evidence, exposure history, and scheduling state to the configured remote. Confirm repository visibility and collaborator access first. SQLite is binary: use one canonical writer and do not try to text-merge independently changed copies.
 
 ## Daily learning loop
 
@@ -168,7 +186,7 @@ ReviewRatingMapper
 FSRS review timing
 ```
 
-This is the same state used by ordinary practice, review, interview work, weakness retesting, resumable sessions, and `tutor today`.
+This is the same state used by ordinary practice, review, interview work, weakness retesting, resumable sessions, `tutor continue`, and `tutor today`.
 
 ## Customize it for yourself
 
@@ -207,6 +225,8 @@ These are examples and starter material, not a mandatory universal curriculum. A
 | `npm run tutor -- onboard` | Build and confirm a structured preparation plan |
 | `npm run tutor -- profile list` | List local learner profiles |
 | `npm run tutor -- profile use <id>` | Select a learner profile |
+| `npm run tutor -- profile checkpoint [id]` | Flush and verify canonical learner state before a Git commit |
+| `npm run tutor -- continue <goal-id> [--minutes <n>]` | Resume unfinished work or return one next action |
 | `npm run tutor -- today <goal-id>` | Build today's bounded evidence-driven mission |
 | `npm run tutor -- goal <goal-id>` | Inspect/configure goal objective requirements |
 | `npm run tutor -- interview <concept-id>` | Start an interview drill scoped to one concept |
@@ -219,11 +239,13 @@ Run `npm run tutor -- --help` for the current command surface.
 
 ## Privacy and local data
 
-Learning OS is local-first. Managed learner databases and profile metadata live under ignored `data/`.
+Learning OS is local-first: the kernel runs against local SQLite. This repository also supports intentionally versioning canonical managed learner databases and profile metadata under `data/` after checkpointing. Versioning is optional operational persistence, not hosted synchronization.
 
 Confirmed onboarding persists structured planning information needed for future operation, such as target, deadline, time budget, objective strategy, and diagnostic intent. It does **not** persist raw resumes, raw job descriptions, chat transcripts, provider message IDs, or API keys as learner state.
 
 The global `knowledge/` directory is repository content and should contain reusable curriculum, not private learner history.
+
+Transient SQLite sidecars are ignored. Canonical profile databases are not encrypted by Learning OS, so pushing one grants its repository readers access to the learner state it contains.
 
 ## Documentation
 
@@ -244,7 +266,7 @@ For contributors and integrators:
 
 ## Project status
 
-The core local product loop is implemented: profile isolation, confirmed adaptive onboarding, sparse objectives, evidence/projections, objective-level FSRS scheduling, challenge selection, interview evidence, resumable sessions, and daily orchestration.
+The core local product loop is implemented: profile isolation, confirmed adaptive onboarding, sparse objectives, evidence/projections, objective-level FSRS scheduling, challenge selection, interview evidence, resume-first continuation, safe profile checkpointing, and daily orchestration.
 
 This is still a developer preview rather than a polished hosted application. The CLI is the concrete offline surface today; AI-teacher integrations are intentionally provider-neutral and are expected to run in an environment that can call the workspace/kernel APIs.
 

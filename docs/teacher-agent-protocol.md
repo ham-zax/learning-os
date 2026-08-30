@@ -52,7 +52,8 @@ pre-profile onboarding
 
 profile-bound teaching
 → createTeacherKernel(db)
-→ current session/interview/today owners
+→ getStudyContinuation(...) before ordinary resumption/next-action selection
+→ current session/interview owners for accepted work
 
 CLI fallback
 → npm run tutor -- ...
@@ -111,7 +112,7 @@ This is the semi-strict balance: **do not block useful teaching, but never hide 
 | Learner request | Required behavior |
 | --- | --- |
 | "What is MVCC?" outside an active/pending MVCC assessment | Explain directly; do not infer mastery. |
-| "What should I study today?" | Resolve profile/goal and use Learning OS mission ownership. |
+| "Continue" / "Resume" / "What should I study today?" | Resolve profile/goal and call `kernel.getStudyContinuation(...)` before selecting or opening work. |
 | "Quiz me" / "Interview me" | Resolve the requested active objective and call `kernel.resolveRequestedChallenge(...)` before generating an assessable question. Respect an authoritative blocker instead of substituting another generic interview. |
 | "I know this already" | Treat as self-report/planning signal only. |
 | "Explain this" while the same objective has a pending diagnostic | Offer diagnose-first vs explain-now; if explain-now, record exposure and preserve unknown mastery. |
@@ -154,11 +155,20 @@ Before teaching an existing learner:
 1. resolve the intended profile; do not silently switch learners;
 2. open the profile;
 3. recover durable preparation context, including any `studyFocus`, profile interaction preferences, and the active goal;
-4. inspect resumable session state when relevant;
+4. call `kernel.getStudyContinuation(...)` for “continue,” “resume,” and ordinary next-action requests;
 5. use persisted evidence/projections rather than old chat memory to decide what is true;
-6. use the current Learning OS owner to choose the next pedagogical action.
+6. execute the returned branch without composing a competing resume/planning order.
 
 Conversation memory may improve tone and continuity, but it is never learner-state authority.
+
+`getStudyContinuation(...)` owns the transition boundary:
+
+- `resume`: continue the returned durable session before asking about time, even after a long break;
+- `needs_budget`: ask for current remaining active-study minutes; show `suggestedMinutes` only as a configured suggestion;
+- `recommend`: present the single returned move and wait for acceptance before opening an attempt;
+- `no_action`: explain returned blockers or that no goal work is currently actionable.
+
+A break of two minutes, two hours, or longer never becomes active-study time and never expires an attempt. When no session is resumable and remaining time is unknown, omit `availableMinutes`; do not reset it from `minutes_per_day`, wall elapsed time, or a planned item estimate.
 
 ## Pedagogical execution contract
 
@@ -189,7 +199,7 @@ Choose pedagogy from information exposed through the public teacher boundary:
 
 - `ChallengeIntent`, including capability, task form, novelty, selected weakness, changed-surface requirement, and recent surfaces to avoid;
 - durable readiness, transfer, durability, diagnostic, preparation, and explicit profile interaction preferences from `getPreparationContext(...)`;
-- current/resumed attempt hint and exposure provenance from `resumeSession(...)` when an attempt exists;
+- current/resumed attempt hint and exposure provenance from the `getStudyContinuation(...)` resume result (or low-level `resumeSession(...)` in session-specific tooling);
 - the authoritative mission/session/interview decision returned by Learning OS.
 
 Do not require arbitrary historical exposure inspection or direct database reads to choose scaffolding.
@@ -352,11 +362,11 @@ Interview is only a delivery context. Do not run a separate generic ChatGPT inte
 
 ## Learner-facing next action
 
-After the current interaction episode has reached cognitive closure, use Learning OS to obtain the authoritative next move. For ordinary study orchestration, call `getTodayMission(...)` with the **current remaining active-study minutes** and `maxItems: 1`. The planner's item `minutes` are reservation estimates, not consumed time. Reduce the remaining budget only from reliable active-time telemetry or a learner report; persist a reliable episode total with `completeSessionFeedback(..., { activeTimeSeconds })` or `resolveSessionReconstruction(..., { activeTimeSeconds })` when available. If active time is unknown, do not deduct wall-clock time or the planned estimate. The planner automatically resolves any durable goal study focus; pass `focusObjectiveIds` only for an intentional per-call override. Recompute after every closed episode so the just-recorded evidence can change selection.
+After the current interaction episode has reached cognitive closure, call `getStudyContinuation(...)` again. Supply the **current remaining active-study minutes** when reliable; otherwise omit them and follow `needs_budget`. Continuation internally bounds ordinary planning to one item and resolves durable goal study focus through the planner. Reduce the remaining budget only from reliable active-time telemetry or a learner report; persist a reliable episode total with `completeSessionFeedback(..., { activeTimeSeconds })` or `resolveSessionReconstruction(..., { activeTimeSeconds })` when available. Wall time and planned item minutes are never consumed time. Recompute after every closed episode so the just-recorded evidence can change selection.
 
 When the learner explicitly enters a curriculum/study phase such as "Day 1", persist that generic phase intent with `setGoalStudyFocus({ goalId, label, objectiveIds })`. Use the active goal-objective IDs supplied by the confirmed curriculum/reference; do not infer competence from the phase label. Learning OS snapshots the resolved prerequisite/foundation closure in a stable study-focus episode. Keep the focus until the learner explicitly completes, leaves, or changes that phase, then call `clearGoalStudyFocus(goalId)`, which closes the episode rather than deleting its history. Calendar-day changes never close a study-focus episode. A fresh teacher recovers the active episode through `getPreparationContext(goalId).studyFocus` and historical phases through `listGoalStudyFocusEpisodes(goalId)`, never previous chat memory. Study focus is orchestration intent only: it never becomes readiness/evidence/FSRS state. Ordinary unrelated due work may appear only as a bounded warm-up and must not replace the focus's main forward-progress episode; with `maxItems: 1`, the sole returned move stays inside the focus envelope unless Learning OS selects a higher-authority exception such as a blocking misconception, recurring/retest weakness, eligible weakness retest, true prerequisite, or transfer that is actually selection-eligible. Required transfer is a later completion requirement for ordinary daily orchestration and becomes transfer-eligible only after the current goal readiness target is met without recent failure or an active unresolved weakness.
 
-Obtaining that recommendation is allowed before learner confirmation; opening another attempt is not. When a move is returned:
+Obtaining a `recommend` result is allowed before learner confirmation; opening another attempt is not. When a move is returned:
 
 1. state the important result briefly;
 2. express the selected move as one clear recommendation;

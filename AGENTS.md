@@ -36,6 +36,7 @@ learn | practice | review | interview | mock
 - `data/profiles/registry.json` stores profile metadata and the active profile only; registry writes are serialized across concurrent processes.
 - `data/tutor.db` is supported only as the preserved legacy compatibility profile.
 - Learner evidence, goals, review cards, weaknesses, sessions, and resumable state are profile-local.
+- Canonical managed `registry.json` and `tutor.db` files may be versioned intentionally after a successful profile checkpoint.
 - Raw resumes, job descriptions, chat transcripts, provider IDs, and API keys are not learner-state persistence.
 
 Never treat these legacy `concepts` columns as authoritative mastery:
@@ -59,6 +60,7 @@ They remain compatibility/provenance fields.
 | `src/selection/` | Deterministic challenge-intent selection |
 | `src/scheduler/` | `ts-fsrs` adapter and evidence-to-rating mapping |
 | `src/plan/today.ts` | Daily mission orchestration and goal time budget |
+| `src/study/continuation.ts` | Read-only resume-before-budget-before-plan orchestration |
 | `src/session/` | Ordinary learning-session flow |
 | `src/interview/` | Coding and system-design interview flows |
 | `src/db/database.ts` | SQLite schema, migrations, CRUD |
@@ -124,6 +126,7 @@ The portable skill source is `skills/learning-os-teacher/`. Claude-compatible lo
 - Evidence corrections rebuild derived projections/cards; do not rewrite history.
 - Coding correctness requires real executable verification when the challenge requires it. LLM review alone is qualitative.
 - A fresh teacher must be able to resume from durable kernel state without previous chat history.
+- Learner-facing continuation must call `getStudyContinuation(...)` before selecting new work.
 
 ## Commands
 
@@ -131,7 +134,9 @@ The portable skill source is `skills/learning-os-teacher/`. Claude-compatible lo
 npm ci
 npm run tutor -- profile create "My Profile"
 npm run tutor -- profile list
+npm run tutor -- profile checkpoint [profile-id]
 npm run tutor -- onboard
+npm run tutor -- continue <goal-id> [--minutes <n>]
 npm run tutor -- today <goal-id>
 npm run tutor -- <topic-id> --mode learn
 npm run tutor -- <topic-id> --mode practice
@@ -144,7 +149,11 @@ npm run typecheck
 npm run build
 ```
 
-Do not commit live runtime learner databases under `data/`, `config.json`, raw learner documents, secrets, or generated personal plans. Portable, intentionally curated learner examples or personalized lesson snapshots may be committed outside `data/` when they are human-readable, explicitly non-secret, and documented as examples rather than authoritative runtime state. Such snapshots are for learning/reference unless an explicit import/restore path exists.
+Canonical managed learner state in `data/profiles/registry.json` and `data/profiles/<profile-id>/tutor.db` may be committed intentionally. Run `npm run tutor -- profile checkpoint [profile-id]` after study and before staging a database. Stage the canonical files; keep SQLite WAL/SHM/journal sidecars and registry lock/temp artifacts untracked.
+
+Versioned learner databases contain responses, evidence, exposure history, goals, and scheduling state. Treat repository visibility and collaborator access as learner-data access. SQLite databases are binary: use one canonical writer, avoid independent edits to the same profile on multiple branches or machines, and choose one canonical database if histories diverge. A textual Git merge is not a database merge.
+
+Keep `config.json`, raw learner documents, resumes, job descriptions, chat transcripts, provider IDs, API keys, secrets, and generated personal plans out of Git. Portable, intentionally curated learner examples or personalized lesson snapshots may be committed outside `data/` when they are human-readable, explicitly non-secret, and documented as examples rather than authoritative runtime state. Such snapshots are for learning/reference unless an explicit import/restore path exists.
 
 ## Documentation authority
 

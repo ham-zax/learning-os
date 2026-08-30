@@ -734,6 +734,35 @@ remove review_card if no effective review history remains
 
 Do not delete or rewrite the original `review_event` or `misconception_observation`. Their effective validity is inherited from the source `EvidenceEvent`. A corrected replacement gets its own derived observations/review event. Restoring evidence re-includes the original derived events during replay and is rejected if doing so would conflict with an already-effective replacement for the same normal attempt/objective.
 
+## Study continuation contract
+
+`src/study/continuation.ts::getStudyContinuation(db, input)` is the read-only entry point for “continue,” “resume,” and ordinary what-to-study-next requests:
+
+```text
+getStudyContinuation({
+  goalId,
+  now,
+  availableMinutes?,
+  retestEligibleWeaknessKeys?,
+  mainDeliveryContext?,
+  transferDeliveryContext?
+})
+→ resume | needs_budget | recommend | no_action
+```
+
+It applies this order:
+
+1. validate the goal;
+2. return the newest resumable session and identify any additional open session IDs;
+3. when no session is resumable and `availableMinutes` is absent, return `needs_budget` with confirmed `minutes_per_day` as a suggestion or `null`;
+4. otherwise call daily planning with `maxItems: 1` and return one `recommend` item or `no_action`.
+
+Resumable state always precedes budget collection. An attempt does not expire because a caller returns after minutes, hours, or longer. A configured daily budget is not evidence of how much active-study time remains. Callers supply current remaining active-study minutes after open work closes; wall time and planner estimates are never substituted.
+
+Continuation does not register/freeze a challenge, create a session, open an attempt, record a hint/exposure/assessment, close feedback, or write scheduling/evidence state. `recommend` is therefore safe before learner acceptance. The learner or agent opens an attempt only after accepting the returned move.
+
+This contract adds no persisted table or projection. It composes existing durable session state and `getTodayMission(...)`; `listResumableSessions(...)`, `resumeSession(...)`, and `getTodayMission(...)` remain available as low-level interfaces.
+
 ## `tutor today` contract
 
 ### Inputs
@@ -826,9 +855,21 @@ The protocol is transport- and provider-neutral. ChatGPT is the preferred V1 int
 
 Use one active teacher/orchestrator at a time in V1. Do not introduce a network service, plugin framework, or multi-agent router solely for portability; the stable kernel contract is the portability boundary.
 
-`src/teacher.ts::createTeacherKernel(db)` is the V1 in-process adapter. It binds the provider-neutral operations below to one database handle without storing provider conversation state. `listResumableSessions(topicId?)` lets a replacement teacher discover unfinished sessions before calling `resumeSession(sessionId)`; discovery does not depend on remembered chat identifiers.
+`src/teacher.ts::createTeacherKernel(db)` is the V1 in-process adapter. It binds the provider-neutral operations below to one database handle without storing provider conversation state. `getStudyContinuation(...)` is the replacement teacher's first operation for resumption or ordinary next-action selection; discovery does not depend on remembered chat identifiers. Low-level `listResumableSessions(topicId?)` and `resumeSession(sessionId)` remain available for session-specific tools.
 
 Optional agent/model provenance may be recorded for audit, but it cannot alter evidence interpretation, projection rules, scheduler semantics, or resume correctness.
+
+### 0. Resolve resumption or one next action
+
+```text
+getStudyContinuation({ goalId, now, availableMinutes? })
+→ resume { session, additionalResumableSessionIds }
+→ needs_budget { goalId, suggestedMinutes }
+→ recommend { mission, item }
+→ no_action { mission }
+```
+
+Call this before composing low-level resume and planning operations. Omit `availableMinutes` when it is unknown: unfinished work still resumes, while new planning returns `needs_budget`. `suggestedMinutes` is confirmed preparation metadata only; ask for the learner's current remaining active-study time before planning.
 
 ### 1. Request daily mission / next bounded move
 
