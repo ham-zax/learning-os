@@ -25,3 +25,11 @@ knowledge/sql-fundamentals.md
 .DS_Store
 .claude/worktrees/
 knowledge/coding-interview/behavioral-prep.md
+
+# Canonical profile registry.json and tutor.db files may be versioned.
+# SQLite/registry coordination artifacts are always transient.
+data/**/*.db-shm
+data/**/*.db-wal
+data/**/*.db-journal
+data/profiles/registry.json.lock/
+data/profiles/registry.json.tmp-*

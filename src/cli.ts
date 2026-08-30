@@ -26,6 +26,7 @@ import chalk from "chalk";
 
 import type { createDatabase } from "./db/database.js";
 import {
+  checkpointProfileDatabase,
   createProfile,
   getActiveProfile,
   getProfile,
@@ -850,6 +851,27 @@ profileCommand
       console.log(`  Created:     ${profile.createdAt}`);
       console.log(`  Source:      ${profile.source}`);
       console.log(`  Description: ${profile.description ?? "(none)"}`);
+    } catch (err) {
+      error(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+    }
+  });
+
+profileCommand
+  .command("checkpoint")
+  .description("Checkpoint a learner database before committing it to Git")
+  .argument("[id]", "Profile ID (defaults to selected profile)")
+  .action((id?: string) => {
+    try {
+      const checkpoint = checkpointProfileDatabase(
+        id ?? cliProfileOverride(),
+        profileStoreOptions(),
+      );
+      success(`Checkpointed profile ${checkpoint.profile.id}.`);
+      console.log(`  Database: ${checkpoint.databasePath}`);
+      console.log(`  Integrity: ${checkpoint.integrity}`);
+      console.log(`  WAL frames checkpointed: ${checkpoint.walFramesCheckpointed}`);
+      console.log(`  WAL frames remaining: ${checkpoint.walFramesRemaining}`);
     } catch (err) {
       error(err instanceof Error ? err.message : String(err));
       process.exitCode = 1;
