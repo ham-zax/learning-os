@@ -255,7 +255,7 @@ A goal-specific onboarding daily budget takes precedence over the global `daily_
 
 ## 9. Checkpoint and version learner state
 
-Canonical managed learner state may be committed to this repository. Flush the profile's WAL and verify integrity before staging it:
+Canonical managed learner state is intentionally versioned in this repository. When learner state changes, flush the profile's WAL and verify integrity before staging and committing it:
 
 ```bash
 npm run tutor -- profile checkpoint <profile-id>
@@ -273,7 +273,7 @@ The canonical database contains learner responses, goals, evidence, exposure his
 ```text
 learning-os/
 ├── knowledge/              # reusable, versioned curriculum
-├── data/                   # canonical profile files may be versioned
+├── data/                   # canonical profile files are versioned learner state
 │   └── profiles/
 │       ├── registry.json
 │       └── <profile-id>/

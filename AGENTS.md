@@ -36,7 +36,7 @@ learn | practice | review | interview | mock
 - `data/profiles/registry.json` stores profile metadata and the active profile only; registry writes are serialized across concurrent processes.
 - `data/tutor.db` is supported only as the preserved legacy compatibility profile.
 - Learner evidence, goals, review cards, weaknesses, sessions, and resumable state are profile-local.
-- Canonical managed `registry.json` and `tutor.db` files may be versioned intentionally after a successful profile checkpoint.
+- Canonical managed `registry.json` and `tutor.db` files are intentionally versioned learner state. When they change and a commit is being made, checkpoint the affected profile and include the canonical files; do not omit them as disposable runtime state.
 - Raw resumes, job descriptions, chat transcripts, provider IDs, and API keys are not learner-state persistence.
 
 Never treat these legacy `concepts` columns as authoritative mastery:
@@ -149,7 +149,7 @@ npm run typecheck
 npm run build
 ```
 
-Canonical managed learner state in `data/profiles/registry.json` and `data/profiles/<profile-id>/tutor.db` may be committed intentionally. Run `npm run tutor -- profile checkpoint [profile-id]` after study and before staging a database. Stage the canonical files; keep SQLite WAL/SHM/journal sidecars and registry lock/temp artifacts untracked.
+Canonical managed learner state in `data/profiles/registry.json` and `data/profiles/<profile-id>/tutor.db` is intentionally versioned. After learner state changes, run `npm run tutor -- profile checkpoint [profile-id]` before staging the database. When committing a work wave that includes those changes, include the changed canonical files; do not leave them out merely because they are learner/runtime data. Keep SQLite WAL/SHM/journal sidecars and registry lock/temp artifacts untracked.
 
 Versioned learner databases contain responses, evidence, exposure history, goals, and scheduling state. Treat repository visibility and collaborator access as learner-data access. SQLite databases are binary: use one canonical writer, avoid independent edits to the same profile on multiple branches or machines, and choose one canonical database if histories diverge. A textual Git merge is not a database merge.
 

@@ -27,4 +27,4 @@ Prefer:
 
 Avoid direct SQLite writes for learner-state operations.
 
-When canonical learner state is intentionally versioned, use the repository's profile checkpoint command before staging `registry.json`/`tutor.db`. Keep WAL/SHM/journal and registry lock/temp artifacts untracked. Repository access controls are learner-data access controls, and independently changed SQLite databases are not text-mergeable.
+Canonical learner state is intentionally versioned. Before staging changed `registry.json`/`tutor.db`, use the repository's profile checkpoint command; when the current work includes those learner-state changes, include the canonical files in the commit rather than treating them as disposable runtime state. Keep WAL/SHM/journal and registry lock/temp artifacts untracked. Repository access controls are learner-data access controls, and independently changed SQLite databases are not text-mergeable.
