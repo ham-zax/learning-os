@@ -267,7 +267,7 @@ Record answer-bearing repair before showing it:
 recordExposure(db, sessionId, {
   attemptId,
   objectiveIds: [OBJECTIVE_ID],
-  exposureType: "answer",
+  exposureType: "answer_revealed",
   teachingMaterial: { content: "The mechanism is causal state transition." },
   requireReconstruction: true,
 });
