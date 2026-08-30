@@ -480,6 +480,11 @@ export function openAttempt(
       const session = SessionSchema.parse(
         db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId),
       );
+      if (session.reconstruction_status === "required") {
+        throw new Error(
+          `Session ${sessionId} requires learner reconstruction or explicit opt-out before another attempt can open`,
+        );
+      }
       if (session.mode !== challenge.deliveryContext) {
         throw new Error(
           `Session delivery context ${session.mode} does not match challenge ${challenge.deliveryContext}`,

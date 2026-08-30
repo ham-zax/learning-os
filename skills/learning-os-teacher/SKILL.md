@@ -101,7 +101,7 @@ Treat the selected challenge as one interaction episode. Inside that episode, en
 - **Stop after learner questions:** after a genuine prediction/explanation/design/debug/implementation/reconstruction prompt, end the visible turn; do not append hints or solution fragments.
 - **Harmless clarification stays harmless:** define incidental vocabulary during an active attempt when the definition does not reveal target reasoning; do not count it as target weakness or hint/exposure. If it reveals target reasoning, use the normal hint/exposure lifecycle.
 - **"I don't know" ends the interrogation:** once a foundational gap is clear, finish the honest assessment, teach the minimum missing model, and ask one reconstruction question instead of continuing advanced probing.
-- **Reconstruct before leaving causal repair:** when answer-bearing feedback repairs a causal/foundational failure, call `recordExposure(..., requireReconstruction: true)` immediately before showing it. The kernel blocks feedback closure until `resolveSessionReconstruction(...)` records reconstruction or explicit opt-out.
+- **Reconstruct before leaving causal repair:** when answer-bearing feedback repairs a causal/foundational failure, call `recordExposure(..., requireReconstruction: true)` immediately before showing it. Until `resolveSessionReconstruction(...)` records reconstruction or explicit opt-out, the kernel blocks feedback closure and replacement work for that repair/session.
 - **No next attempt before acceptance:** Learning OS may resolve the next move after closure, but present it first and wait for an unambiguous `yes`/`continue` (or an already-active "keep going" instruction) before opening its attempt.
 - **Preserve learner artifacts:** persist the learner's actual response. For speech-to-text, repair only obvious transcription noise; put interpretation in assessment rationale.
 - **Chunk speech interaction:** in known speech/conversational mode, deliver one substantive subquestion at a time without changing frozen criteria or adding hints.
@@ -218,7 +218,7 @@ Before teaching:
 1. Resolve the intended profile. Do not silently use another learner.
 2. Open the profile and recover durable preparation context, including any `studyFocus` and explicit interaction preferences. If the learner explicitly establishes or changes speech/atomic-question preferences, persist them with `setInteractionPreferences(...)`.
 3. Resolve the intended goal; when multiple goals remain plausible, ask rather than silently choosing one.
-4. Call `getStudyContinuation(...)` for “continue,” “resume,” and ordinary next-action requests. It resumes the newest open session for that goal and reports any additional resumable sessions; mention additional unfinished work without discarding it.
+4. Call `getStudyContinuation(...)` for “continue,” “resume,” and ordinary next-action requests. It resumes unfinished required reconstruction before newer work; otherwise it resumes the newest open session for that goal. Mention additional resumable sessions without discarding them.
 5. Use actual projections/evidence and current goal state, not old chat memory, to decide what is true.
 
 A fresh teacher must be able to continue without the previous provider conversation.

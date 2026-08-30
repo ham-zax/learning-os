@@ -45,12 +45,15 @@ export function getStudyContinuation(
   }
 
   const resumable = listResumableSessions(db, input.goalId);
-  const [session, ...additional] = resumable;
+  const requiredReconstruction = resumable.find((entry) => entry.reconstructionRequired);
+  const session = requiredReconstruction ?? resumable[0];
   if (session) {
     return {
       kind: "resume",
       session,
-      additionalResumableSessionIds: additional.map((entry) => entry.session.id),
+      additionalResumableSessionIds: resumable
+        .filter((entry) => entry.session.id !== session.session.id)
+        .map((entry) => entry.session.id),
     };
   }
 

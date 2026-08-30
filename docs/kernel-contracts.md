@@ -132,7 +132,7 @@ Do not persist raw resumes, job descriptions, chat transcripts, provider identif
 
 ### `sessions` repair checkpoint
 
-`reconstruction_status` is profile-local interaction state with values `not_required`, `required`, `completed`, or `opted_out`. It is not evidence or mastery. When answer-bearing feedback repairs a causal/foundational error, `recordExposure(..., requireReconstruction: true)` marks the current feedback episode `required` in the same transaction as the exposure. `completeSessionFeedback(...)` must refuse to close that episode until `resolveSessionReconstruction(...)` records either learner reconstruction or explicit opt-out. A replacement teacher therefore cannot lose an unfinished repair merely because the provider conversation changed.
+`reconstruction_status` is profile-local interaction state with values `not_required`, `required`, `completed`, or `opted_out`. It is not evidence or mastery. When answer-bearing feedback repairs a causal/foundational error, `recordExposure(..., requireReconstruction: true)` marks the current feedback episode `required` in the same transaction as the exposure. Until `resolveSessionReconstruction(...)` records learner reconstruction or explicit opt-out, `completeSessionFeedback(...)` must refuse closure, `openAttempt(...)` must refuse another attempt in that session, and `createSession(...)` must refuse another session for the same goal/topic. Continuation prioritizes required reconstruction over newer resumable work so a replacement teacher cannot lose an unfinished repair merely because another session exists or the provider conversation changed.
 
 ### `interaction_preferences`
 
@@ -753,7 +753,7 @@ getStudyContinuation({
 It applies this order:
 
 1. validate the goal;
-2. return the newest resumable session and identify any additional open session IDs;
+2. if any resumable session requires learner reconstruction, return that repair episode first; otherwise return the newest resumable session, and identify any additional open session IDs;
 3. when no session is resumable and `availableMinutes` is absent, return `needs_budget` with confirmed `minutes_per_day` as a suggestion or `null`;
 4. otherwise call daily planning with `maxItems: 1` and return one `recommend` item or `no_action`.
 

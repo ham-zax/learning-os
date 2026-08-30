@@ -163,7 +163,7 @@ Conversation memory may improve tone and continuity, but it is never learner-sta
 
 `getStudyContinuation(...)` owns the transition boundary:
 
-- `resume`: continue the returned durable session before asking about time, even after a long break;
+- `resume`: continue the returned durable session before asking about time, even after a long break; required reconstruction outranks newer unfinished work;
 - `needs_budget`: ask for current remaining active-study minutes; show `suggestedMinutes` only as a configured suggestion;
 - `recommend`: present the single returned move and wait for acceptance before opening an attempt;
 - `no_action`: explain returned blockers or that no goal work is currently actionable.
@@ -185,7 +185,7 @@ These rules are learner-facing execution boundaries. Most remain teacher-owned; 
 3. **Stop after a real question.** When asking the learner to predict, explain, trace, design, debug, implement, or reconstruct, end the learner-visible turn after that prompt. Do not append hints, solution fragments, or the next teaching move.
 4. **Clarify without contaminating the target.** A brief definition or clarification may occur during an active attempt when it does not reveal target reasoning. Do not record it as a hint/exposure or target weakness. If the clarification would reveal target reasoning, use the normal hint/exposure lifecycle instead.
 5. **Teach when interrogation has stopped being useful.** If the learner says "I don't know" or a foundational gap is already clear, do not keep probing advanced criteria merely to accumulate failures. Finish the honest assessment, teach the minimum missing model, then ask for reconstruction.
-6. **Reconstruct before transition after causal repair.** After answer-bearing repair of a causal/foundational error, call `recordExposure(..., requireReconstruction: true)` immediately before the visible repair. The kernel then blocks `completeSessionFeedback(...)` until the learner reconstructs the corrected model or explicitly opts out through `resolveSessionReconstruction(...)`. Generating corrective text is not cognitive closure.
+6. **Reconstruct before transition after causal repair.** After answer-bearing repair of a causal/foundational error, call `recordExposure(..., requireReconstruction: true)` immediately before the visible repair. Until the learner reconstructs the corrected model or explicitly opts out through `resolveSessionReconstruction(...)`, the kernel blocks feedback closure and opening replacement work for that repair/session. Generating corrective text is not cognitive closure.
 7. **Do not open the next attempt before acceptance.** After episode closure, Learning OS may resolve the next move. Present that move in learner language, but do not freeze/open/present its attempt until the learner unambiguously accepts it (for example, "yes", "continue", or an equivalent prior instruction such as "keep going").
 8. **Preserve the learner response artifact.** Persist what the learner actually said or produced. For speech-to-text, repair only obvious transcription noise needed to recover the utterance; put teacher interpretation in assessment rationale rather than polishing the learner response.
 9. **Chunk speech/conversational challenges.** When speech-to-text or conversational chunking is known, deliver one substantive subquestion at a time while preserving the frozen criteria. Clarify material ambiguity before assessment; do not smuggle hints into the clarification.

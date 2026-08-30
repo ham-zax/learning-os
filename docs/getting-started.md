@@ -178,7 +178,7 @@ npm run tutor -- continue <goal-id>
 
 Continuation follows one fixed order:
 
-1. resume the newest unfinished session for the goal;
+1. resume unfinished required reconstruction first; otherwise resume the newest unfinished session for the goal;
 2. when no work is open and remaining time is unknown, ask for it;
 3. with a supplied budget, return at most one recommendation;
 4. open no attempt until the learner accepts that recommendation.

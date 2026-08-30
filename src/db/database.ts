@@ -1833,6 +1833,24 @@ export function createSession(
   db: Database.Database,
   input: { topicId: string; mode: DeliveryContext },
 ): Session {
+  const requiredRepair = db
+    .prepare(
+      `SELECT id
+       FROM sessions
+       WHERE topic_id = ?
+         AND phase = 'feedback'
+         AND pending_action = 'present_feedback'
+         AND reconstruction_status = 'required'
+       ORDER BY COALESCE(started_at, '') DESC, id DESC
+       LIMIT 1`,
+    )
+    .get(input.topicId) as { id: number } | undefined;
+  if (requiredRepair) {
+    throw new Error(
+      `Session ${requiredRepair.id} requires learner reconstruction or explicit opt-out before another session can start`,
+    );
+  }
+
   const now = new Date().toISOString();
   const info = db
     .prepare(
