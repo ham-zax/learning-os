@@ -1,12 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   ConceptFrontmatterSchema,
-  ConceptFileSchema,
   ManifestSchema,
   ConceptMapSchema,
-  ConceptProposalSchema,
-  LearningPlanSchema,
-  PlanSessionSchema,
 } from '../src/knowledge/types.js'
 
 describe('Knowledge Types', () => {
@@ -91,37 +87,6 @@ describe('Knowledge Types', () => {
       })
       expect(map.concepts).toHaveLength(1)
       expect(map.concepts[0].source).toBe('ai-feeds')
-    })
-  })
-
-  describe('LearningPlanSchema', () => {
-    it('parses a learning plan with sessions', () => {
-      const plan = LearningPlanSchema.parse({
-        topic: 'ai-engineering',
-        goal: 'Pass AI engineer interview',
-        deadline: '2026-07-01',
-        sessions: [
-          {
-            sessionNumber: 1,
-            conceptIds: ['rag-basics', 'llm-orchestration'],
-            estimatedMinutes: 30,
-            targetDate: '2026-06-08',
-            mode: 'explore',
-          },
-        ],
-      })
-      expect(plan.sessions).toHaveLength(1)
-      expect(plan.sessions[0].mode).toBe('explore')
-    })
-
-    it('allows null deadline', () => {
-      const plan = LearningPlanSchema.parse({
-        topic: 'test',
-        goal: 'Learn stuff',
-        deadline: null,
-        sessions: [],
-      })
-      expect(plan.deadline).toBeNull()
     })
   })
 })

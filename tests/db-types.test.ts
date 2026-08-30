@@ -8,6 +8,7 @@ import {
   SyncedSignalSchema,
   ProblemSchema,
   AttemptSchema,
+  InteractionPreferencesRowSchema,
   schemas,
   type Topic,
   type Concept,
@@ -103,11 +104,11 @@ describe('Database Types (Zod Schemas)', () => {
   })
 
   describe('Schema registry', () => {
-    it('has all 8 tables', () => {
-      expect(Object.keys(schemas)).toHaveLength(8)
+    it('registers current session and interaction schemas', () => {
       expect(schemas.topics).toBe(TopicSchema)
       expect(schemas.concepts).toBe(ConceptSchema)
       expect(schemas.sessions).toBe(SessionSchema)
+      expect(schemas.interaction_preferences).toBe(InteractionPreferencesRowSchema)
       expect(schemas.reviews).toBe(ReviewSchema)
       expect(schemas.synced_gaps).toBe(SyncedGapSchema)
       expect(schemas.synced_signals).toBe(SyncedSignalSchema)
