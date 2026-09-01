@@ -3,6 +3,7 @@ import {
   clearGoalStudyFocus,
   createSession,
   getGoalObjectives,
+  getInteractionPreferences,
   getStudyFocusEpisode,
   listGoalStudyFocusEpisodes,
   setInteractionPreferences,
@@ -69,6 +70,7 @@ import {
 } from "./revision-notes.js";
 import { getStudyContinuation } from "./study/continuation.js";
 import type { StudyContinuationInput } from "./study/continuation.js";
+import { derivePedagogyRecommendation } from "./teacher-pedagogy.js";
 import type {
   RevisionNoteContextInput,
   SaveRevisionNoteInput,
@@ -90,6 +92,17 @@ export function createTeacherKernel(db: Database.Database) {
       resolveRequestedChallenge(db, input),
     listPreparationContexts: () => listDurablePreparationContexts(db),
     getPreparationContext: (goalId: string) => getDurablePreparationContext(db, goalId),
+    getPedagogyRecommendation: (goalId: string, intent: ChallengeIntent) => {
+      const context = getDurablePreparationContext(db, goalId);
+      const objective = context?.objectives.find(
+        (candidate) => candidate.objectiveId === intent.objectiveId,
+      );
+      return derivePedagogyRecommendation({
+        intent,
+        objective,
+        interactionPreferences: getInteractionPreferences(db),
+      });
+    },
     setInteractionPreferences: (input: SetInteractionPreferencesInput) =>
       setInteractionPreferences(db, input),
     setGoalObjective: (input: SetGoalObjectiveInput) => setGoalObjective(db, input),

@@ -24,6 +24,8 @@ The teacher owns conversation, semantic extraction, natural clarification, expla
 
 ## Active attempt lifecycle
 
+After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(goalId, intent)` and treat its pure, non-durable recipe as the default interaction shape. The helper may recommend free recall/brain dump, a 4–5 item MCQ quiz, prediction, model construction, thought experiment, boundary testing, teach-back, debugging autopsy, reconstruction, or worked-example scaffolding; it never changes learner truth or next-work ownership. Execute multi-step recipes one learner prompt at a time, respecting atomic question chunking.
+
 Treat one selected challenge as an interaction episode:
 
 ```text

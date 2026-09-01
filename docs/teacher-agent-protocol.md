@@ -204,6 +204,10 @@ Choose pedagogy from information exposed through the public teacher boundary:
 
 Do not require arbitrary historical exposure inspection or direct database reads to choose scaffolding.
 
+After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(goalId, intent)` before authoring the learner-facing interaction. Treat the returned recommendation as the default execution recipe for the already-selected objective: it may recommend a brain dump, a 4–5 item MCQ quiz, prediction, model construction, thought experiment, boundary test, teach-back, debugging autopsy, reconstruction, or worked-example scaffolding. The recommendation is pure and non-durable: it cannot change the objective, capability, task form, novelty, evidence, readiness, or scheduler state. A learner's explicit interaction request may override the recommended presentation shape when that override still satisfies the frozen challenge/intent and evidence lifecycle.
+
+When the recommendation contains multiple steps, execute only the next cognitively necessary step and stop after a genuine learner prompt. Do not dump the whole recipe into one turn. `questionChunking=atomic` means a multi-item quiz is delivered one item at a time while preserving its intended item count.
+
 ### Canonical repertoire
 
 Use this as a repertoire, not a mandatory turn template:

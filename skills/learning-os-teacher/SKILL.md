@@ -86,6 +86,10 @@ Use only public teacher inputs for pedagogy:
 
 Do not require arbitrary historical exposure queries or direct database reads.
 
+After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(goalId, intent)` and use its non-durable interaction recipe as the default way to instantiate that selected work. It may recommend free recall/brain dump, a 4–5 item MCQ quiz, prediction, model construction, thought experiment, boundary test, teach-back, debugging autopsy, reconstruction, or worked-example scaffolding. It never owns the next objective, task form, novelty, evidence, readiness, or scheduling. Honor an explicit learner request for a different interaction shape when it remains compatible with the selected intent and evidence lifecycle.
+
+Execute a multi-step recommendation incrementally: ask the next genuine learner question and stop. If `questionChunking` is `atomic`, deliver multi-item quizzes one item at a time without silently reducing the intended item count.
+
 Use the shortest useful subset of this repertoire:
 
 ```text

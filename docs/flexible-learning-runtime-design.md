@@ -391,9 +391,9 @@ This remains a generic focus mechanism rather than a hard-coded `day_1` field. F
 
 Protocol-only dogfood succeeded; live use then skipped visible teaching/reconstruction twice.
 
-This is now evidence for a small pure teacher-side interaction directive, not a stateful pedagogy engine.
+This evidence now activates a small pure teacher-side interaction directive, not a stateful pedagogy engine. The implementation is exposed as `getPedagogyRecommendation(goalId, intent)` and derives a bounded interaction recipe from existing authoritative state without persistence or selector ownership.
 
-Candidate shape:
+Implemented shape is conceptually equivalent to:
 
 ```ts
 type TurnDirective =

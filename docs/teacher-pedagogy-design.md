@@ -2,7 +2,7 @@
 
 ## Status
 
-First teacher-pedagogy wave implemented and dogfooded. Tasks 13–16 remain conditional on observed need. This design does not change learner-state authority, evidence semantics, scheduler behavior, or curriculum ownership.
+First teacher-pedagogy wave implemented and dogfooded. Later live use demonstrated the protocol-only consistency gap anticipated by Tasks 13–14, so Learning OS now exposes a pure, non-durable teacher-side pedagogy recommendation for the selected `ChallengeIntent`. Tasks 15–16 remain conditional. This design does not change learner-state authority, evidence semantics, scheduler behavior, or curriculum ownership.
 
 ## Problem
 

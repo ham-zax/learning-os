@@ -1,6 +1,6 @@
 # Learning OS Teacher Pedagogy Implementation Plan
 
-**Status:** Tasks 1–12 are complete and dogfooded. Tasks 13–16 remain conditional and should not be implemented without new evidence.
+**Status:** Tasks 1–14 are complete. Live use demonstrated the protocol-only consistency gap that activated the pure teacher-side pedagogy recommendation work. Tasks 15–16 remain conditional.
 
 **Goal:** Turn authoritative Learning OS state and `ChallengeIntent` into consistently strong, evidence-safe learning interactions that build, test, repair, and transfer learner mental models while keeping the learner-facing flow low-friction.
 
@@ -354,9 +354,9 @@ This phase is conditional. Do not implement it merely because helper code is pos
 - Produces: a non-durable, derived recommendation such as operator candidates, scaffold posture, and learner-facing reason.
 
 **Steps:**
-- [ ] Define only derived fields needed to eliminate an observed cross-teacher inconsistency. Example shape may include `preferredOperators`, `scaffoldPosture`, `commitBeforeReveal`, and `reason`; do not finalize names until the dogfood failure is concrete.
-- [ ] Keep the type explicitly teacher-facing and non-authoritative for evidence/proficiency.
-- [ ] Do not persist the output.
+- [x] Define only derived fields needed to eliminate the observed cross-teacher inconsistency: interaction form/steps, scaffold posture, commit-before-reveal, chunking, and reason.
+- [x] Keep the type explicitly teacher-facing and non-authoritative for evidence/proficiency.
+- [x] Do not persist the output.
 
 **Acceptance criteria:**
 - Every field exists because a demonstrated protocol-only ambiguity requires it.
@@ -373,10 +373,10 @@ This phase is conditional. Do not implement it merely because helper code is pos
 - Produces: deterministic teacher-side recommendations; no database writes.
 
 **Steps:**
-- [ ] Derive recommendations using existing signals only.
-- [ ] Keep selector ownership intact: the helper cannot replace objective, capability, task form, novelty, or weakness selection.
-- [ ] Keep scheduling/evidence ownership intact: the helper cannot emit mastery/readiness/review changes.
-- [ ] Expose the helper through `createTeacherKernel(db)` only if doing so materially reduces teacher integration friction; otherwise keep it internal to a teacher adapter.
+- [x] Derive recommendations using existing intent/preparation/preference signals only.
+- [x] Keep selector ownership intact: the helper cannot replace objective, capability, task form, novelty, or weakness selection.
+- [x] Keep scheduling/evidence ownership intact: the helper cannot emit mastery/readiness/review changes.
+- [x] Expose the helper through `createTeacherKernel(db)` as `getPedagogyRecommendation(goalId, intent)` so replaceable teachers receive the same default interaction recipe.
 
 **Acceptance criteria:**
 - The helper is pure and stateless.
