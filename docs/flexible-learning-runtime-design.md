@@ -391,20 +391,20 @@ This remains a generic focus mechanism rather than a hard-coded `day_1` field. F
 
 Protocol-only dogfood succeeded; live use then skipped visible teaching/reconstruction twice.
 
-This evidence now activates a small pure teacher-side interaction directive, not a stateful pedagogy engine. The implementation is exposed as `getPedagogyRecommendation(goalId, intent)` and derives a bounded interaction recipe from existing authoritative state without persistence or selector ownership.
+This evidence now activates a small pure teacher-side directive, not a stateful pedagogy engine. The implementation is exposed as `getPedagogyRecommendation(goalId, intent)` and derives only four execution guardrails—prompt shape, scaffold level, commit-before-reveal, and question chunking—from existing authoritative state without persistence or selector ownership.
 
 Implemented shape is conceptually equivalent to:
 
 ```ts
-type TurnDirective =
-  | { kind: "ask"; stopAfterPrompt: true }
-  | { kind: "clarify"; answerBearing: boolean }
-  | { kind: "teach"; exposureType: ExposureType }
-  | { kind: "reconstruct"; requiredBeforeTransition: boolean }
-  | { kind: "transition_offer"; requiresConfirmation: true };
+type PedagogyDirective = {
+  promptShape: "direct" | "mcq";
+  scaffold: "independent" | "guided";
+  commitBeforeReveal: boolean;
+  questionChunking: "default" | "atomic";
+};
 ```
 
-It must not choose the objective or mutate learner projections.
+It must not choose the objective, model the teaching process, or mutate learner projections.
 
 ## P14. The packaged Skill can drift from the repository Skill
 

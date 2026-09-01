@@ -343,7 +343,7 @@ Do not create a durable pedagogy table, `mental_model_score`, `signal_score`, or
 
 This phase is conditional. Do not implement it merely because helper code is possible.
 
-### Task 13: Define a pure `PedagogyRecommendation` contract
+### Task 13: Define a pure `PedagogyDirective` contract
 
 **Files:**
 - Create only if needed: `src/teacher/pedagogy.types.ts`
@@ -351,11 +351,11 @@ This phase is conditional. Do not implement it merely because helper code is pos
 
 **Interfaces:**
 - Consumes: existing `ChallengeIntent` plus authoritative projection/interaction inputs already available to the teacher boundary.
-- Produces: a non-durable, derived recommendation with one learner interaction, scaffold posture, bounded probing/impasse behavior, and learner-facing reason.
+- Produces: a non-durable directive containing only prompt shape, scaffold level, commit-before-reveal, and question chunking.
 
 **Steps:**
-- [x] Keep only the derived fields that still change teacher execution after simplification: one interaction, scaffold posture, commit-before-reveal, question chunking, a bounded probe count, impasse behavior, and reason.
-- [x] Remove recommendation fields that duplicate existing owners: performance/reflection posture, cognitive direction, pedagogy-owned hint depth, incidental-load posture, challenge-surface posture, repair policy, and scaffold-withdrawal flags.
+- [x] Keep only fields with demonstrated cross-teacher consistency value: `promptShape`, `scaffold`, `commitBeforeReveal`, and `questionChunking`.
+- [x] Remove fields that model stable protocol or duplicate existing owners: interaction-form taxonomy, probe/impasse state, reasons, performance/reflection posture, cognitive direction, pedagogy-owned hint depth, incidental-load posture, challenge-surface posture, repair policy, and scaffold-withdrawal flags.
 - [x] Keep the type explicitly teacher-facing and non-authoritative for evidence/proficiency.
 - [x] Do not persist the output.
 
@@ -377,13 +377,13 @@ This phase is conditional. Do not implement it merely because helper code is pos
 - [x] Derive recommendations using existing intent/preparation/preference signals only.
 - [x] Keep selector ownership intact: the helper cannot replace objective, capability, task form, novelty, or weakness selection.
 - [x] Keep scheduling/evidence ownership intact: the helper cannot emit mastery/readiness/review changes.
-- [x] Expose the helper through `createTeacherKernel(db)` as `getPedagogyRecommendation(goalId, intent)` so replaceable teachers receive the same default interaction recipe.
+- [x] Expose the helper through `createTeacherKernel(db)` as `getPedagogyRecommendation(goalId, intent)` so replaceable teachers receive the same compact execution guardrails.
 
 **Acceptance criteria:**
 - The helper is pure and stateless.
 - Existing kernel behavior is unchanged when its recommendation is ignored.
 - The helper cannot create evidence or mutate learner state.
-- Default recommendations remain short: normally one learner action, with deeper pedagogy added reactively rather than encoded as a mandatory sequence.
+- The directive prevents known cross-teacher failure modes; it does not encode a lesson sequence or teaching-process state.
 - A learner complexity complaint can be handled inside the same frozen episode by harmless rephrasing, neutral decomposition, or recorded hint/exposure plus reconstruction when answer-bearing help is required.
 
 ---

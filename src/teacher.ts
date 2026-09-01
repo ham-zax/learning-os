@@ -70,7 +70,7 @@ import {
 } from "./revision-notes.js";
 import { getStudyContinuation } from "./study/continuation.js";
 import type { StudyContinuationInput } from "./study/continuation.js";
-import { derivePedagogyRecommendation } from "./teacher-pedagogy.js";
+import { derivePedagogyDirective } from "./teacher-pedagogy.js";
 import type {
   RevisionNoteContextInput,
   SaveRevisionNoteInput,
@@ -92,14 +92,14 @@ export function createTeacherKernel(db: Database.Database) {
       resolveRequestedChallenge(db, input),
     listPreparationContexts: () => listDurablePreparationContexts(db),
     getPreparationContext: (goalId: string) => getDurablePreparationContext(db, goalId),
-    // Pure teacher-side execution guidance for an already-selected intent.
-    // It never chooses learner work or mutates learner state.
+    // Tiny, pure execution directive for an already-selected intent.
+    // It prevents cross-teacher drift without modeling the teaching process.
     getPedagogyRecommendation: (goalId: string, intent: ChallengeIntent) => {
       const context = getDurablePreparationContext(db, goalId);
       const objective = context?.objectives.find(
         (candidate) => candidate.objectiveId === intent.objectiveId,
       );
-      return derivePedagogyRecommendation({
+      return derivePedagogyDirective({
         intent,
         objective,
         interactionPreferences: getInteractionPreferences(db),

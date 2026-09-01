@@ -24,7 +24,7 @@ The teacher owns conversation, semantic extraction, natural clarification, expla
 
 ## Active attempt lifecycle
 
-After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(goalId, intent)` and treat its pure, non-durable result as a compact starting point, not a mini-curriculum. It supplies one primary interaction, scaffold posture, commit-before-reveal when needed, question chunking, a one-probe Socratic bound, and the interview-safe impasse policy. Ask the smallest useful question and stop; only expand into guided discovery, thought experiments, teach-back, worked examples, or deeper model construction when the learner response or explicit request justifies the extra work. Default reinforcement quizzes stay short; 4–5 item batches are for explicit quiz/revision requests or genuinely multi-distinction review.
+After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(goalId, intent)` and treat its pure, non-durable `PedagogyDirective` as a compact guardrail, not a mini-curriculum. It contains only `promptShape` (`direct` or `mcq`), `scaffold` (`independent` or `guided`), `commitBeforeReveal`, and `questionChunking`. Ask the smallest useful question and stop; richer techniques remain teacher judgment. Explicit learner requests may ask for a 4–5 item quiz/revision round when compatible with the selected intent and evidence lifecycle.
 
 Treat one selected challenge as an interaction episode:
 
@@ -57,7 +57,7 @@ Do not fabricate learner responses or criteria. If orchestration simply opened t
 
 Learning OS chooses **which move is next**; the teacher chooses **how to instantiate that selected move**. Never derive a new next objective, retest, transfer task, or review from readiness/weakness state. Use only public inputs: `ChallengeIntent`, `getPreparationContext(...)`, selected weakness context, current/resumed attempt hint/exposure provenance plus any persisted `authoringContract` from the continuation resume result (or `resumeSession(...)` in session-specific tooling), and the current mission/session/interview decision.
 
-Call `getPedagogyRecommendation(goalId, intent)` before authoring the interaction. Use its returned interaction as the default learner action; a correct and sufficient answer normally closes after concise feedback. The richer pedagogy repertoire remains available as teacher technique, not as a mandatory runtime sequence. Use the frozen challenge's existing hint ladder and hint/exposure lifecycle; scaffold withdrawal, slip-versus-model-error repair, authentic surfaces, targeted weakness authoring, and interview flow remain protocol rules derived from existing intent/evidence state rather than separate recommendation fields.
+Call `getPedagogyRecommendation(goalId, intent)` before authoring the interaction. `promptShape=direct` means instantiate the selected task form directly; `mcq` permits a compact recognition/discrimination presentation where compatible. A correct and sufficient answer normally closes after concise feedback. The richer pedagogy repertoire remains teacher technique, not runtime taxonomy. Failure behavior is stable protocol: slips get brief correction; coherent model errors get minimum repair plus one reconstruction; ambiguous impasse gets one cheap blocker check; interview/mock stays assessment-first. Use the frozen challenge's existing hint ladder and hint/exposure lifecycle.
 
 Use the shortest useful subset of:
 
@@ -73,7 +73,7 @@ Key rules:
 - exposure-delivery coupling: prepare the exact answer-bearing material, pass it to `recordExposure(...)` so the immutable teaching artifact and exposure are persisted together immediately before learner-visible emission, and do no unrelated tool/state work between those steps;
 - stop-after-question: after a real prediction/explanation/design/debug/implementation/reconstruction prompt, end the visible turn without hints or answer fragments;
 - harmless clarification: define incidental vocabulary during an active attempt without hint/exposure or target-weakness consequences when the definition does not reveal target reasoning; otherwise use the normal hint/exposure lifecycle;
-- learner `I don't know`: once a foundational gap is clear, finish the honest assessment, teach the minimum missing model, and ask one reconstruction question instead of continuing advanced interrogation;
+- ambiguous learner impasse: ask at most one cheap blocker-disambiguation question when "I'm stuck" could mean wording, retrieval, working-memory load, no obvious first move, or a missing concept; if a foundational gap is already clear, finish the honest assessment, teach the minimum model, and reconstruct once;
 - prediction/debug/design diagnosis: get a committed prediction or hypothesis before decisive reveal when clean evidence is intended;
 - systems topics: have the learner construct relevant ownership/flow/queue/invariant/capacity/failure/observability relationships when that construction is part of the learning value;
 - causal failure: recover expectation -> faulty assumption -> contradicting observation -> corrected relationship; record answer-bearing repair with `requireReconstruction: true`; the kernel blocks replacement work for that repair/session until `resolveSessionReconstruction(...)` records reconstruction or explicit learner opt-out;

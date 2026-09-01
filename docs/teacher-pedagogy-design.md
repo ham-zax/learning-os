@@ -2,7 +2,7 @@
 
 ## Status
 
-First teacher-pedagogy wave implemented and dogfooded. Later live use demonstrated the protocol-only consistency gap anticipated by Tasks 13–14, so Learning OS exposes a pure, non-durable teacher-side pedagogy recommendation for the selected `ChallengeIntent`. A later simplicity review reduced that recommendation to one default learner action plus only the execution controls that materially change it; reactive question decomposition stays teacher-owned and uses the existing hint/exposure lifecycle. Tasks 15–16 remain conditional. This design does not change learner-state authority, evidence semantics, scheduler behavior, or curriculum ownership.
+First teacher-pedagogy wave implemented and dogfooded. Later live use demonstrated the protocol-only consistency gap anticipated by Tasks 13–14, so Learning OS exposes a pure, non-durable teacher-side directive for the selected `ChallengeIntent`. A later simplicity review reduced that directive to four guardrails—prompt shape, scaffold level, commit-before-reveal, and question chunking—while reactive question decomposition and failure handling stay teacher-owned and use the existing hint/exposure lifecycle. Tasks 15–16 remain conditional. This design does not change learner-state authority, evidence semantics, scheduler behavior, or curriculum ownership.
 
 ## Problem
 
@@ -588,7 +588,7 @@ Two integration frictions were concrete:
 1. A fresh teacher initially passed `ChallengeIntent.conceptId` to `createSession(...)` and hit a foreign-key failure. The causal issue is call-shape discoverability, not missing learner state. The first-wave fix is the explicit goal/topic-ID lifecycle note in the protocol and Skill.
 2. Fresh agents spent substantial time inspecting source to recover public call shapes. The compact lifecycle note reduces that burden; this run did not demonstrate a need for a new pedagogy owner or persistent field.
 
-The dogfood did **not** demonstrate a need for arbitrary historical exposure access, a `PedagogyRecommendation` helper, durable interview-signal state, challenge-load metadata, or new misconception-definition APIs. Tasks 13–16 remain gated. A Learning-OS-selected changed-surface retest/transfer did not arise in this isolated run, so that conditional path was not fabricated merely to satisfy the checklist.
+At that first dogfood point, the run did **not** demonstrate a need for arbitrary historical exposure access, a typed pedagogy helper, durable interview-signal state, challenge-load metadata, or new misconception-definition APIs. Later live use supplied the separate cross-teacher consistency evidence that activated Tasks 13–14. A Learning-OS-selected changed-surface retest/transfer did not arise in the original isolated run, so that conditional path was not fabricated merely to satisfy the checklist.
 
 ## Documentation ownership
 
@@ -724,13 +724,15 @@ A bounded review of the learner's older OmniLearner, OmniMentor, Cognitive Mento
 Retained and normalized into Learning OS:
 
 - **Guided discovery:** useful as an optional teacher technique when one compact question shows that learner inference is likely to pay off; it is not a mandatory multi-step recipe.
-- **Bounded Socratic probing:** discovery is useful only while it produces inference. `maxProbeTurns` is intentionally one by default, with `teach_minimum_then_reconstruct` as the learning/practice off-ramp and assessment-first debrief for interview/mock.
+- **Bounded Socratic probing:** discovery is useful only while it produces inference. Use one useful inference probe by default; if the learner remains stuck, diagnose the blocker once or teach the minimum rather than continuing interrogation. Interview/mock remains assessment-first.
 - **Progressive independence:** scaffolding is temporary by protocol. Do not preemptively prepend worked examples, and withdraw help once it is no longer needed.
 - **Error-driven model repair:** preserve the existing expected-result → faulty-assumption → contradicting-observation → corrected-model → reconstruction path for coherent causal errors, not slips.
 - **Productive contradiction and pattern noticing:** keep boundary tests, counterexamples, changed constraints, contrasted examples, and thought experiments as optional authoring techniques rather than runtime state.
 - **Theory-to-practice momentum:** preserve one clear learner action by default. Correct and sufficient performance should normally close rather than automatically triggering another pedagogical operator.
 
-A second pass over the Adaptive German Weaver / German immersion lineage provided useful teaching ideas, but a later simplicity review removed the parts that duplicated existing owners. Automaticity/performance flow comes from delivery context and ordinary practice semantics; hint depth comes from the frozen challenge hint ladder; weakness/transfer/authentic-surface authoring comes from `ChallengeIntent`; slip-versus-model-error repair and scaffold withdrawal remain protocol rules. They do not need separate `performancePosture`, `direction`, `hintLadder`, `cognitiveLoadPosture`, `challengeSurfacePosture`, `repairPolicy`, or scaffold-withdrawal fields in `PedagogyRecommendation`.
+A second pass over the Adaptive German Weaver / German immersion lineage provided useful teaching ideas, but a later simplicity review removed the parts that duplicated existing owners. Automaticity/performance flow comes from delivery context and ordinary practice semantics; hint depth comes from the frozen challenge hint ladder; weakness/transfer/authentic-surface authoring comes from `ChallengeIntent`; slip-versus-model-error repair, blocker diagnosis, scaffold withdrawal, and interview-safe impasse behavior remain protocol rules. The typed `PedagogyDirective` keeps only `promptShape`, `scaffold`, `commitBeforeReveal`, and `questionChunking`.
+
+**Design rule:** `PedagogyDirective` exists to prevent demonstrated cross-teacher failure modes, not to model the teaching process. A field belongs there only when fresh teachers repeatedly get the behavior wrong without typed guidance.
 
 ### Adaptive decomposition without a second learner model
 
