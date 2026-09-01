@@ -6,6 +6,7 @@ export type PedagogyInteractionForm =
   | "brain_dump"
   | "mcq_quiz"
   | "prediction"
+  | "guided_discovery"
   | "model_construction"
   | "thought_experiment"
   | "boundary_test"
@@ -31,6 +32,9 @@ export interface PedagogyRecommendation {
   scaffoldPosture: ScaffoldPosture;
   commitBeforeReveal: boolean;
   questionChunking: "default" | "atomic";
+  maxProbeTurns: number;
+  onImpasse: "teach_minimum_then_reconstruct" | "finish_assessment_then_debrief";
+  withdrawScaffoldAfterSuccess: boolean;
   reason: string;
 }
 
@@ -84,6 +88,12 @@ function scaffoldPosture(
     case "exposed":
       return "guided";
   }
+}
+
+function impasseAction(intent: ChallengeIntent): PedagogyRecommendation["onImpasse"] {
+  return intent.deliveryContext === "interview" || intent.deliveryContext === "mock"
+    ? "finish_assessment_then_debrief"
+    : "teach_minimum_then_reconstruct";
 }
 
 function step(
@@ -222,12 +232,19 @@ export function derivePedagogyRecommendation(
     (intent.capabilityId === "explain" || intent.capabilityId === "predict")
   ) {
     ({ steps, reason } = dueRetrievalSteps(intent));
-  } else if (intent.reasonKind === "new_objective" && intent.capabilityId === "explain") {
+  } else if (
+    intent.reasonKind === "new_objective" &&
+    intent.capabilityId === "explain" &&
+    intent.deliveryContext !== "interview" &&
+    intent.deliveryContext !== "mock"
+  ) {
     steps = [
       step("brain_dump", "Externalize the learner's current model without priming it."),
-      step("model_construction", "Turn the recalled fragments into an explicit causal model."),
+      step("guided_discovery", "Frame one concrete problem that makes the missing principle necessary, then guide inference before naming it."),
+      step("model_construction", "Turn the learner's inferred principle into an explicit causal model."),
+      step("teach_back", "Have the learner restate the principle and connect it back to the framing problem."),
     ];
-    reason = "A new explanation objective needs a clean view of the learner's existing model before teaching.";
+    reason = "A new explanation objective benefits from eliciting the existing model, guided inference, explicit model construction, and learner articulation before direct exposition.";
   } else if (intent.reasonKind === "transfer_needed") {
     steps = transferSteps(intent);
     reason = "Transfer should preserve the selected capability while changing the surface enough to prevent recognition-only success.";
@@ -266,6 +283,14 @@ export function derivePedagogyRecommendation(
       intent.capabilityId === "debug" ||
       steps.some((candidate) => candidate.form === "thought_experiment"),
     questionChunking,
+    maxProbeTurns:
+      intent.deliveryContext === "interview" || intent.deliveryContext === "mock"
+        ? 1
+        : posture === "independent"
+          ? 3
+          : 2,
+    onImpasse: impasseAction(intent),
+    withdrawScaffoldAfterSuccess: posture !== "independent",
     reason,
   };
 }

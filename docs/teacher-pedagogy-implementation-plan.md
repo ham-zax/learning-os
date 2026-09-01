@@ -354,7 +354,7 @@ This phase is conditional. Do not implement it merely because helper code is pos
 - Produces: a non-durable, derived recommendation such as operator candidates, scaffold posture, and learner-facing reason.
 
 **Steps:**
-- [x] Define only derived fields needed to eliminate the observed cross-teacher inconsistency: interaction form/steps, scaffold posture, commit-before-reveal, chunking, and reason.
+- [x] Define only derived fields needed to eliminate the observed cross-teacher inconsistency: interaction form/steps, scaffold posture, commit-before-reveal, chunking, bounded probing/impasse behavior, scaffold withdrawal, and reason.
 - [x] Keep the type explicitly teacher-facing and non-authoritative for evidence/proficiency.
 - [x] Do not persist the output.
 

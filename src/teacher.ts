@@ -92,6 +92,8 @@ export function createTeacherKernel(db: Database.Database) {
       resolveRequestedChallenge(db, input),
     listPreparationContexts: () => listDurablePreparationContexts(db),
     getPreparationContext: (goalId: string) => getDurablePreparationContext(db, goalId),
+    // Pure teacher-side execution guidance for an already-selected intent.
+    // It never chooses learner work or mutates learner state.
     getPedagogyRecommendation: (goalId: string, intent: ChallengeIntent) => {
       const context = getDurablePreparationContext(db, goalId);
       const objective = context?.objectives.find(

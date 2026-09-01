@@ -717,14 +717,28 @@ Different teachers may create challenges of very different cognitive load under 
 
 Replaceable-teacher use has demonstrated a different persistence need: a future teacher must be able to compare an inherited frozen challenge with the selection-time constraints that produced it. Persisting an immutable authoring-contract snapshot is provenance for intent conformance, not challenge-load metadata and not a second selector.
 
+## Curated prompt-corpus lessons
+
+A bounded review of the learner's older OmniLearner, OmniMentor, Cognitive Mentor, Socratic, and Integrated Learning Architect prompt families reinforced several mechanisms but did not justify importing their prompt-owned state machines.
+
+Retained and normalized into Learning OS:
+
+- **Guided discovery:** problem pressure first, learner inference second, formal naming after the idea is visible, then model construction and teach-back.
+- **Bounded Socratic probing:** discovery is useful only while it produces inference. The teacher-side recommendation now supplies `maxProbeTurns` plus an explicit `teach_minimum_then_reconstruct` impasse path.
+- **Progressive independence:** scaffolding is temporary. `withdrawScaffoldAfterSuccess` tells replaceable teachers not to replay the same assistance after success.
+- **Error-driven model repair:** preserve the existing expected-result → faulty-assumption → contradicting-observation → corrected-model → reconstruction path.
+- **Productive contradiction:** use boundary tests, counterexamples, changed constraints, and thought experiments as discriminating probes rather than adding a separate durable "productive confusion" state.
+- **Theory-to-practice momentum:** preserve one clear recommended next interaction rather than importing large learner menus or a rigid theory → example → practice state machine.
+
+Explicitly rejected from the corpus: response-embedded JSON memory, prompt-owned mastery/curriculum maps, mandatory menus/toolboxes, fixed turn-count curriculum checks, universal Socratic behavior, mandatory model answers after every attempt, and separate prompt-level schedulers. Learning OS already has stronger owners for state, evidence, sequencing, resumption, and review timing.
+
 ## Deferred extensions
 
-Consider these only after the protocol/skill implementation is dogfooded:
+Consider these only after further dogfooding:
 
-1. A small pure teacher-side pedagogy planner that derives operator/scaffolding recommendations from authoritative state.
-2. Optional structured interview-signal observations if durable cross-session coaching proves useful and a non-mastery owner is clearly defined.
-3. Explicit challenge-load metadata if replaceable teachers cannot reliably calibrate complexity from existing state and protocol guidance.
-4. Additional task forms only if current forms cannot represent a recurring assessable interaction. Do not add a `system_map` task form merely because system maps are useful artifacts.
+1. Optional structured interview-signal observations if durable cross-session coaching proves useful and a non-mastery owner is clearly defined.
+2. Explicit challenge-load metadata if replaceable teachers cannot reliably calibrate complexity from existing state and protocol guidance.
+3. Additional task forms only if current forms cannot represent a recurring assessable interaction. Do not add a `system_map` task form merely because system maps are useful artifacts.
 
 ## Decision
 

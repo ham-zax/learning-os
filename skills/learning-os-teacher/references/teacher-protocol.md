@@ -24,7 +24,7 @@ The teacher owns conversation, semantic extraction, natural clarification, expla
 
 ## Active attempt lifecycle
 
-After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(goalId, intent)` and treat its pure, non-durable recipe as the default interaction shape. The helper may recommend free recall/brain dump, a 4–5 item MCQ quiz, prediction, model construction, thought experiment, boundary testing, teach-back, debugging autopsy, reconstruction, or worked-example scaffolding; it never changes learner truth or next-work ownership. Execute multi-step recipes one learner prompt at a time, respecting atomic question chunking.
+After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(goalId, intent)` and treat its pure, non-durable recipe as the default interaction shape. The helper may recommend free recall/brain dump, bounded guided discovery, a 4–5 item MCQ quiz, prediction, model construction, thought experiment, boundary testing, teach-back, debugging autopsy, reconstruction, or worked-example scaffolding; it never changes learner truth or next-work ownership. Execute multi-step recipes one learner prompt at a time, respecting atomic question chunking. Honor `maxProbeTurns` and `onImpasse`: learning/practice may teach the minimum missing model then reconstruct, while interview/mock must finish assessment before debriefing. When `withdrawScaffoldAfterSuccess` is true reduce assistance after success rather than repeating the same scaffold.
 
 Treat one selected challenge as an interaction episode:
 
