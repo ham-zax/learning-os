@@ -1,12 +1,18 @@
 {
   "version": 1,
-  "activeProfileId": "backend-systems",
+  "activeProfileId": "frontend",
   "profiles": [
     {
       "id": "backend-systems",
       "displayName": "Backend Systems",
       "createdAt": "2026-08-28T10:38:32.880Z",
       "description": "Systems-first backend interview sprint with durable stable concepts and evidence-first diagnostics."
+    },
+    {
+      "id": "frontend",
+      "displayName": "Frontend",
+      "createdAt": "2026-09-01T06:00:42.137Z",
+      "description": "Frontend profile backed by the local JavaScript interview source corpus."
     }
   ]
 }
