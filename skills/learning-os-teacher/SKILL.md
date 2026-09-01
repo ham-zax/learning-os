@@ -88,7 +88,13 @@ Do not require arbitrary historical exposure queries or direct database reads.
 
 After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(goalId, intent)` and use its tiny non-durable `PedagogyDirective` as the starting guardrail. It contains only `promptShape` (`direct` or `mcq`), `scaffold` (`independent` or `guided`), `commitBeforeReveal`, and `questionChunking`. It never owns the next objective, task form, novelty, evidence, readiness, weakness state, or scheduling.
 
-Ask the smallest useful question and stop. Correct and sufficient answers normally get concise feedback and closure; do not automatically append teach-back, boundary testing, reflection, or another quiz item. Richer techniques such as pattern noticing, guided discovery, thought experiments, teach-back, worked examples, or system maps are teacher judgment and should be added only when the learner response or explicit request justifies them. A learner may explicitly request a 4–5 item quiz/revision round when compatible with the selected intent. Failure behavior is stable protocol rather than returned state: slips get brief correction; coherent model errors get minimum repair plus one reconstruction; ambiguous "stuck" gets one cheap blocker-disambiguation question before reteaching; interview/mock stays assessment-first. Use the frozen challenge's existing hint ladder and hint/exposure lifecycle rather than a second pedagogy-owned hint system.
+Ask the smallest useful question and stop. Correct and sufficient answers normally get concise feedback and closure; do not automatically append teach-back, boundary testing, reflection, or another quiz item. Richer pedagogy is preserved as progressively loaded Skill guidance rather than runtime state. Load **only the playbook that matches the current episode**:
+
+- concept construction, retrieval, discrimination, transfer, or learner-requested depth -> `references/reasoning-retrieval-playbook.md`;
+- debugging, failed prediction, causal/model error, or selected weakness repair -> `references/debugging-repair-playbook.md`;
+- interview/mock, fluency, realistic performance, or post-attempt interview debrief -> `references/performance-interview-playbook.md`.
+
+Do not load all playbooks by default, and do not invoke a technique merely because it exists. A learner may explicitly request a 4–5 item quiz/revision round when compatible with the selected intent. Failure behavior is stable protocol rather than returned state: slips get brief correction; coherent model errors get minimum repair plus one reconstruction; ambiguous "stuck" gets one cheap blocker-disambiguation question before reteaching; interview/mock stays assessment-first. Use the frozen challenge's existing hint ladder and hint/exposure lifecycle rather than a second pedagogy-owned hint system.
 
 Use the shortest useful subset of this repertoire:
 
@@ -311,7 +317,12 @@ Examples:
 - "I only have 15 minutes today." → use the explicit time override rather than rewriting scheduler state.
 - "Interview me on X." → route X through the current interview/selection/evidence lifecycle rather than using a generic interview script.
 
-## Read the detailed protocol when needed
+## Read supporting references only when needed
 
 Use `references/teacher-protocol.md` for the complete decision matrix, lifecycle rules, and examples.
 Use `references/environment-routing.md` for web versus CLI/IDE repository behavior.
+Use `references/reasoning-retrieval-playbook.md` for retrieval, model construction, guided discovery, discrimination, self-verification, transfer bridges, and integration-span techniques.
+Use `references/debugging-repair-playbook.md` for hypothesis-driven debugging, fastest falsifiers, failure localization, mental-model autopsy, precision remediation, and reconstruction.
+Use `references/performance-interview-playbook.md` for uninterrupted performance, authentic artifacts, interview-safe debrief, and contrastive benchmark feedback.
+
+Load the smallest relevant reference set for the current learner need; do not preload the playbooks as a mandatory teaching stack.

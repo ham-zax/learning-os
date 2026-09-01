@@ -734,6 +734,10 @@ A second pass over the Adaptive German Weaver / German immersion lineage provide
 
 **Design rule:** `PedagogyDirective` exists to prevent demonstrated cross-teacher failure modes, not to model the teaching process. A field belongs there only when fresh teachers repeatedly get the behavior wrong without typed guidance.
 
+### Rich repertoire through progressive Skill loading
+
+Removing a technique from the typed directive does not remove it from the teacher's capabilities. Preserve high-value techniques in direct Skill references and load them only when the current episode needs them. The canonical teacher Skill separates reasoning/retrieval, debugging/repair, and performance/interview playbooks so a replaceable teacher can recover proven techniques without preloading a large pedagogical state machine. Availability never implies invocation: correct-and-sufficient performance still closes, and Learning OS remains the sole owner of objective/review/transfer/retest selection.
+
 ### Adaptive decomposition without a second learner model
 
 Question complexity is a presentation problem until evidence shows otherwise. When the learner says a challenge is confusing or too large, the teacher first distinguishes three cases without changing the selected objective:
