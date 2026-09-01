@@ -12,7 +12,7 @@
       "id": "frontend",
       "displayName": "Frontend",
       "createdAt": "2026-09-01T06:00:42.137Z",
-      "description": "Frontend profile backed by the local JavaScript interview source corpus."
+      "description": "Frontend profile backed by local JavaScript, React 19.2, and Angular 22 interview corpora."
     }
   ]
 }
