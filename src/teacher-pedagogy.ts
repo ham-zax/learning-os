@@ -6,55 +6,26 @@ export type PedagogyInteractionForm =
   | "brain_dump"
   | "mcq_quiz"
   | "prediction"
-  | "pattern_noticing"
-  | "guided_discovery"
   | "model_construction"
   | "thought_experiment"
-  | "boundary_test"
-  | "teach_back"
   | "implementation_attempt"
-  | "debug_localization"
-  | "debug_autopsy"
-  | "reconstruction"
-  | "worked_example";
+  | "debug_localization";
 
-export type ScaffoldPosture = "independent" | "prompted" | "guided" | "worked_example";
-export type PerformancePosture = "deliberate_learning" | "fluent_execution";
-export type CognitiveDirection = "generation" | "recognition" | "reflection";
-export type HintDepth = "metacognitive_nudge" | "structural_cue" | "direct_teaching";
-export type CognitiveLoadPosture = "isolate" | "normal" | "compound" | "noisy";
-export type ChallengeSurfacePosture =
-  | "standard"
-  | "targeted_remediation"
-  | "naturalistic_interleaving"
-  | "authentic_artifact";
+export type ScaffoldPosture = "independent" | "prompted" | "guided";
 
 export interface PedagogyStep {
   form: PedagogyInteractionForm;
-  direction: CognitiveDirection;
   purpose: string;
   questionCount?: number;
-  stopAfterPrompt: boolean;
 }
 
 export interface PedagogyRecommendation {
-  primaryForm: PedagogyInteractionForm;
-  steps: PedagogyStep[];
+  interaction: PedagogyStep;
   scaffoldPosture: ScaffoldPosture;
   commitBeforeReveal: boolean;
   questionChunking: "default" | "atomic";
   maxProbeTurns: number;
   onImpasse: "teach_minimum_then_reconstruct" | "finish_assessment_then_debrief";
-  withdrawScaffoldAfterSuccess: boolean;
-  performancePosture: PerformancePosture;
-  reflectionTiming: "in_episode" | "after_attempt_debrief";
-  hintLadder: HintDepth[];
-  cognitiveLoadPosture: CognitiveLoadPosture;
-  challengeSurfacePosture: ChallengeSurfacePosture;
-  repairPolicy: {
-    slip: "brief_recast_or_correction";
-    modelError: "autopsy_then_reconstruct";
-  };
   reason: string;
 }
 
@@ -64,24 +35,6 @@ export interface PedagogyRecommendationInput {
   interactionPreferences?: {
     questionChunking: "default" | "atomic";
   } | null;
-}
-
-function stableChecksum(value: string): number {
-  let checksum = 0;
-  for (const char of value) checksum = (checksum + char.charCodeAt(0)) % 997;
-  return checksum;
-}
-
-function quizQuestionCount(objectiveId: string): number {
-  return stableChecksum(objectiveId) % 2 === 0 ? 4 : 5;
-}
-
-function shouldUseQuiz(intent: ChallengeIntent): boolean {
-  const historySignal = intent.avoidRecentChallenges.reduce(
-    (sum, item) => sum + item.attemptId + stableChecksum(item.challengeId),
-    0,
-  );
-  return (stableChecksum(intent.objectiveId) + historySignal) % 2 === 0;
 }
 
 function scaffoldPosture(
@@ -116,201 +69,65 @@ function impasseAction(intent: ChallengeIntent): PedagogyRecommendation["onImpas
     : "teach_minimum_then_reconstruct";
 }
 
-function cognitiveDirection(form: PedagogyInteractionForm): CognitiveDirection {
-  switch (form) {
-    case "mcq_quiz":
-    case "pattern_noticing":
-    case "boundary_test":
-      return "recognition";
-    case "teach_back":
-    case "debug_autopsy":
-    case "reconstruction":
-      return "reflection";
-    default:
-      return "generation";
-  }
-}
-
 function step(
   form: PedagogyInteractionForm,
   purpose: string,
   questionCount?: number,
 ): PedagogyStep {
-  return {
-    form,
-    direction: cognitiveDirection(form),
-    purpose,
-    questionCount,
-    stopAfterPrompt: true,
-  };
+  return { form, purpose, questionCount };
 }
 
-function performancePosture(
-  intent: ChallengeIntent,
-  objective: DurablePreparationObjective | null | undefined,
-): PerformancePosture {
-  if (intent.deliveryContext === "interview" || intent.deliveryContext === "mock") {
-    return "fluent_execution";
-  }
-  if (
-    intent.deliveryContext === "practice" &&
-    intent.reasonKind === "reinforcement" &&
-    objective?.readiness === "independent"
-  ) {
-    return "fluent_execution";
-  }
-  return "deliberate_learning";
-}
-
-function hintLadder(
-  performance: PerformancePosture,
-  posture: ScaffoldPosture,
-): HintDepth[] {
-  if (performance === "fluent_execution") return [];
-  switch (posture) {
-    case "independent":
-      return ["metacognitive_nudge", "structural_cue", "direct_teaching"];
-    case "prompted":
-      return ["structural_cue", "direct_teaching"];
-    case "guided":
-    case "worked_example":
-      return ["direct_teaching"];
-  }
-}
-
-function cognitiveLoadPosture(
-  intent: ChallengeIntent,
-  objective: DurablePreparationObjective | null | undefined,
-): CognitiveLoadPosture {
-  if (intent.deliveryContext === "interview" || intent.deliveryContext === "mock") return "noisy";
-  if (intent.reasonKind === "transfer_needed" || intent.novelty === "transfer") return "compound";
-  if (intent.weakness || intent.reasonKind === "new_objective" || objective?.readiness === "exposed") {
-    return "isolate";
-  }
-  return "normal";
-}
-
-function challengeSurfacePosture(intent: ChallengeIntent): ChallengeSurfacePosture {
-  if (intent.weakness) return "targeted_remediation";
-  if (intent.reasonKind === "due_retrieval") return "naturalistic_interleaving";
-  if (
-    intent.reasonKind === "transfer_needed" ||
-    intent.novelty === "transfer" ||
-    intent.deliveryContext === "interview" ||
-    intent.deliveryContext === "mock"
-  ) {
-    return "authentic_artifact";
-  }
-  return "standard";
-}
-
-function capabilityFallback(intent: ChallengeIntent): PedagogyStep[] {
+function capabilityFallback(intent: ChallengeIntent): PedagogyStep {
   switch (intent.capabilityId) {
     case "explain":
-      return [
-        step("free_recall", "Retrieve the current model before teaching."),
-        step("teach_back", "Make the learner state the mechanism in their own words."),
-      ];
+      return step("free_recall", "Ask one compact question that exposes the learner's current model.");
     case "predict":
-      return [
-        step("prediction", "Commit to an observable outcome before reveal."),
-        step("boundary_test", "Vary one assumption to test the model boundary."),
-      ];
+      return step("prediction", "Commit to one observable outcome before reveal.");
     case "implement":
-      return [
-        step("implementation_attempt", "Produce an implementation before seeing a worked solution."),
-        step("debug_localization", "Localize any failure before repair."),
-      ];
+      return step("implementation_attempt", "Attempt the smallest implementation that still exercises the selected objective.");
     case "debug":
-      return [
-        step("debug_localization", "Separate observation, hypothesis, and responsible boundary."),
-        step("debug_autopsy", "Identify the faulty assumption after assessment."),
-      ];
+      return step("debug_localization", "Identify the first discriminating observation or test before proposing repair.");
     case "design":
-      return [
-        step("model_construction", "Construct ownership, boundaries, invariants, and failure paths."),
-        step("boundary_test", "Stress the design with a changed constraint or failure."),
-      ];
+      return step("model_construction", "Build only the ownership, invariant, or flow needed to answer this design question.");
   }
 }
 
-function dueRetrievalSteps(intent: ChallengeIntent): { steps: PedagogyStep[]; reason: string } {
-  if (shouldUseQuiz(intent)) {
-    const count = quizQuestionCount(intent.objectiveId);
-    return {
-      steps: [
-        step("mcq_quiz", "Use several discriminating retrieval items instead of one broad prompt.", count),
-        step("teach_back", "After the quiz, require a concise causal explanation of the governing rule."),
-      ],
-      reason: `This due retrieval rotates to ${count} short discriminating checks before explanation.`,
-    };
-  }
-
+function dueRetrievalInteraction(intent: ChallengeIntent): { interaction: PedagogyStep; reason: string } {
   if (intent.capabilityId === "predict") {
     return {
-      steps: [
-        step("prediction", "Use one fresh changed-surface prediction for clean retrieval."),
-        step("boundary_test", "Probe the rule with one nearby counterfactual after the prediction."),
-      ],
-      reason: "This due retrieval rotates away from MCQ recognition toward open prediction.",
+      interaction: step("prediction", "Use one fresh prediction for clean retrieval."),
+      reason: "Due retrieval should be short and answer-hidden by default.",
     };
   }
 
   return {
-    steps: [
-      step("free_recall", "Retrieve the governing mechanism without answer choices or priming."),
-      step("teach_back", "Condense the recalled mechanism into a causal explanation."),
-    ],
-    reason: "This due retrieval rotates away from MCQ recognition toward open recall.",
+    interaction: step("free_recall", "Retrieve the governing mechanism without answer choices or priming."),
+    reason: "Due retrieval should normally be one compact open recall, not a mandatory quiz batch.",
   };
 }
 
-function transferSteps(intent: ChallengeIntent): PedagogyStep[] {
+function transferInteraction(intent: ChallengeIntent): PedagogyStep {
   switch (intent.capabilityId) {
     case "implement":
-      return [
-        step("implementation_attempt", "Implement on a changed surface without revealing the mapping to the prior solution."),
-        step("boundary_test", "Vary one constraint to test whether the implementation preserves the target invariant."),
-      ];
+      return step("implementation_attempt", "Implement on a changed surface without revealing the prior mapping.");
     case "debug":
-      return [
-        step("debug_localization", "Localize a changed-surface failure before receiving the prior analogy."),
-        step("thought_experiment", "Test whether the debugging model survives a nearby counterfactual."),
-      ];
+      return step("debug_localization", "Localize a changed-surface failure without revealing the prior analogy.");
     case "predict":
-      return [
-        step("prediction", "Commit to the changed-surface outcome before reveal."),
-        step("thought_experiment", "Vary one condition while preserving the same underlying mechanism."),
-      ];
+      return step("prediction", "Commit to the changed-surface outcome before reveal.");
     case "explain":
     case "design":
-      return [
-        step("thought_experiment", "Change the surface while preserving the underlying principle."),
-        step("boundary_test", "Ask which assumption makes the transferred reasoning succeed or fail."),
-      ];
+      return step("thought_experiment", "Use one changed-surface scenario that preserves the underlying principle.");
   }
 }
 
-function weaknessSteps(intent: ChallengeIntent): PedagogyStep[] {
+function weaknessInteraction(intent: ChallengeIntent): PedagogyStep {
   if (intent.capabilityId === "implement") {
-    return [
-      step("implementation_attempt", "Target the selected weakness with a discriminating implementation surface."),
-      step("debug_autopsy", "After assessment, identify the assumption that produced the failure."),
-      step("reconstruction", "Rebuild the corrected implementation model before transition."),
-    ];
+    return step("implementation_attempt", "Isolate the selected weakness in one discriminating implementation task.");
   }
   if (intent.capabilityId === "debug") {
-    return [
-      step("debug_localization", "Target the selected weakness with a discriminating failure surface."),
-      step("debug_autopsy", "After assessment, identify the assumption that produced the failure."),
-      step("reconstruction", "Rebuild the corrected debugging model before transition."),
-    ];
+    return step("debug_localization", "Isolate the selected weakness in one discriminating failure surface.");
   }
-  return [
-    step("model_construction", "Expose the selected weakness through an explicit learner-built model."),
-    step("boundary_test", "Use a counterexample that distinguishes the faulty model from the corrected one."),
-    step("reconstruction", "Restate the corrected model after feedback."),
-  ];
+  return step("model_construction", "Expose the selected weakness with the smallest model that distinguishes the competing explanations.");
 }
 
 export function derivePedagogyRecommendation(
@@ -319,84 +136,49 @@ export function derivePedagogyRecommendation(
   const { intent, objective } = input;
   const questionChunking = input.interactionPreferences?.questionChunking ?? "default";
   const posture = scaffoldPosture(intent, objective);
-  const performance = performancePosture(intent, objective);
-  let steps: PedagogyStep[];
+  let interaction: PedagogyStep;
   let reason: string;
 
   if (
     intent.reasonKind === "due_retrieval" &&
     (intent.capabilityId === "explain" || intent.capabilityId === "predict")
   ) {
-    ({ steps, reason } = dueRetrievalSteps(intent));
+    ({ interaction, reason } = dueRetrievalInteraction(intent));
   } else if (
     intent.reasonKind === "new_objective" &&
     intent.capabilityId === "explain" &&
     intent.deliveryContext !== "interview" &&
     intent.deliveryContext !== "mock"
   ) {
-    steps = [
-      step("brain_dump", "Externalize the learner's current model without priming it."),
-      step("pattern_noticing", "Show a minimal contrasted phenomenon and ask what changes or repeats before naming the rule."),
-      step("guided_discovery", "Frame one concrete problem that makes the missing principle necessary, then guide inference before naming it."),
-      step("model_construction", "Turn the learner's inferred principle into an explicit causal model."),
-      step("teach_back", "Have the learner restate the principle and connect it back to the framing problem."),
-    ];
-    reason = "A new explanation objective benefits from eliciting the existing model, noticing the phenomenon, guided inference, explicit model construction, and learner articulation before direct exposition.";
+    interaction = step("brain_dump", "Ask one compact prompt that exposes the learner's current model without priming it.");
+    reason = "Start a new explanation objective with one compact elicitation. Expand into pattern noticing, guided discovery, or direct teaching only if the learner's response shows that extra structure is useful.";
   } else if (intent.reasonKind === "transfer_needed") {
-    steps = transferSteps(intent);
+    interaction = transferInteraction(intent);
     reason = "Transfer should preserve the selected capability while changing the surface enough to prevent recognition-only success.";
   } else if (intent.weakness) {
-    steps = weaknessSteps(intent);
+    interaction = weaknessInteraction(intent);
     reason = `The selected ${intent.weakness.lifecycle} weakness should be discriminated directly rather than hidden inside generic questioning.`;
   } else if (
     intent.reasonKind === "reinforcement" &&
-    (intent.capabilityId === "explain" || intent.capabilityId === "predict") &&
-    shouldUseQuiz(intent)
+    intent.capabilityId === "explain"
   ) {
-    const count = quizQuestionCount(intent.objectiveId);
-    steps = [
-      step("mcq_quiz", "Sample several nearby distinctions to avoid rehearsing one memorized surface.", count),
-      step("boundary_test", "Probe one near-miss or counterexample after the quiz."),
-    ];
-    reason = `This reinforcement rotates to ${count} varied checks plus one boundary case.`;
+    interaction = step("mcq_quiz", "Use a short three-item discrimination check for variety without turning reinforcement into a long quiz.", 3);
+    reason = "Explanation reinforcement may use a short recognition check; longer 4-5 item quiz batches are better reserved for an explicit learner request or a dedicated revision round.";
   } else {
-    steps = capabilityFallback(intent);
+    interaction = capabilityFallback(intent);
     reason = `Use the default ${intent.capabilityId} interaction repertoire for this selected challenge.`;
   }
 
-  if (posture === "guided" && steps[0]?.form !== "worked_example") {
-    steps = [
-      step("worked_example", "Supply the minimum structure needed to make productive progress, then withdraw it."),
-      ...steps,
-    ];
-  }
-
   return {
-    primaryForm: steps[0]!.form,
-    steps,
+    interaction,
     scaffoldPosture: posture,
     commitBeforeReveal:
       intent.capabilityId === "predict" ||
       intent.capabilityId === "debug" ||
-      steps.some((candidate) => candidate.form === "thought_experiment"),
+      interaction.form === "thought_experiment",
     questionChunking,
-    maxProbeTurns:
-      intent.deliveryContext === "interview" || intent.deliveryContext === "mock"
-        ? 1
-        : posture === "independent"
-          ? 3
-          : 2,
+    maxProbeTurns: 1,
     onImpasse: impasseAction(intent),
-    withdrawScaffoldAfterSuccess: posture !== "independent",
-    performancePosture: performance,
-    reflectionTiming: performance === "fluent_execution" ? "after_attempt_debrief" : "in_episode",
-    hintLadder: hintLadder(performance, posture),
-    cognitiveLoadPosture: cognitiveLoadPosture(intent, objective),
-    challengeSurfacePosture: challengeSurfacePosture(intent),
-    repairPolicy: {
-      slip: "brief_recast_or_correction",
-      modelError: "autopsy_then_reconstruct",
-    },
     reason,
   };
 }

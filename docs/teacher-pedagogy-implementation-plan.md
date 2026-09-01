@@ -351,10 +351,11 @@ This phase is conditional. Do not implement it merely because helper code is pos
 
 **Interfaces:**
 - Consumes: existing `ChallengeIntent` plus authoritative projection/interaction inputs already available to the teacher boundary.
-- Produces: a non-durable, derived recommendation such as operator candidates, scaffold posture, and learner-facing reason.
+- Produces: a non-durable, derived recommendation with one learner interaction, scaffold posture, bounded probing/impasse behavior, and learner-facing reason.
 
 **Steps:**
-- [x] Define only derived fields needed to eliminate the observed cross-teacher inconsistency: interaction form/steps and cognitive direction, scaffold posture, commit-before-reveal, chunking, bounded probing/impasse behavior, scaffold withdrawal, performance/reflection posture, hint depth, incidental load, challenge-surface posture, repair policy, and reason.
+- [x] Keep only the derived fields that still change teacher execution after simplification: one interaction, scaffold posture, commit-before-reveal, question chunking, a bounded probe count, impasse behavior, and reason.
+- [x] Remove recommendation fields that duplicate existing owners: performance/reflection posture, cognitive direction, pedagogy-owned hint depth, incidental-load posture, challenge-surface posture, repair policy, and scaffold-withdrawal flags.
 - [x] Keep the type explicitly teacher-facing and non-authoritative for evidence/proficiency.
 - [x] Do not persist the output.
 
@@ -382,6 +383,8 @@ This phase is conditional. Do not implement it merely because helper code is pos
 - The helper is pure and stateless.
 - Existing kernel behavior is unchanged when its recommendation is ignored.
 - The helper cannot create evidence or mutate learner state.
+- Default recommendations remain short: normally one learner action, with deeper pedagogy added reactively rather than encoded as a mandatory sequence.
+- A learner complexity complaint can be handled inside the same frozen episode by harmless rephrasing, neutral decomposition, or recorded hint/exposure plus reconstruction when answer-bearing help is required.
 
 ---
 

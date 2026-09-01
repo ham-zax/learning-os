@@ -2,7 +2,7 @@
 
 ## Status
 
-First teacher-pedagogy wave implemented and dogfooded. Later live use demonstrated the protocol-only consistency gap anticipated by Tasks 13–14, so Learning OS now exposes a pure, non-durable teacher-side pedagogy recommendation for the selected `ChallengeIntent`. Tasks 15–16 remain conditional. This design does not change learner-state authority, evidence semantics, scheduler behavior, or curriculum ownership.
+First teacher-pedagogy wave implemented and dogfooded. Later live use demonstrated the protocol-only consistency gap anticipated by Tasks 13–14, so Learning OS exposes a pure, non-durable teacher-side pedagogy recommendation for the selected `ChallengeIntent`. A later simplicity review reduced that recommendation to one default learner action plus only the execution controls that materially change it; reactive question decomposition stays teacher-owned and uses the existing hint/exposure lifecycle. Tasks 15–16 remain conditional. This design does not change learner-state authority, evidence semantics, scheduler behavior, or curriculum ownership.
 
 ## Problem
 
@@ -723,23 +723,26 @@ A bounded review of the learner's older OmniLearner, OmniMentor, Cognitive Mento
 
 Retained and normalized into Learning OS:
 
-- **Guided discovery:** problem pressure first, learner inference second, formal naming after the idea is visible, then model construction and teach-back.
-- **Bounded Socratic probing:** discovery is useful only while it produces inference. The teacher-side recommendation now supplies `maxProbeTurns` plus an explicit `teach_minimum_then_reconstruct` impasse path.
-- **Progressive independence:** scaffolding is temporary. `withdrawScaffoldAfterSuccess` tells replaceable teachers not to replay the same assistance after success.
-- **Error-driven model repair:** preserve the existing expected-result → faulty-assumption → contradicting-observation → corrected-model → reconstruction path.
-- **Productive contradiction:** use boundary tests, counterexamples, changed constraints, and thought experiments as discriminating probes rather than adding a separate durable "productive confusion" state.
-- **Theory-to-practice momentum:** preserve one clear recommended next interaction rather than importing large learner menus or a rigid theory → example → practice state machine.
+- **Guided discovery:** useful as an optional teacher technique when one compact question shows that learner inference is likely to pay off; it is not a mandatory multi-step recipe.
+- **Bounded Socratic probing:** discovery is useful only while it produces inference. `maxProbeTurns` is intentionally one by default, with `teach_minimum_then_reconstruct` as the learning/practice off-ramp and assessment-first debrief for interview/mock.
+- **Progressive independence:** scaffolding is temporary by protocol. Do not preemptively prepend worked examples, and withdraw help once it is no longer needed.
+- **Error-driven model repair:** preserve the existing expected-result → faulty-assumption → contradicting-observation → corrected-model → reconstruction path for coherent causal errors, not slips.
+- **Productive contradiction and pattern noticing:** keep boundary tests, counterexamples, changed constraints, contrasted examples, and thought experiments as optional authoring techniques rather than runtime state.
+- **Theory-to-practice momentum:** preserve one clear learner action by default. Correct and sufficient performance should normally close rather than automatically triggering another pedagogical operator.
 
-A second pass over the Adaptive German Weaver / German immersion lineage added several distinct mechanisms, again normalized into teacher-side derivation rather than durable learner truth:
+A second pass over the Adaptive German Weaver / German immersion lineage provided useful teaching ideas, but a later simplicity review removed the parts that duplicated existing owners. Automaticity/performance flow comes from delivery context and ordinary practice semantics; hint depth comes from the frozen challenge hint ladder; weakness/transfer/authentic-surface authoring comes from `ChallengeIntent`; slip-versus-model-error repair and scaffold withdrawal remain protocol rules. They do not need separate `performancePosture`, `direction`, `hintLadder`, `cognitiveLoadPosture`, `challengeSurfacePosture`, `repairPolicy`, or scaffold-withdrawal fields in `PedagogyRecommendation`.
 
-- **Deliberate learning vs fluent execution:** `performancePosture` distinguishes reflection-friendly learning from uninterrupted performance. Interview/mock always uses fluent execution, and independent reinforcement practice can use it to train automaticity without adding a durable phase flag.
-- **Generation / recognition / reflection rotation:** every pedagogy step exposes a `direction`, allowing the same objective to be exercised through production, discrimination, and metacognitive articulation without inventing new capabilities.
-- **Pattern noticing before formalization:** `pattern_noticing` can expose a minimal contrast before guided discovery names the governing rule.
-- **Graded hint depth:** `hintLadder` escalates from metacognitive nudge to structural cue to direct teaching when coaching is allowed; interview/mock receives no mid-attempt hint ladder.
-- **Slip vs model-error repair:** trivial slips receive brief correction/recast; coherent causal errors receive autopsy plus reconstruction.
-- **Precision remediation:** selected weaknesses use `targeted_remediation`, minimizing incidental concepts until the failed relationship is repaired.
-- **Adaptive incidental load:** `cognitiveLoadPosture` uses `isolate`, `normal`, `compound`, or `noisy` to vary challenge complexity without changing the selected objective or readiness state.
-- **Naturalistic retrieval and authentic artifacts:** due retrieval can be embedded in a compatible realistic surface, while transfer/interview/mock can prefer code, logs, diffs, contracts, or design artifacts. Objective-specific evidence requirements still constrain authoring.
+### Adaptive decomposition without a second learner model
+
+Question complexity is a presentation problem until evidence shows otherwise. When the learner says a challenge is confusing or too large, the teacher first distinguishes three cases without changing the selected objective:
+
+```text
+wording complexity       -> rephrase harmlessly
+working-memory overload  -> split the same challenge into one coherent subquestion at a time
+missing model            -> teach the minimum through normal hint/exposure semantics, then reconstruct
+```
+
+Neutral decomposition preserves the same reasoning demand and is not automatically a hint. If the decomposition reveals answer structure, ordering, an invariant, a solution path, or other target reasoning, record it as a hint before showing it. Keep the frozen objective, task form, and criteria unchanged. After chunking, require one integrated reconstruction only when integration itself is part of the frozen criteria or a causal repair; otherwise stop once sufficient evidence exists. A stable learner request such as "always ask one thing at a time" may persist `questionChunking=atomic`; a one-off difficult question does not become a profile trait.
 
 Explicitly rejected from the corpus: response-embedded JSON memory, prompt-owned mastery/curriculum maps, mandatory menus/toolboxes, fixed turn-count curriculum checks, universal Socratic behavior, mandatory model answers after every attempt, and separate prompt-level schedulers. Learning OS already has stronger owners for state, evidence, sequencing, resumption, and review timing.
 
