@@ -199,7 +199,7 @@ Choose pedagogy from information exposed through the public teacher boundary:
 
 - `ChallengeIntent`, including capability, task form, novelty, selected weakness, changed-surface requirement, and recent surfaces to avoid;
 - durable readiness, transfer, durability, diagnostic, preparation, and explicit profile interaction preferences from `getPreparationContext(...)`;
-- current/resumed attempt hint and exposure provenance from the `getStudyContinuation(...)` resume result (or low-level `resumeSession(...)` in session-specific tooling);
+- current/resumed attempt hint and exposure provenance plus any persisted challenge `authoringContract` from the `getStudyContinuation(...)` resume result (or low-level `resumeSession(...)` in session-specific tooling);
 - the authoritative mission/session/interview decision returned by Learning OS.
 
 Do not require arbitrary historical exposure inspection or direct database reads to choose scaffolding.
@@ -316,6 +316,24 @@ A meaningful `variant` changes an interleaving, constraint, ownership boundary, 
 
 Freeze criteria before the response and make them observable: state owner identified, invariant stated, outcome predicted, causal path localized, discriminating metric selected, trade-off explained, or another objective-relevant behavior. Do not add stylistic criteria after seeing the answer.
 
+When the challenge came from a selected `ChallengeIntent`, pass that intent to `registerChallenge(challenge, intent)` so Learning OS persists an immutable authoring-contract snapshot separately from the frozen challenge artifact.
+
+### Review an inherited frozen challenge narrowly
+
+A replacement teacher may evaluate an inherited active challenge against its persisted `authoringContract`, but the question is narrow:
+
+> Does this exact frozen challenge adequately satisfy the selected authoring contract and yield valid evidence?
+
+Do **not** reject a challenge merely because a stronger model could make it deeper, more elegant, or more sophisticated. If the question is simple but still validly measures the selected objective/criteria, continue the exact frozen attempt and preserve any resulting evidence.
+
+A concrete rejection requires a contract/evidence defect such as ambiguity, unanswerability, answer leakage, objective/task-form mismatch, changed-surface violation, invalid rubric/verification contract, or a pre-submission failure to exercise the specifically selected weakness.
+
+- **Before submission:** call `rejectActiveChallengeAttempt(...)`. Learning OS preserves the opened attempt as memory contact, closes it, and returns the same selection intent with the rejected surface added to avoidance. Author the replacement from that returned intent; do not call ordinary planning to choose something else.
+- **After submission:** do not void merely because the question was suboptimal or missed the selected weakness. If the frozen question still yielded valid objective evidence, finish its normal lifecycle and leave the weakness unresolved. Only a defect that invalidates the assessment opportunity may use `rejectActiveChallengeAttempt(...)`; the learner response remains durable, no competence evidence is fabricated, and any already-effective evidence is invalidated append-only.
+- **Historical challenge without an authoring contract:** do not reconstruct selection intent from chat memory. Continue it when valid, or use the older safe lifecycle available for that state; same-intent systematic supersession requires a persisted contract.
+
+Frozen means historically immutable, not pedagogically sacred. Rejection changes the attempt disposition, never the frozen prompt/rubric.
+
 ## Assessable challenge lifecycle
 
 For learning, practice, review, interview, or mock work that can affect evidence:
@@ -323,7 +341,7 @@ For learning, practice, review, interview, or mock work that can affect evidence
 ```text
 Learning OS selects objective/task intent
 → teacher creates concrete challenge + criteria
-→ register/freeze challenge
+→ register/freeze challenge with the selected intent as authoring contract
 → open attempt
 → present learner-visible challenge
 → stop and collect the actual learner response/artifact
@@ -343,14 +361,14 @@ Learning OS selects objective/task intent
 → open its attempt only after unambiguous learner acceptance
 ```
 
-For preparation-goal flows, `kernel.createSession(...)` takes the durable session **topic/goal ID**, not `ChallengeIntent.conceptId`. A direct public-API flow should use the already-resolved goal owner, for example `kernel.createSession(goalId, intent.deliveryContext)`, then `kernel.openAttempt(challenge.id, challenge.version, session.id)`. The intent's `conceptId` identifies the learning target; it is not the session topic ID.
+For preparation-goal flows, `kernel.createSession(...)` takes the durable session **topic/goal ID**, not `ChallengeIntent.conceptId`. A direct public-API flow should use the already-resolved goal owner, for example `kernel.registerChallenge(challenge, intent)`, `kernel.createSession(goalId, intent.deliveryContext)`, then `kernel.openAttempt(challenge.id, challenge.version, session.id)`. The intent's `conceptId` identifies the learning target; it is not the session topic ID.
 
 Important constraints:
 
 - Freeze criteria before the learner answers.
 - Do not invent new success criteria after seeing the response.
 - Never fabricate a learner response to close an attempt.
-- If orchestration opened the wrong challenge and the learner has not submitted anything, use `abandonUnsubmittedSession(sessionId)` instead of inventing work or leaving the accidental attempt resumable. Never use it after submission; submitted work must finish the normal evidence lifecycle.
+- If orchestration simply opened the wrong unsubmitted challenge and there is no persisted same-intent authoring contract to preserve, `abandonUnsubmittedSession(sessionId)` remains the basic cleanup path. If the concrete inherited challenge itself violates its persisted authoring contract, use `rejectActiveChallengeAttempt(...)` so replacement stays on that same intent. After submission, only an invalid assessment opportunity may be voided; merely suboptimal valid work must finish the normal evidence lifecycle.
 - Hints are recorded before they are shown.
 - Corrective explanations/answer reveals are recorded before they are shown.
 - After decisive exposure, do not present the exposed surface as fresh independent or transfer evidence. When Learning OS later selects a qualifying follow-up, use the changed surface it requires and no hint observations if independent evidence is intended.

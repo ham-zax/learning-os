@@ -563,9 +563,9 @@ The first implementation wave should use the existing teacher APIs:
 - `finishSessionInteraction`
 - `completeSessionFeedback`
 
-No new durable table or public kernel method is required for the initial design.
+The initial first-wave design deliberately avoided new durable pedagogy state. Later replaceable-teacher use justified two narrow lifecycle additions without adding a second pedagogy engine: immutable authoring-contract provenance for selected challenges, and a terminal reject/void operation for defective assessment opportunities.
 
-One public-API detail matters for replaceable teachers: `createSession(topicId, mode)` expects the durable session topic. In a preparation-goal flow that is the resolved `goalId`; it is **not** `ChallengeIntent.conceptId`. The direct lifecycle is therefore `resolveRequestedChallenge(...) -> registerChallenge(...) -> createSession(goalId, intent.deliveryContext) -> openAttempt(...)`.
+One public-API detail matters for replaceable teachers: `createSession(topicId, mode)` expects the durable session topic. In a preparation-goal flow that is the resolved `goalId`; it is **not** `ChallengeIntent.conceptId`. The direct lifecycle is therefore `resolveRequestedChallenge(...) -> registerChallenge(challenge, intent) -> createSession(goalId, intent.deliveryContext) -> openAttempt(...)`, so the frozen challenge and its selection-time authoring contract survive teacher replacement together.
 
 ## Fresh-teacher dogfood — 2026-08-28
 
@@ -713,7 +713,9 @@ Signal feedback can become a second scoring system or reward style over substanc
 
 ### Hidden challenge inconsistency
 
-Different teachers may create challenges of very different cognitive load under the same intent. First address this through authoring guidance and dogfooding. Add explicit challenge-load metadata only if the inconsistency remains a demonstrated problem.
+Different teachers may create challenges of very different cognitive load under the same intent. First address load calibration through authoring guidance and dogfooding. Do not add a generic challenge-load score merely because one teacher can write a more sophisticated question.
+
+Replaceable-teacher use has demonstrated a different persistence need: a future teacher must be able to compare an inherited frozen challenge with the selection-time constraints that produced it. Persisting an immutable authoring-contract snapshot is provenance for intent conformance, not challenge-load metadata and not a second selector.
 
 ## Deferred extensions
 

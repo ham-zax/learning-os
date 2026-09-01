@@ -3,6 +3,8 @@ import type Database from "better-sqlite3";
 import {
   AttemptSchema,
   CapabilitySchema,
+  ChallengeAttemptDispositionRowSchema,
+  ChallengeAuthoringContractRowSchema,
   ChallengeCriterionRowSchema,
   ChallengeSpecSchema,
   ChallengeTargetRowSchema,
@@ -32,7 +34,17 @@ import type {
   Session,
   SessionPendingAction,
   SessionPhase,
+  ChallengeAttemptDispositionRow,
 } from "../db/types.js";
+import {
+  ChallengeAuthoringContractSchema,
+  ChallengeIntentSchema,
+  challengeAuthoringContract,
+} from "../selection/types.js";
+import type {
+  ChallengeAuthoringContract,
+  ChallengeIntent,
+} from "../selection/types.js";
 
 export interface LearningObjectiveInput {
   id: string;
@@ -87,6 +99,7 @@ export interface ResolveSessionReconstructionInput extends CompleteSessionFeedba
 export interface ResumableAttempt {
   attempt: Attempt;
   challenge: ChallengeSpec;
+  authoringContract: ChallengeAuthoringContract | null;
   hintObservations: HintObservation[];
   exposureEvents: ExposureEvent[];
   effectiveEvidenceIds: string[];
@@ -213,6 +226,35 @@ function ensureChallengeObjectivesExist(db: Database.Database, spec: ChallengeSp
   }
 }
 
+function validateChallengeAgainstAuthoringContract(
+  db: Database.Database,
+  spec: ChallengeSpec,
+  contract: ChallengeAuthoringContract,
+): void {
+  if (spec.taskForm !== contract.taskForm) {
+    throw new Error(`Challenge task form does not match authoring contract: ${spec.taskForm}/${contract.taskForm}`);
+  }
+  if (spec.deliveryContext !== contract.deliveryContext) {
+    throw new Error(
+      `Challenge delivery context does not match authoring contract: ${spec.deliveryContext}/${contract.deliveryContext}`,
+    );
+  }
+  if (spec.targets.length !== 1 || spec.targets[0]?.objectiveId !== contract.objectiveId) {
+    throw new Error(`Challenge targets must match the single selected objective ${contract.objectiveId}`);
+  }
+  if (spec.targets[0].novelty !== contract.novelty) {
+    throw new Error(
+      `Challenge novelty does not match authoring contract: ${spec.targets[0].novelty}/${contract.novelty}`,
+    );
+  }
+  const objective = LearningObjectiveSchema.parse(
+    db.prepare(`SELECT * FROM learning_objectives WHERE id = ?`).get(contract.objectiveId),
+  );
+  if (objective.concept_id !== contract.conceptId || objective.capability_id !== contract.capabilityId) {
+    throw new Error(`Challenge authoring contract does not match objective identity: ${contract.objectiveId}`);
+  }
+}
+
 function learnerVisibleChallenge(spec: ChallengeSpec): LearnerVisibleChallenge {
   return {
     id: spec.id,
@@ -276,8 +318,12 @@ export function getObjectiveProjection(
 export function registerChallenge(
   db: Database.Database,
   input: ChallengeSpecInput,
+  intent?: ChallengeIntent,
 ): ChallengeSpec {
   const spec = ChallengeSpecSchema.parse(input);
+  const authoringContract = intent === undefined
+    ? null
+    : challengeAuthoringContract(ChallengeIntentSchema.parse(intent));
   validateChallengeRelationships(spec);
 
   db.transaction(() => {
@@ -296,6 +342,9 @@ export function registerChallenge(
     }
 
     ensureChallengeObjectivesExist(db, spec);
+    if (authoringContract) {
+      validateChallengeAgainstAuthoringContract(db, spec, authoringContract);
+    }
 
     const now = new Date().toISOString();
     db.prepare(
@@ -379,6 +428,20 @@ export function registerChallenge(
       );
     });
 
+    if (authoringContract) {
+      db.prepare(
+        `INSERT INTO challenge_authoring_contracts (
+           challenge_id, version, contract_version, intent_json, created_at
+         ) VALUES (?, ?, ?, ?, ?)`,
+      ).run(
+        spec.id,
+        spec.version,
+        authoringContract.contractVersion,
+        JSON.stringify(authoringContract),
+        now,
+      );
+    }
+
     const freeze = db
       .prepare(
         `UPDATE challenge_versions
@@ -460,12 +523,42 @@ export function getChallenge(
   });
 }
 
+export function getChallengeAuthoringContract(
+  db: Database.Database,
+  challengeId: string,
+  version: number,
+): ChallengeAuthoringContract | null {
+  const raw = db
+    .prepare(
+      `SELECT * FROM challenge_authoring_contracts
+       WHERE challenge_id = ? AND version = ?`,
+    )
+    .get(challengeId, version);
+  if (raw === undefined) return null;
+  const row = ChallengeAuthoringContractRowSchema.parse(raw);
+  const parsed = ChallengeAuthoringContractSchema.parse(JSON.parse(row.intent_json));
+  if (parsed.contractVersion !== row.contract_version) {
+    throw new Error(`Challenge authoring contract version mismatch: ${challengeId}@${version}`);
+  }
+  return parsed;
+}
+
 export function getAttempt(
   db: Database.Database,
   attemptId: number,
 ): Attempt | undefined {
   const row = db.prepare(`SELECT * FROM attempts WHERE id = ?`).get(attemptId);
   return row === undefined ? undefined : AttemptSchema.parse(row);
+}
+
+export function getChallengeAttemptDisposition(
+  db: Database.Database,
+  attemptId: number,
+): ChallengeAttemptDispositionRow | null {
+  const row = db
+    .prepare(`SELECT * FROM challenge_attempt_dispositions WHERE attempt_id = ?`)
+    .get(attemptId);
+  return row === undefined ? null : ChallengeAttemptDispositionRowSchema.parse(row);
 }
 
 export function openAttempt(
@@ -859,7 +952,7 @@ export function getAttemptsTargetingObjective(
   return AttemptSchema.array().parse(rows);
 }
 
-function effectiveEvidenceIdsForAttempt(db: Database.Database, attemptId: number): string[] {
+export function effectiveEvidenceIdsForAttempt(db: Database.Database, attemptId: number): string[] {
   return (db
     .prepare(
       `SELECT evidence.id
@@ -910,6 +1003,7 @@ function resumableAttempt(
   return {
     attempt,
     challenge,
+    authoringContract: getChallengeAuthoringContract(db, challenge.id, challenge.version),
     hintObservations: getHintObservationsForAttempt(db, attempt.id),
     exposureEvents: ExposureEventSchema.array().parse(exposureRows),
     effectiveEvidenceIds: effectiveEvidenceIdsForAttempt(db, attempt.id),
@@ -931,6 +1025,7 @@ function unresolvedAttemptsForSession(db: Database.Database, sessionId: number):
   const assessment: ResumableAttempt[] = [];
 
   for (const attempt of attempts) {
+    if (getChallengeAttemptDisposition(db, attempt.id) !== null) continue;
     const challenge = getFrozenChallengeOrThrow(
       db,
       attempt.challenge_id!,
@@ -1086,6 +1181,26 @@ export function finishSessionInteraction(db: Database.Database, sessionId: numbe
     return;
   }
   setSessionToNextUnresolvedOrComplete(db, sessionId, true);
+}
+
+export function closeSessionAfterRejectedAttempt(
+  db: Database.Database,
+  sessionId: number,
+  attemptId: number,
+): Session {
+  const session = SessionSchema.parse(db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId));
+  if (session.active_attempt_id !== attemptId) {
+    throw new Error(`Session ${sessionId} active attempt is not ${attemptId}`);
+  }
+  db.prepare(
+    `UPDATE sessions
+     SET ended_at = COALESCE(ended_at, ?),
+         phase = 'complete', pending_action = 'none',
+         active_challenge_id = NULL, active_challenge_version = NULL, active_attempt_id = NULL,
+         reconstruction_status = 'not_required'
+     WHERE id = ?`,
+  ).run(new Date().toISOString(), sessionId);
+  return SessionSchema.parse(db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId));
 }
 
 export function completeSessionFeedback(

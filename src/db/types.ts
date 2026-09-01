@@ -65,6 +65,29 @@ export type EvaluatorType = z.infer<typeof EvaluatorType>;
 export const EvidenceRevisionAction = z.enum(["invalidate", "restore"]);
 export type EvidenceRevisionAction = z.infer<typeof EvidenceRevisionAction>;
 
+export const ChallengeAttemptDisposition = z.enum([
+  "rejected_before_submission",
+  "voided_after_submission",
+]);
+export type ChallengeAttemptDisposition = z.infer<typeof ChallengeAttemptDisposition>;
+
+export const ChallengeRejectionReason = z.enum([
+  "ambiguous",
+  "unanswerable",
+  "answer_leaking",
+  "objective_mismatch",
+  "task_form_mismatch",
+  "fails_selected_weakness",
+  "changed_surface_violation",
+  "invalid_rubric",
+  "verification_mismatch",
+  "other_contract_violation",
+]);
+export type ChallengeRejectionReason = z.infer<typeof ChallengeRejectionReason>;
+
+export const ChallengeDefectScope = z.enum(["attempt_context", "challenge_intrinsic"]);
+export type ChallengeDefectScope = z.infer<typeof ChallengeDefectScope>;
+
 export const ReviewRating = z.enum(["Again", "Hard", "Good"]);
 export type ReviewRating = z.infer<typeof ReviewRating>;
 
@@ -585,6 +608,15 @@ export const ChallengeCriterionRowSchema = z.object({
 });
 export type ChallengeCriterionRow = z.infer<typeof ChallengeCriterionRowSchema>;
 
+export const ChallengeAuthoringContractRowSchema = z.object({
+  challenge_id: z.string(),
+  version: z.number().int().positive(),
+  contract_version: z.literal(1),
+  intent_json: z.string(),
+  created_at: z.string(),
+});
+export type ChallengeAuthoringContractRow = z.infer<typeof ChallengeAuthoringContractRowSchema>;
+
 // ─── attempts ───────────────────────────────────────────────────────────────
 
 export const AttemptSchema = z.object({
@@ -604,6 +636,16 @@ export const AttemptSchema = z.object({
   created_at: z.string(),
 });
 export type Attempt = z.infer<typeof AttemptSchema>;
+
+export const ChallengeAttemptDispositionRowSchema = z.object({
+  attempt_id: z.number().int().positive(),
+  disposition: ChallengeAttemptDisposition,
+  reason_code: ChallengeRejectionReason,
+  defect_scope: ChallengeDefectScope,
+  detail: z.string(),
+  created_at: z.string(),
+});
+export type ChallengeAttemptDispositionRow = z.infer<typeof ChallengeAttemptDispositionRowSchema>;
 
 // ─── interaction provenance ─────────────────────────────────────────────────
 
@@ -769,7 +811,9 @@ export const schemas = {
   challenge_versions: ChallengeVersionRowSchema,
   challenge_targets: ChallengeTargetRowSchema,
   challenge_criteria: ChallengeCriterionRowSchema,
+  challenge_authoring_contracts: ChallengeAuthoringContractRowSchema,
   attempts: AttemptSchema,
+  challenge_attempt_dispositions: ChallengeAttemptDispositionRowSchema,
   hint_observations: HintObservationSchema,
   teaching_artifacts: TeachingArtifactSchema,
   exposure_events: ExposureEventSchema,

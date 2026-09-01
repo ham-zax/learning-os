@@ -628,6 +628,21 @@ private assessment references
 
 Interruption or agent replacement must not require regenerating the challenge or rubric.
 
+### Authoring-contract persistence invariant
+
+When a concrete challenge is authored from a selected `ChallengeIntent`, persist that selection decision separately from the frozen challenge artifact as an immutable V1 authoring contract keyed by `(challenge_id, version)`. The snapshot contains the selected objective/concept/capability, task form, delivery context, novelty, selection reason, selected weakness, changed-surface requirement, and recent challenge surfaces to avoid.
+
+The authoring contract answers a different question from `ChallengeSpec`:
+
+```text
+authoring contract = what Learning OS selected and constrained
+frozen challenge   = what the teacher concretely authored
+```
+
+Intent-aware registration must reject a concrete challenge that changes the selected objective, concept/capability identity, task form, delivery context, or novelty. Historical challenges created before this contract may have no authoring snapshot; a replacement teacher must not invent one from conversation memory.
+
+A frozen challenge is immutable historical evidence of what was presented. Immutability does not certify that the authored question was a valid instantiation of its selection intent.
+
 ## Multi-objective challenges
 
 One challenge may target several objectives, but evidence is emitted separately.
@@ -894,11 +909,12 @@ Long `design` and `implementation` episodes require at least 10 remaining minute
 ### 2. Register/freeze a challenge
 
 ```text
-registerChallenge(ChallengeSpec)
+registerChallenge(ChallengeSpec, ChallengeIntent?)
 → durably persisted frozen challenge ID/version
+→ immutable authoring contract when an intent is supplied
 ```
 
-The kernel validates target objectives, criterion ownership, and required private assessment metadata, persists the exact frozen version, and only then returns success. A fresh compatible agent must be able to reconstruct that version without regeneration.
+The kernel validates target objectives, criterion ownership, and required private assessment metadata, persists the exact frozen version, and only then returns success. When a `ChallengeIntent` is supplied, registration also validates the concrete challenge against that intent and stores the authoring contract separately. A fresh compatible agent must be able to reconstruct both without regeneration.
 
 ### 3. Open attempt before delivery
 
@@ -1003,6 +1019,32 @@ abandonUnsubmittedSession(sessionId)
 ```
 
 `abandonUnsubmittedSession(...)` is only for an active attempt with no learner submission and no submitted verification/assessment work. It ends the session and clears restart pointers without inventing a response, assessment, or evidence event. The unsubmitted attempt remains as historical memory-contact provenance.
+
+### 10. Reject a defective inherited challenge attempt
+
+```text
+rejectActiveChallengeAttempt(
+  sessionId,
+  {
+    reason,
+    defectScope: attempt_context | challenge_intrinsic,
+    detail
+  }
+)
+→ terminal attempt disposition
+→ same persisted authoring intent for replacement
+→ rejected challenge appended to recent-surface avoidance
+```
+
+Use this only when a replacement/current teacher can name a concrete authoring-contract defect, not merely because it could write a more sophisticated question.
+
+For an **unsubmitted** active attempt, the kernel records `rejected_before_submission`, preserves the opened attempt as memory contact, closes the old session, and returns the original authoring intent with the rejected surface added to avoidance.
+
+For a **submitted** attempt, `voided_after_submission` is allowed only when the defect makes the assessment opportunity invalid. The learner response, active-time data, and memory contact remain durable. No new competence evidence is fabricated. If effective evidence already exists, the rejection path invalidates it through ordinary append-only evidence revision and rebuilds affected projections/review state before closing the session. A voided attempt is excluded from unresolved verification/assessment resumption, and its evidence cannot later be restored or replaced.
+
+`fails_selected_weakness` alone cannot void already-submitted otherwise-valid work. Finish that attempt's normal evidence lifecycle and leave the weakness unresolved; a later Learning-OS-selected challenge can discriminate it better.
+
+Rejected/voided attempts remain eligible memory contact and recent challenge history. Rejection does not delete or rewrite the frozen challenge/rubric and does not rerun ordinary planning. Replacement authoring stays on the returned authoring intent.
 
 Recommended V1 session phases:
 

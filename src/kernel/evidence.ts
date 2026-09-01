@@ -34,6 +34,7 @@ import {
   advanceSessionToFeedback,
   getAttempt,
   getChallenge,
+  getChallengeAttemptDisposition,
   getHintObservationsForAttempt,
   syncSessionAfterEvidenceChange,
 } from "./foundation.js";
@@ -1041,6 +1042,9 @@ export function recordAssessment(
     if (attempt.submitted_at === null) {
       throw new Error(`Attempt must be submitted before assessment: ${attemptId}`);
     }
+    if (getChallengeAttemptDisposition(db, attemptId) !== null) {
+      throw new Error(`Voided/rejected attempt cannot be assessed: ${attemptId}`);
+    }
     const challenge = challengeForAttemptOrThrow(db, attempt);
     validateAssessmentTargets(db, challenge, assessment);
 
@@ -1165,6 +1169,14 @@ export function reviseEvidence(
 
   return db.transaction(() => {
     const evidence = evidenceEventOrThrow(db, evidenceEventId);
+    const disposition = evidence.attempt_id === null
+      ? null
+      : getChallengeAttemptDisposition(db, evidence.attempt_id);
+    if (disposition && (action === "restore" || corrected !== undefined)) {
+      throw new Error(
+        `Voided/rejected attempt evidence cannot be restored or replaced: ${evidence.attempt_id}`,
+      );
+    }
     const effective = latestRevisionAction(db, evidence.id) !== "invalidate";
 
     if (action === "invalidate" && !effective) {

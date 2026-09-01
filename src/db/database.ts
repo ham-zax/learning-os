@@ -38,7 +38,7 @@ import type {
   InitialDiagnosticKind,
 } from "./types.js";
 
-const CURRENT_SCHEMA_VERSION = 14;
+const CURRENT_SCHEMA_VERSION = 15;
 
 // ─── Schema DDL ──────────────────────────────────────────────────────────────
 
@@ -1170,6 +1170,78 @@ const migrations: Migration[] = [
             source             TEXT NOT NULL CHECK (source = 'learner_explicit'),
             updated_at         TEXT NOT NULL
           );
+        `);
+      })();
+    },
+  },
+  {
+    version: 15,
+    up: (db) => {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE challenge_authoring_contracts (
+            challenge_id      TEXT NOT NULL,
+            version           INTEGER NOT NULL CHECK (version > 0),
+            contract_version  INTEGER NOT NULL CHECK (contract_version = 1),
+            intent_json       TEXT NOT NULL,
+            created_at        TEXT NOT NULL,
+            PRIMARY KEY(challenge_id, version),
+            FOREIGN KEY(challenge_id, version)
+              REFERENCES challenge_versions(challenge_id, version) ON DELETE RESTRICT
+          );
+
+          CREATE TRIGGER challenge_authoring_contracts_no_insert_after_freeze
+          BEFORE INSERT ON challenge_authoring_contracts
+          WHEN (
+            SELECT is_frozen FROM challenge_versions
+            WHERE challenge_id = NEW.challenge_id AND version = NEW.version
+          ) = 1
+          BEGIN
+            SELECT RAISE(ABORT, 'frozen challenge authoring contracts are immutable');
+          END;
+
+          CREATE TRIGGER challenge_authoring_contracts_no_update
+          BEFORE UPDATE ON challenge_authoring_contracts
+          BEGIN
+            SELECT RAISE(ABORT, 'challenge authoring contracts are immutable');
+          END;
+
+          CREATE TRIGGER challenge_authoring_contracts_no_delete
+          BEFORE DELETE ON challenge_authoring_contracts
+          BEGIN
+            SELECT RAISE(ABORT, 'challenge authoring contracts are immutable');
+          END;
+
+          CREATE TABLE challenge_attempt_dispositions (
+            attempt_id       INTEGER PRIMARY KEY REFERENCES attempts(id) ON DELETE RESTRICT,
+            disposition      TEXT NOT NULL CHECK (
+              disposition IN ('rejected_before_submission', 'voided_after_submission')
+            ),
+            reason_code      TEXT NOT NULL CHECK (
+              reason_code IN (
+                'ambiguous', 'unanswerable', 'answer_leaking', 'objective_mismatch',
+                'task_form_mismatch', 'fails_selected_weakness', 'changed_surface_violation',
+                'invalid_rubric', 'verification_mismatch', 'other_contract_violation'
+              )
+            ),
+            defect_scope     TEXT NOT NULL CHECK (
+              defect_scope IN ('attempt_context', 'challenge_intrinsic')
+            ),
+            detail           TEXT NOT NULL,
+            created_at       TEXT NOT NULL
+          );
+
+          CREATE TRIGGER challenge_attempt_dispositions_no_update
+          BEFORE UPDATE ON challenge_attempt_dispositions
+          BEGIN
+            SELECT RAISE(ABORT, 'challenge attempt dispositions are immutable');
+          END;
+
+          CREATE TRIGGER challenge_attempt_dispositions_no_delete
+          BEFORE DELETE ON challenge_attempt_dispositions
+          BEGIN
+            SELECT RAISE(ABORT, 'challenge attempt dispositions are immutable');
+          END;
         `);
       })();
     },

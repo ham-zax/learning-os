@@ -68,7 +68,7 @@ Explanations, hints, answers, worked solutions, and corrective feedback are allo
 - If the learner chooses the explanation, respect that choice. Record the material exposure before revealing it when an objective/session can be identified. Do not later present the contaminated interaction as clean retrieval evidence.
 - If the learner asks for a hint, record the hint observation before showing the hint.
 - Never fabricate a learner response or assessment merely to close an interaction.
-- If orchestration opened the wrong challenge and the learner has not submitted anything, use `abandonUnsubmittedSession(sessionId)`. Never use it after submission; submitted work must finish the normal evidence lifecycle.
+- If orchestration simply opened the wrong unsubmitted challenge and no persisted same-intent authoring contract is involved, `abandonUnsubmittedSession(sessionId)` remains the cleanup path. If an inherited concrete challenge violates its persisted authoring contract, use `rejectActiveChallengeAttempt(...)`; after submission, void only an invalid assessment opportunity, not merely suboptimal valid work.
 
 This is the balance: **do not block useful teaching, but never hide its effect on evidence.**
 
@@ -81,7 +81,7 @@ Use only public teacher inputs for pedagogy:
 - the current `ChallengeIntent`;
 - durable preparation/projection state from `getPreparationContext(...)`;
 - the selected weakness carried by the intent;
-- current/resumed attempt hint and exposure provenance from the continuation resume result (or low-level `resumeSession(...)` in session-specific tooling);
+- current/resumed attempt hint/exposure provenance and any persisted challenge `authoringContract` from the continuation resume result (or low-level `resumeSession(...)` in session-specific tooling);
 - the current mission/session/interview decision.
 
 Do not require arbitrary historical exposure queries or direct database reads.
@@ -147,6 +147,18 @@ If an existing registered misconception definition matches, record its ID in ass
 After technical assessment, optionally tighten how the learner would express the same reasoning to a senior engineer/interviewer. If the answer is already close, make at most a small terminology/ordering correction. If it is correct but materially vague or rambling, give one concise stronger formulation. If a causal link is missing or the model is wrong, repair reasoning before polishing wording.
 
 Do not record articulation-only wording/structure refinement as exposure when it adds no missing target reasoning. If the refinement supplies a missing causal link, model answer, or other target mechanism, it is teaching exposure and uses the normal exposure/reconstruction lifecycle. This refinement never changes technical correctness or learner state.
+
+### Review inherited challenges narrowly
+
+For a resumed active challenge with a persisted `authoringContract`, ask only whether the exact frozen challenge adequately satisfies that contract and can yield valid evidence. Do not reject it merely because you could make it deeper, cleaner, or more sophisticated.
+
+Concrete defects include ambiguity, unanswerability, answer leakage, objective/task-form mismatch, changed-surface violation, invalid rubric/verification, or a pre-submission failure to exercise the specifically selected weakness.
+
+- Before learner submission, call `rejectActiveChallengeAttempt(...)`; use its returned `replacementIntent` to author a changed/avoided surface for the **same** selection decision. Do not call ordinary planning to choose a different objective.
+- After learner submission, preserve valid evidence from a merely suboptimal question. `fails_selected_weakness` alone is not a void reason after submission. Void only when the assessment opportunity itself is invalid; the response remains durable and any already-effective evidence is invalidated append-only by the kernel.
+- Do not reconstruct a missing historical authoring contract from chat memory.
+
+Frozen challenges preserve history; they are not sacred. Rejection changes attempt disposition, never the frozen prompt/rubric.
 
 ### Withdraw scaffolding honestly
 
@@ -232,7 +244,7 @@ For an assessable interaction:
 ```text
 Learning OS chooses objective/task intent
 → teacher creates concrete challenge + criteria
-→ register/freeze challenge
+→ register/freeze challenge with `registerChallenge(challenge, intent)`
 → open attempt
 → present learner-visible challenge and stop
 → collect the actual learner response/artifact
@@ -251,7 +263,7 @@ Learning OS chooses objective/task intent
 → present it and wait for learner acceptance before opening its attempt
 ```
 
-For preparation-goal flows, `kernel.createSession(...)` takes the durable goal/topic ID, not `ChallengeIntent.conceptId`: use `kernel.createSession(goalId, intent.deliveryContext)`, then attach the frozen challenge with `kernel.openAttempt(...)`. The concept ID names the learning target, not the session topic.
+For preparation-goal flows, `kernel.createSession(...)` takes the durable goal/topic ID, not `ChallengeIntent.conceptId`: use `kernel.registerChallenge(challenge, intent)`, `kernel.createSession(goalId, intent.deliveryContext)`, then attach the frozen challenge with `kernel.openAttempt(...)`. The concept ID names the learning target, not the session topic.
 
 After decisive exposure, do not reuse that exposed surface as fresh independent or transfer evidence. A later qualifying follow-up must come from Learning OS and honor its changed-surface requirement; independent evidence also requires no hint observations.
 

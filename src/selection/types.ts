@@ -1,17 +1,20 @@
-import type {
+import { z } from "zod";
+import {
   DeliveryContext,
   Novelty,
-  Readiness,
   TaskForm,
   WeaknessLifecycle,
 } from "../db/types.js";
+import type { Readiness } from "../db/types.js";
 
-export type SelectionCapabilityId =
-  | "explain"
-  | "predict"
-  | "implement"
-  | "debug"
-  | "design";
+export const SelectionCapabilityIdSchema = z.enum([
+  "explain",
+  "predict",
+  "implement",
+  "debug",
+  "design",
+]);
+export type SelectionCapabilityId = z.infer<typeof SelectionCapabilityIdSchema>;
 
 export type ObjectiveImportance = "core" | "important" | "supporting";
 export type TransferSelectionPolicy = "none" | "eligible" | "required";
@@ -46,44 +49,58 @@ export interface ChallengeSelectionInput {
   candidates: readonly ObjectiveSelectionCandidate[];
 }
 
-export interface RecentChallengeRef {
-  challengeId: string;
-  version: number;
-  attemptId: number;
-  taskForm: TaskForm;
-  novelty: Novelty;
-  performedAt: string;
-}
+export const RecentChallengeRefSchema = z.object({
+  challengeId: z.string().min(1),
+  version: z.number().int().positive(),
+  attemptId: z.number().int().positive(),
+  taskForm: TaskForm,
+  novelty: Novelty,
+  performedAt: z.string().min(1),
+}).strict();
+export type RecentChallengeRef = z.infer<typeof RecentChallengeRefSchema>;
 
-export interface SelectedWeaknessContext {
-  key: string;
-  category: string;
-  lifecycle: WeaknessLifecycle;
-  isRetest: boolean;
-}
+export const SelectedWeaknessContextSchema = z.object({
+  key: z.string().min(1),
+  category: z.string().min(1),
+  lifecycle: WeaknessLifecycle,
+  isRetest: z.boolean(),
+}).strict();
+export type SelectedWeaknessContext = z.infer<typeof SelectedWeaknessContextSchema>;
 
-export type SelectionReasonKind =
-  | "recurring_weakness"
-  | "resolved_weakness_retest"
-  | "transfer_needed"
-  | "due_retrieval"
-  | "weak_capability"
-  | "new_objective"
-  | "reinforcement";
+export const SelectionReasonKindSchema = z.enum([
+  "recurring_weakness",
+  "resolved_weakness_retest",
+  "transfer_needed",
+  "due_retrieval",
+  "weak_capability",
+  "new_objective",
+  "reinforcement",
+]);
+export type SelectionReasonKind = z.infer<typeof SelectionReasonKindSchema>;
 
-export interface ChallengeIntent {
-  objectiveId: string;
-  conceptId: string;
-  capabilityId: SelectionCapabilityId;
-  taskForm: TaskForm;
-  deliveryContext: DeliveryContext;
-  novelty: Novelty;
-  reasonKind: SelectionReasonKind;
-  reason: string;
-  dueAt: string | null;
-  weakness: SelectedWeaknessContext | null;
-  requiresChangedSurface: boolean;
-  avoidRecentChallenges: RecentChallengeRef[];
+export const ChallengeIntentSchema = z.object({
+  objectiveId: z.string().min(1),
+  conceptId: z.string().min(1),
+  capabilityId: SelectionCapabilityIdSchema,
+  taskForm: TaskForm,
+  deliveryContext: DeliveryContext,
+  novelty: Novelty,
+  reasonKind: SelectionReasonKindSchema,
+  reason: z.string().min(1),
+  dueAt: z.string().nullable(),
+  weakness: SelectedWeaknessContextSchema.nullable(),
+  requiresChangedSurface: z.boolean(),
+  avoidRecentChallenges: z.array(RecentChallengeRefSchema),
+}).strict();
+export type ChallengeIntent = z.infer<typeof ChallengeIntentSchema>;
+
+export const ChallengeAuthoringContractSchema = ChallengeIntentSchema.extend({
+  contractVersion: z.literal(1),
+}).strict();
+export type ChallengeAuthoringContract = z.infer<typeof ChallengeAuthoringContractSchema>;
+
+export function challengeAuthoringContract(intent: ChallengeIntent): ChallengeAuthoringContract {
+  return ChallengeAuthoringContractSchema.parse({ contractVersion: 1, ...intent });
 }
 
 export interface BlockedSelectionCandidate {

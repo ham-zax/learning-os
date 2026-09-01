@@ -19,6 +19,7 @@ import {
   createLearningObjective,
   finishSessionInteraction,
   getChallenge,
+  getChallengeAuthoringContract,
   getLearningObjective,
   listCapabilities,
   listResumableSessions,
@@ -51,6 +52,11 @@ import type {
   SetGoalStudyFocusInput,
   SetInteractionPreferencesInput,
 } from "./db/database.js";
+import type { ChallengeIntent } from "./selection/types.js";
+import {
+  rejectActiveChallengeAttempt,
+} from "./kernel/challenge-rejection.js";
+import type { RejectActiveChallengeAttemptInput } from "./kernel/challenge-rejection.js";
 import {
   getDurablePreparationContext,
   listDurablePreparationContexts,
@@ -106,7 +112,10 @@ export function createTeacherKernel(db: Database.Database) {
       createSession(db, { topicId, mode }),
     getChallenge: (challengeId: string, version: number) =>
       getChallenge(db, challengeId, version),
-    registerChallenge: (challenge: ChallengeSpecInput) => registerChallenge(db, challenge),
+    getChallengeAuthoringContract: (challengeId: string, version: number) =>
+      getChallengeAuthoringContract(db, challengeId, version),
+    registerChallenge: (challenge: ChallengeSpecInput, intent?: ChallengeIntent) =>
+      registerChallenge(db, challenge, intent),
     openAttempt: (challengeId: string, version: number, sessionId: number | null = null) =>
       openAttempt(db, challengeId, version, sessionId),
     recordHintUse: (attemptId: number, input: RecordHintUseInput) =>
@@ -122,6 +131,8 @@ export function createTeacherKernel(db: Database.Database) {
     listResumableSessions: (topicId?: string) => listResumableSessions(db, topicId),
     resumeSession: (sessionId: number) => resumeSession(db, sessionId),
     abandonUnsubmittedSession: (sessionId: number) => abandonUnsubmittedSession(db, sessionId),
+    rejectActiveChallengeAttempt: (sessionId: number, input: RejectActiveChallengeAttemptInput) =>
+      rejectActiveChallengeAttempt(db, sessionId, input),
     finishSessionInteraction: (sessionId: number) => finishSessionInteraction(db, sessionId),
     completeSessionFeedback: (sessionId: number, input: CompleteSessionFeedbackInput = {}) =>
       completeSessionFeedback(db, sessionId, input),
