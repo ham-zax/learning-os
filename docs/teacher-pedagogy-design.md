@@ -730,6 +730,17 @@ Retained and normalized into Learning OS:
 - **Productive contradiction:** use boundary tests, counterexamples, changed constraints, and thought experiments as discriminating probes rather than adding a separate durable "productive confusion" state.
 - **Theory-to-practice momentum:** preserve one clear recommended next interaction rather than importing large learner menus or a rigid theory → example → practice state machine.
 
+A second pass over the Adaptive German Weaver / German immersion lineage added several distinct mechanisms, again normalized into teacher-side derivation rather than durable learner truth:
+
+- **Deliberate learning vs fluent execution:** `performancePosture` distinguishes reflection-friendly learning from uninterrupted performance. Interview/mock always uses fluent execution, and independent reinforcement practice can use it to train automaticity without adding a durable phase flag.
+- **Generation / recognition / reflection rotation:** every pedagogy step exposes a `direction`, allowing the same objective to be exercised through production, discrimination, and metacognitive articulation without inventing new capabilities.
+- **Pattern noticing before formalization:** `pattern_noticing` can expose a minimal contrast before guided discovery names the governing rule.
+- **Graded hint depth:** `hintLadder` escalates from metacognitive nudge to structural cue to direct teaching when coaching is allowed; interview/mock receives no mid-attempt hint ladder.
+- **Slip vs model-error repair:** trivial slips receive brief correction/recast; coherent causal errors receive autopsy plus reconstruction.
+- **Precision remediation:** selected weaknesses use `targeted_remediation`, minimizing incidental concepts until the failed relationship is repaired.
+- **Adaptive incidental load:** `cognitiveLoadPosture` uses `isolate`, `normal`, `compound`, or `noisy` to vary challenge complexity without changing the selected objective or readiness state.
+- **Naturalistic retrieval and authentic artifacts:** due retrieval can be embedded in a compatible realistic surface, while transfer/interview/mock can prefer code, logs, diffs, contracts, or design artifacts. Objective-specific evidence requirements still constrain authoring.
+
 Explicitly rejected from the corpus: response-embedded JSON memory, prompt-owned mastery/curriculum maps, mandatory menus/toolboxes, fixed turn-count curriculum checks, universal Socratic behavior, mandatory model answers after every attempt, and separate prompt-level schedulers. Learning OS already has stronger owners for state, evidence, sequencing, resumption, and review timing.
 
 ## Deferred extensions

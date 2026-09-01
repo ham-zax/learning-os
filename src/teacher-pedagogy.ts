@@ -6,6 +6,7 @@ export type PedagogyInteractionForm =
   | "brain_dump"
   | "mcq_quiz"
   | "prediction"
+  | "pattern_noticing"
   | "guided_discovery"
   | "model_construction"
   | "thought_experiment"
@@ -18,9 +19,19 @@ export type PedagogyInteractionForm =
   | "worked_example";
 
 export type ScaffoldPosture = "independent" | "prompted" | "guided" | "worked_example";
+export type PerformancePosture = "deliberate_learning" | "fluent_execution";
+export type CognitiveDirection = "generation" | "recognition" | "reflection";
+export type HintDepth = "metacognitive_nudge" | "structural_cue" | "direct_teaching";
+export type CognitiveLoadPosture = "isolate" | "normal" | "compound" | "noisy";
+export type ChallengeSurfacePosture =
+  | "standard"
+  | "targeted_remediation"
+  | "naturalistic_interleaving"
+  | "authentic_artifact";
 
 export interface PedagogyStep {
   form: PedagogyInteractionForm;
+  direction: CognitiveDirection;
   purpose: string;
   questionCount?: number;
   stopAfterPrompt: boolean;
@@ -35,6 +46,15 @@ export interface PedagogyRecommendation {
   maxProbeTurns: number;
   onImpasse: "teach_minimum_then_reconstruct" | "finish_assessment_then_debrief";
   withdrawScaffoldAfterSuccess: boolean;
+  performancePosture: PerformancePosture;
+  reflectionTiming: "in_episode" | "after_attempt_debrief";
+  hintLadder: HintDepth[];
+  cognitiveLoadPosture: CognitiveLoadPosture;
+  challengeSurfacePosture: ChallengeSurfacePosture;
+  repairPolicy: {
+    slip: "brief_recast_or_correction";
+    modelError: "autopsy_then_reconstruct";
+  };
   reason: string;
 }
 
@@ -96,6 +116,21 @@ function impasseAction(intent: ChallengeIntent): PedagogyRecommendation["onImpas
     : "teach_minimum_then_reconstruct";
 }
 
+function cognitiveDirection(form: PedagogyInteractionForm): CognitiveDirection {
+  switch (form) {
+    case "mcq_quiz":
+    case "pattern_noticing":
+    case "boundary_test":
+      return "recognition";
+    case "teach_back":
+    case "debug_autopsy":
+    case "reconstruction":
+      return "reflection";
+    default:
+      return "generation";
+  }
+}
+
 function step(
   form: PedagogyInteractionForm,
   purpose: string,
@@ -103,10 +138,70 @@ function step(
 ): PedagogyStep {
   return {
     form,
+    direction: cognitiveDirection(form),
     purpose,
     questionCount,
     stopAfterPrompt: true,
   };
+}
+
+function performancePosture(
+  intent: ChallengeIntent,
+  objective: DurablePreparationObjective | null | undefined,
+): PerformancePosture {
+  if (intent.deliveryContext === "interview" || intent.deliveryContext === "mock") {
+    return "fluent_execution";
+  }
+  if (
+    intent.deliveryContext === "practice" &&
+    intent.reasonKind === "reinforcement" &&
+    objective?.readiness === "independent"
+  ) {
+    return "fluent_execution";
+  }
+  return "deliberate_learning";
+}
+
+function hintLadder(
+  performance: PerformancePosture,
+  posture: ScaffoldPosture,
+): HintDepth[] {
+  if (performance === "fluent_execution") return [];
+  switch (posture) {
+    case "independent":
+      return ["metacognitive_nudge", "structural_cue", "direct_teaching"];
+    case "prompted":
+      return ["structural_cue", "direct_teaching"];
+    case "guided":
+    case "worked_example":
+      return ["direct_teaching"];
+  }
+}
+
+function cognitiveLoadPosture(
+  intent: ChallengeIntent,
+  objective: DurablePreparationObjective | null | undefined,
+): CognitiveLoadPosture {
+  if (intent.deliveryContext === "interview" || intent.deliveryContext === "mock") return "noisy";
+  if (intent.reasonKind === "transfer_needed" || intent.novelty === "transfer") return "compound";
+  if (intent.weakness || intent.reasonKind === "new_objective" || objective?.readiness === "exposed") {
+    return "isolate";
+  }
+  return "normal";
+}
+
+function challengeSurfacePosture(intent: ChallengeIntent): ChallengeSurfacePosture {
+  if (intent.weakness) return "targeted_remediation";
+  if (intent.reasonKind === "due_retrieval") return "naturalistic_interleaving";
+  if (
+    intent.reasonKind === "transfer_needed" ||
+    intent.novelty === "transfer" ||
+    intent.deliveryContext === "interview" ||
+    intent.deliveryContext === "mock"
+  ) {
+    return "authentic_artifact";
+  }
+  return "standard";
 }
 
 function capabilityFallback(intent: ChallengeIntent): PedagogyStep[] {
@@ -224,6 +319,7 @@ export function derivePedagogyRecommendation(
   const { intent, objective } = input;
   const questionChunking = input.interactionPreferences?.questionChunking ?? "default";
   const posture = scaffoldPosture(intent, objective);
+  const performance = performancePosture(intent, objective);
   let steps: PedagogyStep[];
   let reason: string;
 
@@ -240,11 +336,12 @@ export function derivePedagogyRecommendation(
   ) {
     steps = [
       step("brain_dump", "Externalize the learner's current model without priming it."),
+      step("pattern_noticing", "Show a minimal contrasted phenomenon and ask what changes or repeats before naming the rule."),
       step("guided_discovery", "Frame one concrete problem that makes the missing principle necessary, then guide inference before naming it."),
       step("model_construction", "Turn the learner's inferred principle into an explicit causal model."),
       step("teach_back", "Have the learner restate the principle and connect it back to the framing problem."),
     ];
-    reason = "A new explanation objective benefits from eliciting the existing model, guided inference, explicit model construction, and learner articulation before direct exposition.";
+    reason = "A new explanation objective benefits from eliciting the existing model, noticing the phenomenon, guided inference, explicit model construction, and learner articulation before direct exposition.";
   } else if (intent.reasonKind === "transfer_needed") {
     steps = transferSteps(intent);
     reason = "Transfer should preserve the selected capability while changing the surface enough to prevent recognition-only success.";
@@ -291,6 +388,15 @@ export function derivePedagogyRecommendation(
           : 2,
     onImpasse: impasseAction(intent),
     withdrawScaffoldAfterSuccess: posture !== "independent",
+    performancePosture: performance,
+    reflectionTiming: performance === "fluent_execution" ? "after_attempt_debrief" : "in_episode",
+    hintLadder: hintLadder(performance, posture),
+    cognitiveLoadPosture: cognitiveLoadPosture(intent, objective),
+    challengeSurfacePosture: challengeSurfacePosture(intent),
+    repairPolicy: {
+      slip: "brief_recast_or_correction",
+      modelError: "autopsy_then_reconstruct",
+    },
     reason,
   };
 }

@@ -57,6 +57,8 @@ Do not fabricate learner responses or criteria. If orchestration simply opened t
 
 Learning OS chooses **which move is next**; the teacher chooses **how to instantiate that selected move**. Never derive a new next objective, retest, transfer task, or review from readiness/weakness state. Use only public inputs: `ChallengeIntent`, `getPreparationContext(...)`, selected weakness context, current/resumed attempt hint/exposure provenance plus any persisted `authoringContract` from the continuation resume result (or `resumeSession(...)` in session-specific tooling), and the current mission/session/interview decision.
 
+Call `getPedagogyRecommendation(goalId, intent)` before authoring the interaction. Execute its steps incrementally and honor their `direction` (`generation`, `recognition`, `reflection`). The recommendation may use pattern noticing before formalization, bounded guided discovery, MCQ discrimination, prediction, model construction, thought experiments, boundary tests, teach-back, debugging/autopsy, reconstruction, or worked examples. Its execution controls are also normative defaults: `fluent_execution` (including interview/mock or independent reinforcement practice) defers reflection until debrief, an empty `hintLadder` forbids mid-attempt coaching, `cognitiveLoadPosture` changes incidental complexity without changing the objective, and the challenge surface may request targeted remediation, compatible naturalistic interleaving, or an authentic artifact. After assessment, treat a slip with brief correction/recast and reserve autopsy plus reconstruction for a coherent model error.
+
 Use the shortest useful subset of:
 
 ```text
