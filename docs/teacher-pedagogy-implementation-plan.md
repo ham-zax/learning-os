@@ -351,10 +351,10 @@ This phase is conditional. Do not implement it merely because helper code is pos
 
 **Interfaces:**
 - Consumes: existing `ChallengeIntent` plus authoritative projection/interaction inputs already available to the teacher boundary.
-- Produces: a non-durable directive containing only prompt shape, scaffold level, commit-before-reveal, and question chunking.
+- Produces: a non-durable directive containing only scaffold level, commit-before-reveal, and question chunking.
 
 **Steps:**
-- [x] Keep only fields with demonstrated cross-teacher consistency value: `promptShape`, `scaffold`, `commitBeforeReveal`, and `questionChunking`.
+- [x] Keep only fields with demonstrated cross-teacher consistency value: `scaffold`, `commitBeforeReveal`, and `questionChunking`. The 2026-09-05 systematic corpus review removed `promptShape` after showing that deterministic `explain` reinforcement had collapsed into recognition-by-default; MCQ remains an optional teacher-side discrimination technique.
 - [x] Remove fields that model stable protocol or duplicate existing owners: interaction-form taxonomy, probe/impasse state, reasons, performance/reflection posture, cognitive direction, pedagogy-owned hint depth, incidental-load posture, challenge-surface posture, repair policy, and scaffold-withdrawal flags.
 - [x] Keep the type explicitly teacher-facing and non-authoritative for evidence/proficiency.
 - [x] Do not persist the output.

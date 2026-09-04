@@ -1,6 +1,6 @@
 # Reasoning and retrieval playbook
 
-Use this reference only when the current Learning OS-selected episode needs more than the default direct/MCQ presentation: concept construction, retrieval repair, discrimination, transfer, or learner-requested depth. Do not load or execute it merely because the techniques are available.
+Use this reference only when the current Learning OS-selected episode needs specialized concept construction, retrieval repair, discrimination, transfer, or learner-requested depth. Do not load or execute it merely because the techniques are available.
 
 ## Contents
 
@@ -87,7 +87,7 @@ A and B look similar
 -> what near-miss answer would be tempting, and why is it wrong?
 ```
 
-Prefer this over asking for two memorized definitions. MCQ can be useful when the distractors encode real competing models rather than trivia.
+Prefer this over asking for two memorized definitions. MCQ can be useful when the distractors encode real competing models rather than trivia, but it is a recognition/discrimination technique, not the default evidence shape for an `explain` objective. When explanation quality is being assessed, require the learner's rationale or explanation rather than treating a choice alone as sufficient explanation evidence.
 
 ## Prediction and self-verification
 

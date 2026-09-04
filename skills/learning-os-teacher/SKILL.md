@@ -86,15 +86,16 @@ Use only public teacher inputs for pedagogy:
 
 Do not require arbitrary historical exposure queries or direct database reads.
 
-After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(goalId, intent)` and use its tiny non-durable `PedagogyDirective` as the starting guardrail. It contains only `promptShape` (`direct` or `mcq`), `scaffold` (`independent` or `guided`), `commitBeforeReveal`, and `questionChunking`. It never owns the next objective, task form, novelty, evidence, readiness, weakness state, or scheduling.
+After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(goalId, intent)` and use its tiny non-durable `PedagogyDirective` as the starting guardrail. It contains only `scaffold` (`independent` or `guided`), `commitBeforeReveal`, and `questionChunking`. It never owns the next objective, task form, novelty, evidence, readiness, weakness state, or scheduling. Recognition formats such as MCQ remain optional teacher techniques; Learning OS does not select them merely because an `explain` objective is being reinforced.
 
 Ask the smallest useful question and stop. Correct and sufficient answers normally get concise feedback and closure; do not automatically append teach-back, boundary testing, reflection, or another quiz item. Richer pedagogy is preserved as progressively loaded Skill guidance rather than runtime state. Load **only the playbook that matches the current episode**:
 
 - concept construction, retrieval, discrimination, transfer, or learner-requested depth -> `references/reasoning-retrieval-playbook.md`;
 - debugging, failed prediction, causal/model error, or selected weakness repair -> `references/debugging-repair-playbook.md`;
+- ordinary implementation, design, codebase learning, or project work against a real artifact -> `references/problem-solving-implementation-playbook.md`;
 - interview/mock, fluency, realistic performance, or post-attempt interview debrief -> `references/performance-interview-playbook.md`.
 
-Do not load all playbooks by default, and do not invoke a technique merely because it exists. A learner may explicitly request a 4–5 item quiz/revision round when compatible with the selected intent. Failure behavior is stable protocol rather than returned state: slips get brief correction; coherent model errors get minimum repair plus one reconstruction; ambiguous "stuck" gets one cheap blocker-disambiguation question before reteaching; interview/mock stays assessment-first. Use the frozen challenge's existing hint ladder and hint/exposure lifecycle rather than a second pedagogy-owned hint system.
+Choose one primary playbook for the current episode phase. Transition only when the phase actually changes—for example, ordinary implementation develops a concrete failure and becomes debugging. Do not load all playbooks by default, and do not invoke a technique merely because it exists. A learner may explicitly request a 4–5 item quiz/revision round when compatible with the selected intent. Failure behavior is stable protocol rather than returned state: slips get brief correction; coherent model errors get minimum repair plus one reconstruction; ambiguous "stuck" gets one cheap blocker-disambiguation question before reteaching; interview/mock stays assessment-first. Use the frozen challenge's existing hint ladder and hint/exposure lifecycle rather than a second pedagogy-owned hint system.
 
 Use the shortest useful subset of this repertoire:
 
@@ -151,6 +152,12 @@ expected result
 ```
 
 If an existing registered misconception definition matches, record its ID in assessment. Otherwise use a precise `observedErrors` category; never create a persistent misconception definition from conversation.
+
+### Prioritize the exact observed gap
+
+Assessment should still record every criterion result and observed error required for durable truth. Learner-facing coaching should usually concentrate on the single highest-leverage **observed** gap: tie feedback to the learner's actual response/artifact, identify the smallest faulty assumption, boundary, or implementation decision, and repair that rather than drifting into a nearby generic lesson. If several independent correctness or safety failures are materially important, state them honestly; focus is a coaching default, not permission to hide assessment results.
+
+At a meaningful phase boundary, after a substantial repair, or when the learner asks for a recap, a compact debrief may state: target -> what the learner demonstrated -> highest-leverage observed gap -> corrected mental model/invariant -> what remains unproven. Keep it evidence-grounded and optional. It never creates learner state or chooses the next move; use revision-note APIs when the learner wants a durable artifact from prior work.
 
 ### Refine strong answers without over-coaching
 
@@ -323,6 +330,7 @@ Use `references/teacher-protocol.md` for the complete decision matrix, lifecycle
 Use `references/environment-routing.md` for web versus CLI/IDE repository behavior.
 Use `references/reasoning-retrieval-playbook.md` for retrieval, model construction, guided discovery, discrimination, self-verification, transfer bridges, and integration-span techniques.
 Use `references/debugging-repair-playbook.md` for hypothesis-driven debugging, fastest falsifiers, failure localization, mental-model autopsy, precision remediation, and reconstruction.
+Use `references/problem-solving-implementation-playbook.md` for real-artifact project learning, source fidelity, learner-first implementation, executable verification, exact-error coaching, and compact debriefs.
 Use `references/performance-interview-playbook.md` for uninterrupted performance, authentic artifacts, interview-safe debrief, and contrastive benchmark feedback.
 
 Load the smallest relevant reference set for the current learner need; do not preload the playbooks as a mandatory teaching stack.

@@ -204,9 +204,11 @@ Choose pedagogy from information exposed through the public teacher boundary:
 
 Do not require arbitrary historical exposure inspection or direct database reads to choose scaffolding.
 
-After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(goalId, intent)` before authoring the learner-facing interaction. Its returned `PedagogyDirective` is deliberately tiny and non-durable: `promptShape` (`direct` or `mcq`), `scaffold` (`independent` or `guided`), `commitBeforeReveal`, and `questionChunking`. It exists to prevent demonstrated cross-teacher execution failures, not to model the teaching process. It cannot change the objective, capability, task form, novelty, evidence, readiness, weakness state, or scheduler state.
+After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(goalId, intent)` before authoring the learner-facing interaction. Its returned `PedagogyDirective` is deliberately tiny and non-durable: `scaffold` (`independent` or `guided`), `commitBeforeReveal`, and `questionChunking`. It exists to prevent demonstrated cross-teacher execution failures, not to model the teaching process. It cannot change the objective, capability, task form, novelty, evidence, readiness, weakness state, or scheduler state.
 
-Treat the directive as a **starting guardrail**, not a lesson recipe. `direct` means instantiate the already-selected task form directly; `mcq` permits a compact recognition/discrimination presentation where compatible. Ask the smallest useful question and stop. A correct and sufficient answer normally closes the episode after concise feedback. Richer techniques—pattern noticing, guided discovery, teach-back, thought experiments, boundary tests, worked examples, system maps, and debugging autopsy—remain teacher judgment and are used only when the learner response or explicit request justifies them. A learner's explicit request for a 4–5 item quiz/revision round may override `promptShape` when it remains compatible with the selected intent and evidence lifecycle.
+Treat the directive as a **starting guardrail**, not a lesson recipe. Ask the smallest useful question and stop. A correct and sufficient answer normally closes the episode after concise feedback. Richer techniques—pattern noticing, guided discovery, teach-back, thought experiments, boundary tests, worked examples, system maps, real-artifact implementation, and debugging autopsy—remain teacher judgment and are used only when the learner response or explicit request justifies them. Recognition formats such as MCQ are optional teacher techniques, not a deterministic default for `explain` reinforcement. A learner may explicitly request a compact quiz/revision round when it remains compatible with the selected intent and evidence lifecycle.
+
+When specialized guidance is needed, load one primary playbook for the current episode phase: reasoning/retrieval for concept construction, retrieval, discrimination, or transfer; debugging/repair for concrete failures and causal-model repair; problem-solving/implementation for ordinary implementation, design, codebase learning, or real-artifact project work; performance/interview for interview, mock, or fluency pressure. Transition only when the episode phase actually changes rather than chaining playbooks by default.
 
 Failure handling is stable protocol, not returned state: slips get brief correction; coherent causal/model errors get minimum repair plus one reconstruction; ambiguous impasse gets one cheap blocker check before reteaching; interview/mock remains assessment-first and defers answer-bearing coaching until debrief. Scaffold withdrawal, authentic surfaces, targeted weakness authoring, and repair depth are likewise derived from existing intent/evidence state. Use the frozen challenge's hint ladder and the existing hint/exposure lifecycle rather than a second pedagogy-owned hint system.
 
@@ -312,6 +314,22 @@ After the technical assessment, optionally improve how the learner would express
 - if the mental model is wrong, repair the model rather than rewriting bad reasoning.
 
 Articulation-only feedback is non-authoritative presentation: it does not change correctness, evidence, readiness, weaknesses, transfer, durability, review timing, or FSRS. Do **not** call `recordExposure(...)` when the refinement merely restates reasoning the learner already demonstrated with better terminology or structure. If the proposed formulation adds missing target reasoning, a causal link, a model answer, or other material that refreshes the mechanism, treat that portion as teaching exposure and use the normal exposure/reconstruction lifecycle.
+
+### Feedback focus and compact debrief
+
+Assessment should record every frozen criterion result and observed error required for durable truth. Learner-facing coaching should normally focus on the single highest-leverage **observed** gap: tie feedback to the learner's actual response or artifact, identify the smallest faulty assumption/boundary/implementation decision, and repair that rather than drifting to a nearby generic lesson. If several independent correctness or safety failures are materially important, state them honestly; focused coaching is not permission to hide assessment results.
+
+At a meaningful phase boundary, after a substantial repair, or when the learner asks for a recap, a compact debrief may state:
+
+```text
+target
+-> what the learner demonstrated
+-> highest-leverage observed gap
+-> corrected mental model / invariant
+-> what remains unproven
+```
+
+Keep this optional and evidence-grounded. It does not create proficiency, select future work, or schedule review. If the learner wants a durable revision artifact from prior Learning OS work, derive it through the existing revision-note APIs rather than chat memory.
 
 ### Challenge authoring
 
