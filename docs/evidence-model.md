@@ -6,6 +6,29 @@ The evidence model prevents the system from turning exposure, confidence, or one
 
 The authoritative assessment history is append-only evidence plus evidence revisions. Scoped hint observations, material exposure events, and misconception observations preserve the interaction provenance needed to interpret that evidence. Readiness, historical-highest readiness, transfer/durability state, blockers, broad weakness signals, and scheduler card state are derived and rebuildable.
 
+Use an authority hierarchy rather than treating every persisted value as equally true:
+
+```text
+observed history
+  > rebuildable projection
+  > bounded live-episode coordination
+  > teacher interpretation
+```
+
+An **authority transition** occurs whenever a weaker observation or proposal becomes a stronger system claim. The owner of the stronger claim must own that promotion. A teacher assessment cannot directly become mastery; it enters the kernel evidence contract, which then owns evidence creation and projection rebuild.
+
+### Support-aware evidence
+
+`independent` means independent of answer-bearing support for the target capability, not necessarily independent of every real-world tool. Documentation, tests, a debugger, repository search, or other tools may legitimately belong to the intended performance environment.
+
+When that distinction matters, freeze the support semantics prospectively in the challenge prompt and/or criteria before the learner responds. Do not infer a more favorable support contract after seeing the answer. Existing scoped hints and exposure events remain the durable provenance for teacher-provided answer-bearing assistance. V1 deliberately avoids a universal support matrix until real usage proves that frozen challenge semantics are insufficient.
+
+### Evidence receipts
+
+`getObjectiveEvidenceReceipt(objectiveId)` is a read-only audit view for consequential learner-state claims. It returns the objective, current rebuildable projection/weakness views, objective-scoped exposure provenance, and the full evidence history with current evidence-revision effectiveness, referenced learner response/artifact/verification observations when available, and frozen challenge surfaces.
+
+The receipt is not another learner model. Reading it cannot rebuild, correct, select, schedule, or persist anything. A teacher may use it to explain *why* Learning OS currently considers an objective guided/independent, transferable/not demonstrated, durable/not demonstrated, or weak. Invalidated events remain visible as history but are explicitly ineffective.
+
 ## Learning objective
 
 Track capability at the level where task selection changes.
@@ -138,17 +161,17 @@ durability:  untested | not_demonstrated | demonstrated | contradicted
 
 - `unknown`: no gradable evidence exists.
 - `exposed`: only answer-revealed/L5 evidence or unsuccessful attempts exist.
-- `guided`: there is useful successful/partial assisted performance, or a newer qualifying unaided result other than `correct` has contradicted prior independent readiness.
-- `independent`: the two most recent qualifying unaided (`L0`) gradable attempts are both `correct`, use distinct task versions or materially distinct surfaces, and no active blocking misconception applies.
+- `guided`: there is useful successful/partial performance with objective-relevant hint/teaching assistance, or a newer qualifying L0 answer-hidden result other than `correct` has contradicted prior independent readiness.
+- `independent`: the two most recent qualifying L0 answer-hidden gradable attempts are both `correct` under their prospectively frozen support conditions, use distinct task versions or materially distinct surfaces, and no active blocking misconception applies.
 
-A newer qualifying unaided result other than `correct` prevents current `independent` readiness until two subsequent qualifying successes satisfy the gate. Historical-highest readiness remains intact.
+A newer qualifying L0 answer-hidden result other than `correct` prevents current `independent` readiness until two subsequent qualifying successes satisfy the gate. Historical-highest readiness remains intact.
 
 ### Transfer
 
 - `untested`: no qualifying `novelty=transfer` evidence.
 - `not_demonstrated`: qualifying transfer has been attempted but no transfer success has yet been demonstrated, and the latest qualifying result is not `correct`.
-- `demonstrated`: the latest qualifying unaided transfer event is `correct`.
-- `contradicted`: the latest qualifying unaided transfer event is `incorrect` or `partially_correct` after at least one prior transfer demonstration.
+- `demonstrated`: the latest qualifying L0 answer-hidden transfer event under its frozen support conditions is `correct`.
+- `contradicted`: the latest qualifying L0 answer-hidden transfer event is `incorrect` or `partially_correct` after at least one prior transfer demonstration.
 
 A correct transfer event may also count toward independent readiness.
 

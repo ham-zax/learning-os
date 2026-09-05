@@ -19,6 +19,33 @@ The kernel owns durable learner state. Agents may teach, generate challenges, ru
 9. FSRS receives only scheduler ratings; it never interprets pedagogical evidence.
 10. Agent/local execution is the V1 verifier for executable programming tasks.
 11. Assessment and evidence-correction commits are atomic: authoritative events and every affected projection/cache either commit together or do not commit.
+12. Authority decreases as interpretation increases: observations are authoritative history; readiness/transfer/durability, weaknesses, and review cards remain rebuildable views; teacher hypotheses never become learner truth merely because they are useful.
+13. A stronger learner-state claim is created only through its owning authority transition. Failed promotion preserves lower-authority value where possible instead of weakening evidence requirements.
+14. When allowed tools/references materially affect what an attempt proves, those support semantics are fixed prospectively in the frozen challenge prompt and/or criteria. Teacher-provided answer-bearing help remains governed by hint/exposure provenance.
+15. Consequential learner-state claims must be explainable from objective-scoped kernel history through a read-only evidence receipt; the receipt itself has no write, selection, projection, or scheduling authority.
+16. Fresh-teacher correctness requires semantic handoff integrity: replacing the teacher may change pedagogy but not the meaning of proven/unproven, hinted/exposed, independent, due, or unresolved interaction state.
+
+## Authority-transition contract
+
+Use this pattern whenever implementation promotes a weaker fact/proposal into a stronger claim:
+
+```text
+candidate / observation
+        ↓
+ownership + proof gate
+        ↓
+authoritative or rebuildable system claim
+```
+
+Examples:
+
+- teacher-authored activity -> frozen challenge: owned by challenge registration/freezing;
+- learner response + assessment -> `EvidenceEvent`: owned by the evidence commit;
+- evidence history -> readiness/transfer/durability/weakness/card views: owned by deterministic rebuild;
+- answer-bearing learner-visible material -> exposure provenance: owned by `recordExposure(...)` immediately before display;
+- session interaction -> resumable obligation: owned by the session/reconstruction contracts.
+
+If the stronger claim cannot be justified, do not coerce it through the boundary. The interaction may remain practice, exposure, historical response, or other lower-authority material.
 
 ## V1 logical schema
 
@@ -415,10 +442,10 @@ Rules:
 
 - `unknown`: no gradable evidence exists.
 - `exposed`: only answer-revealed/L5 evidence or unsuccessful attempts exist; no qualifying guided success exists.
-- `guided`: there is useful successful/partial performance with assistance, or current independent readiness has been contradicted by a newer qualifying unaided result other than `correct`.
-- `independent`: the two most recent qualifying unaided (`L0`) gradable attempts are both `correct`, use distinct task versions or materially distinct surfaces, and no active blocking misconception applies.
+- `guided`: there is useful successful/partial performance with objective-relevant hint/teaching assistance, or current independent readiness has been contradicted by a newer qualifying L0 answer-hidden result other than `correct`.
+- `independent`: the two most recent qualifying L0 answer-hidden gradable attempts are both `correct` under their prospectively frozen support conditions, use distinct task versions or materially distinct surfaces, and no active blocking misconception applies.
 
-A newer qualifying unaided result other than `correct` prevents current `independent` readiness until two subsequent qualifying successes satisfy the gate. Historical-highest readiness remains unchanged.
+A newer qualifying L0 answer-hidden result other than `correct` prevents current `independent` readiness until two subsequent qualifying successes satisfy the gate. Historical-highest readiness remains unchanged.
 
 `partially_correct` therefore both fails to establish independent readiness and breaks the current two-success independent gate.
 
@@ -428,8 +455,8 @@ Transfer is independent of the readiness ladder:
 
 - `untested`: no qualifying `novelty=transfer` evidence.
 - `not_demonstrated`: at least one qualifying transfer attempt exists, but no transfer success has yet been demonstrated and the latest qualifying result is not `correct`.
-- `demonstrated`: the latest qualifying unaided transfer event is `correct`.
-- `contradicted`: the latest qualifying unaided transfer event is `incorrect` or `partially_correct` after at least one prior transfer demonstration.
+- `demonstrated`: the latest qualifying L0 answer-hidden transfer event under its frozen support conditions is `correct`.
+- `contradicted`: the latest qualifying L0 answer-hidden transfer event is `incorrect` or `partially_correct` after at least one prior transfer demonstration.
 
 A correct transfer event can also count as one of the two independent-readiness successes.
 
@@ -916,6 +943,8 @@ registerChallenge(ChallengeSpec, ChallengeIntent?)
 
 The kernel validates target objectives, criterion ownership, and required private assessment metadata, persists the exact frozen version, and only then returns success. When a `ChallengeIntent` is supplied, registration also validates the concrete challenge against that intent and stores the authoring contract separately. A fresh compatible agent must be able to reconstruct both without regeneration.
 
+When legitimate tools/references materially affect what success would prove, the teacher must state those support conditions prospectively in the frozen `publicPrompt` and/or criterion descriptions before registration. V1 does not infer support conditions from the learner's later behavior and does not add a parallel support-permission state model.
+
 ### 3. Open attempt before delivery
 
 ```text
@@ -997,6 +1026,26 @@ reviseEvidence(
 ```
 
 `correctedObjectiveResult` is allowed only with invalidation and causes the atomic corrected-replacement path. Restore reactivates the original event and its existing derived events only when that would not conflict with another effective replacement.
+
+### 8a. Inspect an objective evidence receipt
+
+```text
+getObjectiveEvidenceReceipt(objectiveId)
+→ objective identity
+→ current rebuildable projection
+→ current rebuildable weakness projections
+→ evidence history with latest revision/effectiveness
+→ referenced learner response/artifact/verification observation when available
+→ exact frozen challenge surface for each evidence event
+→ objective-scoped exposure provenance
+→ authority descriptor
+```
+
+This operation is read-only. It must not rebuild projections, mutate evidence, change scheduler state, select work, or create a new learner-state interpretation. Invalidated evidence remains visible as historical provenance with `effective=false`; effective projections/weaknesses continue to come from the existing kernel owners.
+
+The receipt exists so a compatible teacher can explain consequential learner-state claims from objective-scoped kernel history rather than chat memory or an indiscriminate profile dump. Learner-facing presentation should translate internal IDs/enums into ordinary language unless system detail is explicitly requested.
+
+A disputed claim does not grant direct mutation authority. If the receipt demonstrates a concrete assessment/evidence error, use the existing `reviseEvidence(...)` contract. Hint/exposure history remains governed by its existing immutable contracts in V1.
 
 ### 9. Resume or abandon an unsubmitted interaction
 

@@ -24,12 +24,14 @@ Read these before changing how mastery, assessment, scheduling, or challenge sel
 - [Teacher pedagogy design](teacher-pedagogy-design.md) — rationale and detailed operator/challenge guidance behind the normative teacher-agent protocol. If wording conflicts, `teacher-agent-protocol.md` governs teacher behavior unless a higher-authority repository contract applies.
 - [Teacher pedagogy implementation plan](teacher-pedagogy-implementation-plan.md) — completed first-wave protocol/Skill rollout and fresh-teacher dogfood, with product extensions kept evidence-gated.
 - [Flexible learning runtime design](flexible-learning-runtime-design.md) — live-session pain points and V2 design for dynamic concept episodes, learner-visible teaching, speech-aware questioning, time/FSRS ownership, prerequisite repair, soft curriculum focus, and evidence-safe replanning.
+- [Evidence Ecology implementation plan](evidence-ecology-implementation-plan.md) — current authority-transition/inspectable-evidence wave, deliberately avoiding speculative schema and selector expansion.
 - [Implementation plan](implementation-plan.md) — staged migration from the original Generic Tutor architecture.
 - [Source comparison](research/source-comparison.md) — ideas evaluated from other learning/interview projects.
 - [ADR 0001: fork Generic Tutor](decisions/0001-fork-generic-tutor.md)
 - [ADR 0002: evidence is authoritative](decisions/0002-evidence-is-authoritative.md)
 - [ADR 0003: scheduler input policy](decisions/0003-scheduler-input-policy.md)
 - [ADR 0004: teacher-agent portability](decisions/0004-teacher-agent-portability.md)
+- [ADR 0005: authority transitions](decisions/0005-authority-transitions.md)
 
 ## Document authority
 

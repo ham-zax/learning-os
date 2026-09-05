@@ -44,6 +44,7 @@ import {
   recordAssessment,
   reviseEvidence,
 } from "./kernel/evidence.js";
+import { getObjectiveEvidenceReceipt } from "./kernel/evidence-receipt.js";
 import type { ReviseEvidenceInput } from "./kernel/evidence.js";
 import type { AssessmentResultInput } from "./db/types.js";
 import { getTodayMission, resolveRequestedChallenge } from "./plan/today.js";
@@ -118,6 +119,8 @@ export function createTeacherKernel(db: Database.Database) {
     createLearningObjective: (input: LearningObjectiveInput) =>
       createLearningObjective(db, input),
     getLearningObjective: (objectiveId: string) => getLearningObjective(db, objectiveId),
+    getObjectiveEvidenceReceipt: (objectiveId: string) =>
+      getObjectiveEvidenceReceipt(db, objectiveId),
     getRevisionNoteContext: (input: RevisionNoteContextInput) =>
       getRevisionNoteContext(db, input),
     saveRevisionNote: (input: SaveRevisionNoteInput) => saveRevisionNote(db, input),

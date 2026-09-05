@@ -10,6 +10,38 @@ Build a learning kernel that can answer three questions reliably:
 
 The system must keep those questions separate. Grading, task selection, and spaced scheduling are related but not the same responsibility.
 
+## Evidence Ecology and authority transitions
+
+Learning OS uses **Evidence Ecology** as the governing architecture lens:
+
+> **Flexible exploration. Exact promotion. Inspectable authority.**
+
+Information has different epistemic authority:
+
+```text
+observations
+(attempts, responses/artifacts, frozen challenges, hints, exposures,
+verification, assessment results)
+        ↓ strongest durable authority
+rebuildable projections
+(readiness, transfer, durability, weaknesses, review cards)
+        ↓
+bounded live-episode coordination
+(active attempt/challenge, pending action, reconstruction obligation)
+        ↓
+teacher interpretation
+(causal hypothesis, analogy, explanation strategy, playbook choice)
+        ↓ lowest authority / cheapest to revise or discard
+```
+
+Persistence does not make an interpretation more true. A stronger claim must be created only through the component that owns that authority transition. The teacher may explore, teach, diagnose, and propose; the kernel owns promotion into frozen assessable work, evidence, derived learner projections, scheduling state, and resumable correctness constraints.
+
+When promotion fails, preserve lower-authority value instead of weakening the boundary. Answer-bearing help can remain useful teaching exposure without becoming clean retrieval; an authentic project task can remain useful work even when its provenance is insufficient for an independent-capability claim.
+
+Evidence is also interpreted against the support semantics prospectively frozen with the challenge. Legitimate professional tools are not automatically equivalent to answer-bearing help. V1 keeps this semantic rather than adding a generic support permission matrix: when allowed tools/references materially change what the attempt proves, state those conditions in the frozen prompt and/or criteria, while teacher-provided answer-bearing assistance continues through the existing hint/exposure lifecycle.
+
+Fresh-teacher portability therefore requires **semantic handoff integrity**, not identical pedagogy. A replacement teacher may choose a different explanation, but `hinted`, `exposed`, `independent`, `unproven`, `due`, and unresolved interaction obligations must retain the same operational meaning.
+
 ## System boundary
 
 ```text
