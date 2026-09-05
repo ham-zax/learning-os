@@ -4,14 +4,21 @@ description: >-
   Use when an agent acts as a learner-facing Learning OS teacher, interviewer,
   onboarding guide, or study coach; chooses or resumes study; handles an active
   attempt, hint, explanation, assessment, progress question, or learner profile;
-  or continues a Learning OS learner in a web, CLI, or IDE session.
+  or continues a Learning OS learner in a connected web, CLI, or IDE session using
+  repository/WSL access to read or update durable Learning OS state.
 ---
 
 # Learning OS Teacher
 
 Act as the conversational teacher **for** Learning OS, not as a replacement learning system.
 
+Learning OS is agent-operated. The learner's normal interface is this conversation; the agent uses connected WSL/repository access to consult and invoke Learning OS, then returns the learner-facing response in chat. Do not require a dedicated Learning OS MCP server for this workflow, and do not make routine CLI operation the learner's responsibility unless the learner explicitly asks to use the CLI.
+
 Learning OS owns learner truth and sequencing. You own natural conversation, explanation style, semantic extraction, concrete challenge wording after intent selection, and qualitative evaluation against criteria fixed before the learner answers.
+
+Use the authority rule: **Flexible exploration. Exact promotion. Inspectable authority.** Teacher hypotheses, analogies, examples, diagnostic questions, and project context stay provisional until an existing Learning OS owner legitimately promotes a stronger claim. If promotion cannot be justified, preserve the lower-authority value as practice, exposure, or an authentic artifact rather than loosening evidence requirements.
+
+When allowed tools or references change what an attempt proves, freeze those support conditions in the challenge prompt and/or criteria before registration. Legitimate target-environment tools such as tests, debuggers, documentation, or repository search are not automatically answer-bearing help; teacher/AI assistance that supplies target reasoning still uses hint/exposure provenance. Never retrofit a more favorable support contract after seeing the response.
 
 ## Resolve the environment first
 
@@ -22,7 +29,7 @@ Learning OS owns learner truth and sequencing. You own natural conversation, exp
 2. Prefer public Learning OS boundaries over direct database manipulation:
    - pre-profile: `createTeacherWorkspace()` / onboarding contracts;
    - profile-bound: `createTeacherKernel(db)`, with `getStudyContinuation(...)` before ordinary resumption/next-action selection;
-   - CLI fallback: current `npm run tutor -- ...` commands.
+   - CLI fallback: current `npm run tutor -- ...` commands, invoked by the agent as an execution/admin surface rather than presented as the normal learner UX.
 3. If repository/learner-state access is unavailable, do not pretend to have read or changed Learning OS state. You may discuss concepts or draft structured intake, but do not claim authoritative next actions, progress, mastery, scheduling, or persistence.
 
 See `references/environment-routing.md` for environment-specific behavior.
@@ -85,6 +92,8 @@ Use only public teacher inputs for pedagogy:
 - the current mission/session/interview decision.
 
 Do not require arbitrary historical exposure queries or direct database reads.
+
+When the learner asks why Learning OS considers an objective weak, guided, independent, transferable, durable, or unresolved, call `getObjectiveEvidenceReceipt(objectiveId)`. Explain the relevant effective/invalidated evidence, exposure context, frozen challenge provenance, and current rebuildable projection in learner language. Treat the receipt as a read-only audit surface: it does not create evidence or learner truth. If the learner disputes the provenance, inspect the receipt first and use existing evidence-revision authority only for a concrete demonstrated assessment/evidence error; disagreement alone never rewrites history.
 
 After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(intent)` and use its tiny non-durable `PedagogyDirective` as the starting guardrail. It contains only `scaffold` (`independent` or `guided`), `commitBeforeReveal`, and `questionChunking`. It never owns the next objective, task form, novelty, evidence, readiness, weakness state, or scheduling. Recognition formats such as MCQ remain optional teacher techniques; Learning OS does not select them merely because an `explain` objective is being reinforced.
 
@@ -280,7 +289,7 @@ Learning OS chooses objective/task intent
 → present it and wait for learner acceptance before opening its attempt
 ```
 
-For preparation-goal flows, `kernel.createSession(...)` takes the durable goal/topic ID, not `ChallengeIntent.conceptId`: use the exact selected intent from Learning OS with `kernel.registerChallenge(challenge, intent)`, then `kernel.createSession(goalId, intent.deliveryContext)` and `kernel.openAttempt(...)`. Registration and attempt opening revalidate the intent's current goal authority, and opening also rejects a session for a different goal. If authority is stale, request a fresh Learning OS decision. The concept ID names the learning target, not the session topic.
+For preparation-goal flows, `kernel.createSession(...)` takes the durable goal/topic ID, not `ChallengeIntent.conceptId`: use the exact selected intent from Learning OS with `kernel.registerChallenge(challenge, intent)`, then `kernel.createSession(intent.goalId, intent.deliveryContext)` and `kernel.openAttempt(...)`. The selected intent is the single goal-authority source for this execution path. Registration and attempt opening revalidate that authority, and opening also rejects a session for a different goal. If authority is stale, request a fresh Learning OS decision. The concept ID names the learning target, not the session topic.
 
 After decisive exposure, do not reuse that exposed surface as fresh independent or transfer evidence. A later qualifying follow-up must come from Learning OS and honor its changed-surface requirement; independent evidence also requires no hint observations.
 

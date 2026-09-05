@@ -14,6 +14,18 @@ real artifact when useful
 
 The artifact is a practice surface, not a second learner-state system.
 
+## Contents
+
+- Fast routing
+- Prefer authentic artifacts when they improve the signal
+- Keep source fidelity separate from teaching inference
+- Decompose only enough to expose the selected objective
+- Preserve learner-first production
+- Let real verification own correctness
+- Target the observed error, not a nearby lesson
+- Use a compact debrief only when it adds value
+- Transition only when the episode phase actually changes
+
 ## Fast routing
 
 - Existing learner code, repository, diff, spec, design, trace, or implementation plan is relevant -> prefer it over a synthetic exercise when it can exercise the selected objective cleanly.

@@ -2,11 +2,28 @@
 
 The repository's `docs/teacher-agent-protocol.md` is the canonical current protocol when available. This bundled reference exists so the Skill remains usable when that file cannot be loaded.
 
+## Contents
+
+- Authority split
+- Semi-strict decision matrix
+- Active attempt lifecycle
+- Pedagogy for selected work
+- Stable interaction preferences
+- Learner agency
+
 ## Authority split
 
 Learning OS owns learner/profile state, goals/objectives, prerequisites, evidence/projections, weaknesses, review cards, due timing, challenge intent selection, challenge/attempt/hint/exposure lifecycle, assessment persistence, and resumable session state.
 
 The teacher owns conversation, semantic extraction, natural clarification, explanation style, concrete challenge wording after intent selection, criteria construction before learner response, qualitative evaluation against those criteria, and feedback presentation.
+
+Use the operating rule: **Flexible exploration. Exact promotion. Inspectable authority.** Provisional teacher hypotheses, analogies, diagnostic questions, and project context remain lower-authority interpretation until an existing Learning OS owner promotes a stronger claim. Promotion failure is a spillway: preserve useful practice/exposure/artifact value rather than weakening evidence rules.
+
+Do not confuse observed history, rebuildable projections, bounded resumable interaction obligations, and teacher interpretation. Prefer least-privilege context: objective receipt for an objective claim, continuation state for resumption, and preparation context for goal planning.
+
+When evidentiary meaning depends on allowed tools or references, state those support conditions prospectively in the challenge prompt and/or frozen criteria before registration. Legitimate target-environment tools such as tests, debuggers, documentation, or repository search are not automatically answer-bearing help. Teacher/AI assistance that supplies target reasoning still uses the normal hint/exposure lifecycle; never retrofit a more favorable support contract after seeing the learner response.
+
+When a learner asks why an objective is weak, guided, independent, transferable, durable, or unresolved, use `getObjectiveEvidenceReceipt(objectiveId)` as the objective-scoped audit surface. Translate its effective/invalidated evidence, exposure provenance, frozen challenge context, and rebuildable projection into learner language. The receipt is read-only and never becomes a second truth owner. If provenance is disputed, inspect the receipt first; only a concrete demonstrated assessment/evidence error may use the existing `reviseEvidence(...)` authority, and learner disagreement alone never rewrites history.
 
 ## Semi-strict decision matrix
 
@@ -49,7 +66,7 @@ select objective/task intent
 → open its attempt only after unambiguous learner acceptance
 ```
 
-For preparation-goal flows, `kernel.createSession(...)` takes the durable goal/topic ID, not `ChallengeIntent.conceptId`; persist selection provenance with the exact selected intent in `kernel.registerChallenge(challenge, intent)`, use the resolved `goalId` for the session, and use the intent's `conceptId` only as the learning target. Registration and attempt opening revalidate current goal execution scope, and opening rejects cross-goal session attachment; if the intent became stale after goal membership/focus changed, request a fresh Learning OS decision instead of forcing it through. After decisive exposure, only a later Learning-OS-selected qualifying follow-up with the required changed surface can provide fresh independent/transfer evidence; independent evidence also requires no hint observations.
+For preparation-goal flows, `kernel.createSession(...)` takes the durable goal/topic ID, not `ChallengeIntent.conceptId`; persist selection provenance with the exact selected intent in `kernel.registerChallenge(challenge, intent)`, use `intent.goalId` for the session, and use the intent's `conceptId` only as the learning target. The selected intent is the single goal-authority source for this execution path. Registration and attempt opening revalidate current goal execution scope, and opening rejects cross-goal session attachment; if the intent became stale after goal membership/focus changed, request a fresh Learning OS decision instead of forcing it through. After decisive exposure, only a later Learning-OS-selected qualifying follow-up with the required changed surface can provide fresh independent/transfer evidence; independent evidence also requires no hint observations.
 
 Do not fabricate learner responses or criteria. If orchestration simply opened the wrong unsubmitted challenge and no same-intent authoring contract is involved, `abandonUnsubmittedSession(sessionId)` remains the cleanup path. If an inherited concrete challenge violates its persisted authoring contract, use `rejectActiveChallengeAttempt(...)`; after submission, void only an invalid assessment opportunity, not merely suboptimal valid work. Interview uses the same lifecycle. For onboarding ambiguity, use the workspace-provided catalog candidates/resolver. Fuzzy `suggested` matches are optional; explicitly confirm one or mark the learner area `custom: true`. For missing concepts, use `workspace.deriveMissingConceptMaterialization(...)` rather than inventing technical metadata.
 
