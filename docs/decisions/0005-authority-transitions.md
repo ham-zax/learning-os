@@ -61,7 +61,7 @@ learner-visible answer-bearing teaching -> exposure provenance
 conversation state -> durable resumable interaction state
 ```
 
-The component that owns the stronger claim owns the promotion decision. Teachers may propose observations and assessments through public contracts but may not bypass the owning kernel boundary.
+The component that owns the stronger claim owns the promotion decision. Teachers may propose observations and assessments through public contracts but may not bypass the owning kernel boundary. A selected challenge intent is therefore scoped to the goal that authorized it; intent-aware challenge registration must revalidate that the current goal execution scope still authorizes the selected objective before freezing a new assessable challenge, and opening an attempt from that challenge must revalidate the same scope and session-goal identity before learner work begins.
 
 ### Promotion failure is not pedagogical failure
 

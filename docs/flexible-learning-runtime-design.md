@@ -391,7 +391,7 @@ This remains a generic focus mechanism rather than a hard-coded `day_1` field. F
 
 Protocol-only dogfood succeeded; live use then skipped visible teaching/reconstruction twice.
 
-This evidence now activates a small pure teacher-side directive, not a stateful pedagogy engine. The implementation is exposed as `getPedagogyRecommendation(goalId, intent)` and derives only three execution guardrails—scaffold level, commit-before-reveal, and question chunking—from existing authoritative state without persistence or selector ownership. The later systematic prompt-corpus review removed deterministic prompt-shape selection because `explain` reinforcement had collapsed into MCQ recognition by default; recognition/discrimination remains an optional teacher technique instead.
+This evidence now activates a small pure teacher-side directive, not a stateful pedagogy engine. The implementation is exposed as `getPedagogyRecommendation(intent)`; the selected intent carries its authorizing `goalId`, so the API has no second independently supplied goal. It derives only three execution guardrails—scaffold level, commit-before-reveal, and question chunking—from existing authoritative state without persistence or selector ownership. The later systematic prompt-corpus review removed deterministic prompt-shape selection because `explain` reinforcement had collapsed into MCQ recognition by default; recognition/discrimination remains an optional teacher technique instead.
 
 Implemented shape is conceptually equivalent to:
 

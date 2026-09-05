@@ -6,6 +6,8 @@
 
 **Tech Stack:** TypeScript, Zod, better-sqlite3, existing Learning OS teacher kernel and append-only evidence model.
 
+**Current contract note (2026-09-05):** the authority-scope clean migration supersedes the original v1 authoring-intent shape. Current `ChallengeIntent`/authoring contracts require `goalId`, persisted authoring contracts are contract version 2, and schema migration 16 intentionally discards v1 contract rows rather than preserving or inferring them. The v15 references below record the original implementation wave.
+
 ## Global Constraints
 
 - Learning OS remains authoritative for objective/task selection; replacement teaching must not rerun ordinary planning merely because the concrete challenge was defective.

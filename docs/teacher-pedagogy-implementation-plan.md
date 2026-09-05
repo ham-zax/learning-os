@@ -377,7 +377,7 @@ This phase is conditional. Do not implement it merely because helper code is pos
 - [x] Derive recommendations using existing intent/preparation/preference signals only.
 - [x] Keep selector ownership intact: the helper cannot replace objective, capability, task form, novelty, or weakness selection.
 - [x] Keep scheduling/evidence ownership intact: the helper cannot emit mastery/readiness/review changes.
-- [x] Expose the helper through `createTeacherKernel(db)` as `getPedagogyRecommendation(goalId, intent)` so replaceable teachers receive the same compact execution guardrails.
+- [x] Expose the helper through `createTeacherKernel(db)` as `getPedagogyRecommendation(intent)` so replaceable teachers receive the same compact execution guardrails from the intent's own goal scope.
 
 **Acceptance criteria:**
 - The helper is pure and stateless.

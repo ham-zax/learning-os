@@ -79,14 +79,14 @@ Learning OS owns **which move is next**. You own **how to instantiate the alread
 Use only public teacher inputs for pedagogy:
 
 - the current `ChallengeIntent`;
-- durable preparation/projection state from `getPreparationContext(...)`;
+- durable preparation/projection state from `getPreparationContext(...)`, including `objectives[].isActive` so historical/inactive membership is not mistaken for current execution scope;
 - the selected weakness carried by the intent;
 - current/resumed attempt hint/exposure provenance and any persisted challenge `authoringContract` from the continuation resume result (or low-level `resumeSession(...)` in session-specific tooling);
 - the current mission/session/interview decision.
 
 Do not require arbitrary historical exposure queries or direct database reads.
 
-After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(goalId, intent)` and use its tiny non-durable `PedagogyDirective` as the starting guardrail. It contains only `scaffold` (`independent` or `guided`), `commitBeforeReveal`, and `questionChunking`. It never owns the next objective, task form, novelty, evidence, readiness, weakness state, or scheduling. Recognition formats such as MCQ remain optional teacher techniques; Learning OS does not select them merely because an `explain` objective is being reinforced.
+After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(intent)` and use its tiny non-durable `PedagogyDirective` as the starting guardrail. It contains only `scaffold` (`independent` or `guided`), `commitBeforeReveal`, and `questionChunking`. It never owns the next objective, task form, novelty, evidence, readiness, weakness state, or scheduling. Recognition formats such as MCQ remain optional teacher techniques; Learning OS does not select them merely because an `explain` objective is being reinforced.
 
 Ask the smallest useful question and stop. Correct and sufficient answers normally get concise feedback and closure; do not automatically append teach-back, boundary testing, reflection, or another quiz item. Richer pedagogy is preserved as progressively loaded Skill guidance rather than runtime state. Load **only the playbook that matches the current episode**:
 
@@ -198,7 +198,7 @@ Only after the current interaction episode closes, call `getStudyContinuation(..
 
 Planner minutes are capacity estimates, not consumed time. A break of minutes, hours, or longer neither expires an attempt nor becomes active-study time. A bare “continue” authorizes resuming already-open work; it does not silently accept a newly selected recommendation. An explicit standing instruction such as “keep going without pausing” may accept later recommendations until the learner pauses or redirects. If the learner requests a different direction that changes what work comes next, route it through Learning OS rather than synthesizing a shadow next-action policy.
 
-When the learner explicitly enters a curriculum/study phase such as "Day 1", persist that intent with `setGoalStudyFocus({ goalId, label, objectiveIds })` using the active goal-objective IDs from the confirmed curriculum/reference. Learning OS snapshots the resolved prerequisite/foundation closure in a stable focus episode. Recover the active episode from `getPreparationContext(goalId).studyFocus`, list historical phases with `listGoalStudyFocusEpisodes(goalId)`, and clear/replace focus only when the learner completes, leaves, or changes phase. Calendar-day changes never close the episode. Study focus is orchestration intent, not evidence or competence state. Ordinary unrelated due work may appear only as a bounded warm-up and must not replace the focus main episode; on `maxItems: 1`, stay inside the focus envelope unless Learning OS returns a higher-authority exception such as a blocking misconception, recurring/retest weakness, eligible weakness retest, true prerequisite, or transfer that is actually selection-eligible. Treat required transfer as a later goal-completion requirement, not a reason to escalate while readiness is still below target or a recent failure/unresolved weakness remains.
+When the learner explicitly enters a curriculum/study phase such as "Day 1", persist that intent with `setGoalStudyFocus({ goalId, label, objectiveIds })` using the active goal-objective IDs from the confirmed curriculum/reference. Learning OS snapshots the resolved prerequisite/foundation closure in a stable focus episode. Recover the active episode from `getPreparationContext(goalId).studyFocus`, list historical phases with `listGoalStudyFocusEpisodes(goalId)`, and clear/replace focus only when the learner completes, leaves, changes phase, or needs to deactivate one of the focus targets; the kernel rejects deactivating a target while that focus remains active. Calendar-day changes never close the episode. Study focus is orchestration intent, not evidence or competence state. Ordinary unrelated due work may appear only as a bounded warm-up and must not replace the focus main episode; on `maxItems: 1`, stay inside the focus envelope unless Learning OS returns a higher-authority exception such as a blocking misconception, recurring/retest weakness, eligible weakness retest, true prerequisite, or transfer that is actually selection-eligible. Treat required transfer as a later goal-completion requirement, not a reason to escalate while readiness is still below target or a recent failure/unresolved weakness remains.
 
 ### Create personalized revision notes
 
@@ -261,7 +261,7 @@ For an assessable interaction:
 ```text
 Learning OS chooses objective/task intent
 → teacher creates concrete challenge + criteria
-→ register/freeze challenge with `registerChallenge(challenge, intent)`
+→ register/freeze challenge with `registerChallenge(challenge, intent)`; preserve the selected intent's goal authority and replan if registration rejects it as stale
 → open attempt
 → present learner-visible challenge and stop
 → collect the actual learner response/artifact
@@ -280,7 +280,7 @@ Learning OS chooses objective/task intent
 → present it and wait for learner acceptance before opening its attempt
 ```
 
-For preparation-goal flows, `kernel.createSession(...)` takes the durable goal/topic ID, not `ChallengeIntent.conceptId`: use `kernel.registerChallenge(challenge, intent)`, `kernel.createSession(goalId, intent.deliveryContext)`, then attach the frozen challenge with `kernel.openAttempt(...)`. The concept ID names the learning target, not the session topic.
+For preparation-goal flows, `kernel.createSession(...)` takes the durable goal/topic ID, not `ChallengeIntent.conceptId`: use the exact selected intent from Learning OS with `kernel.registerChallenge(challenge, intent)`, then `kernel.createSession(goalId, intent.deliveryContext)` and `kernel.openAttempt(...)`. Registration and attempt opening revalidate the intent's current goal authority, and opening also rejects a session for a different goal. If authority is stale, request a fresh Learning OS decision. The concept ID names the learning target, not the session topic.
 
 After decisive exposure, do not reuse that exposed surface as fresh independent or transfer evidence. A later qualifying follow-up must come from Learning OS and honor its changed-surface requirement; independent evidence also requires no hint observations.
 

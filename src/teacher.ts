@@ -95,8 +95,8 @@ export function createTeacherKernel(db: Database.Database) {
     getPreparationContext: (goalId: string) => getDurablePreparationContext(db, goalId),
     // Tiny, pure execution directive for an already-selected intent.
     // It prevents cross-teacher drift without modeling the teaching process.
-    getPedagogyRecommendation: (goalId: string, intent: ChallengeIntent) => {
-      const context = getDurablePreparationContext(db, goalId);
+    getPedagogyRecommendation: (intent: ChallengeIntent) => {
+      const context = getDurablePreparationContext(db, intent.goalId);
       const objective = context?.objectives.find(
         (candidate) => candidate.objectiveId === intent.objectiveId,
       );
@@ -134,7 +134,7 @@ export function createTeacherKernel(db: Database.Database) {
       getChallengeAuthoringContract(db, challengeId, version),
     registerChallenge: (challenge: ChallengeSpecInput, intent?: ChallengeIntent) =>
       registerChallenge(db, challenge, intent),
-    openAttempt: (challengeId: string, version: number, sessionId: number | null = null) =>
+    openAttempt: (challengeId: string, version: number, sessionId: number) =>
       openAttempt(db, challengeId, version, sessionId),
     recordHintUse: (attemptId: number, input: RecordHintUseInput) =>
       recordHintUse(db, attemptId, input),

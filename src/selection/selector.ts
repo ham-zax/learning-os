@@ -589,6 +589,7 @@ function intentFor(
 
   const reason = reasonFor(evaluation);
   return {
+    goalId: input.goalId,
     objectiveId: evaluation.state.objectiveId,
     conceptId: evaluation.state.conceptId,
     capabilityId: evaluation.state.capabilityId,

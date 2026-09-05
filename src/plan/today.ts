@@ -313,6 +313,7 @@ type FocusPrerequisitePlan = {
 function deriveFocusPrerequisites(
   db: Database.Database,
   goalObjectives: readonly GoalObjective[],
+  inactiveGoalObjectiveIds: ReadonlySet<string>,
   focusTargetObjectiveIds: ReadonlySet<string>,
   policy: PrerequisiteSelectionPolicy,
   urgency: number,
@@ -367,6 +368,7 @@ function deriveFocusPrerequisites(
         | { objective_id: string; readiness: Readiness }
         | undefined;
       if (!objective) continue;
+      if (inactiveGoalObjectiveIds.has(objective.objective_id)) continue;
       if (READINESS_RANK[objective.readiness] >= READINESS_RANK[policy.minimumReadiness]) continue;
 
       preferredObjectiveIds.add(objective.objective_id);
@@ -409,6 +411,7 @@ function selectIntent(
 ) {
   const stateObjectiveIds = new Set(states.map((state) => state.config.objective_id));
   return selectNextChallenge(db, {
+    goalId: input.goalId,
     now,
     deliveryContext,
     prerequisitePolicy: input.prerequisitePolicy ?? DEFAULT_PREREQUISITE_POLICY,
@@ -590,6 +593,7 @@ export function resolveRequestedChallenge(
   }
   const state = loadGoalObjectiveState(db, config);
   const result = selectNextChallenge(db, {
+    goalId: input.goalId,
     now,
     deliveryContext: input.deliveryContext,
     prerequisitePolicy: input.prerequisitePolicy ?? DEFAULT_PREREQUISITE_POLICY,
@@ -641,7 +645,11 @@ export function getTodayMission(
   }
   const deadlineAt = normalizeDeadline(topic.deadline);
   const eligibleRetestKeys = new Set(input.retestEligibleWeaknessKeys ?? []);
-  const goalObjectives = getGoalObjectives(db, input.goalId);
+  const allGoalObjectives = getGoalObjectives(db, input.goalId, { includeInactive: true });
+  const goalObjectives = allGoalObjectives.filter((config) => config.is_active);
+  const inactiveGoalObjectiveIds = new Set(
+    allGoalObjectives.filter((config) => !config.is_active).map((config) => config.objective_id),
+  );
   const activeObjectiveIds = new Set(goalObjectives.map((config) => config.objective_id));
   const activeFocus = getActiveGoalStudyFocusEpisode(db, input.goalId);
   const focusTargetObjectiveIds = new Set(
@@ -656,6 +664,7 @@ export function getTodayMission(
   const focusPlan = deriveFocusPrerequisites(
     db,
     goalObjectives,
+    inactiveGoalObjectiveIds,
     focusTargetObjectiveIds,
     prerequisitePolicy,
     deadlineUrgency(deadlineAt, now),

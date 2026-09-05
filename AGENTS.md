@@ -96,6 +96,10 @@ They are not readiness states.
 
 ## Learner-facing teacher behavior
 
+Learning OS is **agent-operated**. The learner's normal interface is the conversation with ChatGPT or another compatible agent, not the Learning OS CLI. In a connected web/chat session, the agent uses its WSL/repository connection to read the shared Learning OS checkout, invoke the public workspace/kernel boundaries or current CLI as an execution surface, persist/query learner state, and then return the learner-facing response in chat. The normal loop is therefore `learner message -> agent consults/invokes Learning OS in WSL -> agent responds in chat -> repeat`, and any fresh compatible ChatGPT session connected to the same canonical repository/profile must be able to continue from durable Learning OS state without prior chat history.
+
+Do not require or design a dedicated Learning OS MCP server for this workflow. MCP/WSL access is the agent's bridge to the repository; Learning OS itself remains the local kernel/CLI and durable state owner. Likewise, do not instruct the learner to run routine `npm run tutor -- ...` commands as the primary learning UX unless the learner explicitly asks to operate the CLI. CLI commands are agent/admin/debug integration surfaces and fallbacks, not the intended conversational interface.
+
 When an agent is acting as the learner-facing teacher, interviewer, onboarding guide, study coach, or session-resume agent, read and follow `docs/teacher-agent-protocol.md`.
 
 Use the **semi-strict** policy:

@@ -37,6 +37,11 @@ import type {
   ChallengeAttemptDispositionRow,
 } from "../db/types.js";
 import {
+  getActiveGoalStudyFocusEpisode,
+  getGoalObjective,
+  getGoalObjectives,
+} from "../db/database.js";
+import {
   ChallengeAuthoringContractSchema,
   ChallengeIntentSchema,
   challengeAuthoringContract,
@@ -255,6 +260,59 @@ function validateChallengeAgainstAuthoringContract(
   }
 }
 
+function assertCurrentGoalAuthorizesIntent(
+  db: Database.Database,
+  contract: ChallengeAuthoringContract,
+): void {
+  const goalId = contract.goalId;
+  const direct = getGoalObjective(db, goalId, contract.objectiveId);
+  if (direct) {
+    if (direct.is_active) return;
+    throw new Error(
+      `Selected challenge intent is no longer authorized by current goal scope: ${goalId}/${contract.objectiveId}`,
+    );
+  }
+
+  const focus = getActiveGoalStudyFocusEpisode(db, goalId);
+  if (!focus) {
+    throw new Error(
+      `Selected challenge intent is no longer authorized by current goal scope: ${goalId}/${contract.objectiveId}`,
+    );
+  }
+
+  const activeGoalObjectiveIds = new Set(
+    getGoalObjectives(db, goalId).map((objective) => objective.objective_id),
+  );
+  if (focus.target_objective_ids.some((objectiveId) => !activeGoalObjectiveIds.has(objectiveId))) {
+    throw new Error(
+      `Selected challenge intent cannot use stale study focus ${focus.id}: one or more focus targets are no longer active`,
+    );
+  }
+
+  if (focus.resolved_objective_ids.includes(contract.objectiveId)) return;
+
+  const focusTargetConceptIds = new Set(
+    focus.target_objective_ids
+      .map((objectiveId) => getLearningObjective(db, objectiveId)?.concept_id)
+      .filter((conceptId): conceptId is string => conceptId !== undefined),
+  );
+  const focusResolvedConceptIds = new Set(
+    focus.resolved_objective_ids
+      .map((objectiveId) => getLearningObjective(db, objectiveId)?.concept_id)
+      .filter((conceptId): conceptId is string => conceptId !== undefined),
+  );
+  if (
+    !focusTargetConceptIds.has(contract.conceptId) &&
+    focusResolvedConceptIds.has(contract.conceptId)
+  ) {
+    return;
+  }
+
+  throw new Error(
+    `Selected challenge intent is no longer authorized by current goal scope: ${goalId}/${contract.objectiveId}`,
+  );
+}
+
 function learnerVisibleChallenge(spec: ChallengeSpec): LearnerVisibleChallenge {
   return {
     id: spec.id,
@@ -343,6 +401,7 @@ export function registerChallenge(
 
     ensureChallengeObjectivesExist(db, spec);
     if (authoringContract) {
+      assertCurrentGoalAuthorizesIntent(db, authoringContract);
       validateChallengeAgainstAuthoringContract(db, spec, authoringContract);
     }
 
@@ -565,24 +624,31 @@ export function openAttempt(
   db: Database.Database,
   challengeId: string,
   version: number,
-  sessionId: number | null = null,
+  sessionId: number,
 ): OpenedAttempt {
   return db.transaction(() => {
     const challenge = getFrozenChallengeOrThrow(db, challengeId, version);
-    if (sessionId !== null) {
-      const session = SessionSchema.parse(
-        db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId),
+    const authoringContract = getChallengeAuthoringContract(db, challenge.id, challenge.version);
+    const session = SessionSchema.parse(
+      db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId),
+    );
+    if (authoringContract) {
+      if (session.topic_id !== authoringContract.goalId) {
+        throw new Error(
+          `Session goal ${session.topic_id} does not match selected challenge goal ${authoringContract.goalId}`,
+        );
+      }
+      assertCurrentGoalAuthorizesIntent(db, authoringContract);
+    }
+    if (session.reconstruction_status === "required") {
+      throw new Error(
+        `Session ${sessionId} requires learner reconstruction or explicit opt-out before another attempt can open`,
       );
-      if (session.reconstruction_status === "required") {
-        throw new Error(
-          `Session ${sessionId} requires learner reconstruction or explicit opt-out before another attempt can open`,
-        );
-      }
-      if (session.mode !== challenge.deliveryContext) {
-        throw new Error(
-          `Session delivery context ${session.mode} does not match challenge ${challenge.deliveryContext}`,
-        );
-      }
+    }
+    if (session.mode !== challenge.deliveryContext) {
+      throw new Error(
+        `Session delivery context ${session.mode} does not match challenge ${challenge.deliveryContext}`,
+      );
     }
 
     const now = new Date().toISOString();
@@ -599,18 +665,16 @@ export function openAttempt(
       .run(challenge.id, challenge.version, sessionId, now, now);
 
     const attempt = getAttemptOrThrow(db, Number(info.lastInsertRowid));
-    if (sessionId !== null) {
-      db.prepare(
-        `UPDATE sessions
-         SET phase = 'awaiting_response',
-             pending_action = 'collect_response',
-             active_challenge_id = ?,
-             active_challenge_version = ?,
-             active_attempt_id = ?,
-             reconstruction_status = 'not_required'
-         WHERE id = ?`,
-      ).run(challenge.id, challenge.version, attempt.id, sessionId);
-    }
+    db.prepare(
+      `UPDATE sessions
+       SET phase = 'awaiting_response',
+           pending_action = 'collect_response',
+           active_challenge_id = ?,
+           active_challenge_version = ?,
+           active_attempt_id = ?,
+           reconstruction_status = 'not_required'
+       WHERE id = ?`,
+    ).run(challenge.id, challenge.version, attempt.id, sessionId);
 
     return {
       attempt,

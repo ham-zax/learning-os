@@ -611,7 +611,7 @@ export type ChallengeCriterionRow = z.infer<typeof ChallengeCriterionRowSchema>;
 export const ChallengeAuthoringContractRowSchema = z.object({
   challenge_id: z.string(),
   version: z.number().int().positive(),
-  contract_version: z.literal(1),
+  contract_version: z.literal(2),
   intent_json: z.string(),
   created_at: z.string(),
 });

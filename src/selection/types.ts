@@ -39,6 +39,8 @@ export interface ObjectiveSelectionCandidate {
 }
 
 export interface ChallengeSelectionInput {
+  /** Goal whose current execution scope authorizes this selection. */
+  goalId: string;
   /** Explicit time input used only for due-card comparison. */
   now: string;
   /** Delivery context requested by the caller; novelty is selected independently. */
@@ -79,6 +81,8 @@ export const SelectionReasonKindSchema = z.enum([
 export type SelectionReasonKind = z.infer<typeof SelectionReasonKindSchema>;
 
 export const ChallengeIntentSchema = z.object({
+  /** Goal execution scope that authorized this selected intent. */
+  goalId: z.string().min(1),
   objectiveId: z.string().min(1),
   conceptId: z.string().min(1),
   capabilityId: SelectionCapabilityIdSchema,
@@ -95,12 +99,12 @@ export const ChallengeIntentSchema = z.object({
 export type ChallengeIntent = z.infer<typeof ChallengeIntentSchema>;
 
 export const ChallengeAuthoringContractSchema = ChallengeIntentSchema.extend({
-  contractVersion: z.literal(1),
+  contractVersion: z.literal(2),
 }).strict();
 export type ChallengeAuthoringContract = z.infer<typeof ChallengeAuthoringContractSchema>;
 
 export function challengeAuthoringContract(intent: ChallengeIntent): ChallengeAuthoringContract {
-  return ChallengeAuthoringContractSchema.parse({ contractVersion: 1, ...intent });
+  return ChallengeAuthoringContractSchema.parse({ contractVersion: 2, ...intent });
 }
 
 export interface BlockedSelectionCandidate {

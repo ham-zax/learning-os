@@ -153,7 +153,7 @@ Durable history of explicit curriculum/study phases. An episode preserves what a
 
 At most one episode may be active for a goal. `setGoalStudyFocus(...)` opens or reuses that episode; replacing focus closes the prior episode and opens another; `clearGoalStudyFocus(...)` closes the active episode. Repeating the same active focus is idempotent. Pre-v13 focus/revision schemas are intentionally unsupported; recreate those learner profiles instead of upgrading them.
 
-`study_focus_episodes` is the single runtime owner of curriculum/session focus. Focus episodes are orchestration/history metadata, not competence state. `getPreparationContext(goalId).studyFocus` exposes the active episode ID, target IDs, resolved objective IDs, and activation time. `getTodayMission(...)` reads that active episode automatically unless the caller supplies an intentional per-call override. `listGoalStudyFocusEpisodes(goalId)` and `getStudyFocusEpisode(id)` expose historical phases to a fresh teacher without chat memory.
+`study_focus_episodes` is the single runtime owner of curriculum/session focus. Focus episodes are orchestration/history metadata, not competence state. `getPreparationContext(goalId).studyFocus` exposes the active episode ID, target IDs, resolved objective IDs, and activation time. `getPreparationContext(goalId).objectives` may include historical/inactive goal-objective rows for continuity and therefore exposes `isActive`; presence in that array is never itself current execution authority. A goal objective that is still a target of the active focus cannot be deactivated until that focus is explicitly cleared or replaced, so current focus and active goal membership cannot silently diverge. `getTodayMission(...)` reads active goal membership and the active focus automatically unless the caller supplies an intentional per-call override. `listGoalStudyFocusEpisodes(goalId)` and `getStudyFocusEpisode(id)` expose historical phases to a fresh teacher without chat memory.
 
 Do not persist raw resumes, job descriptions, chat transcripts, provider identifiers, or the full draft proposal here. Resume/JD/self-report claims may shape this confirmed plan but cannot create evidence, review events/cards, misconceptions, or non-unknown objective projections.
 
@@ -657,7 +657,7 @@ Interruption or agent replacement must not require regenerating the challenge or
 
 ### Authoring-contract persistence invariant
 
-When a concrete challenge is authored from a selected `ChallengeIntent`, persist that selection decision separately from the frozen challenge artifact as an immutable V1 authoring contract keyed by `(challenge_id, version)`. The snapshot contains the selected objective/concept/capability, task form, delivery context, novelty, selection reason, selected weakness, changed-surface requirement, and recent challenge surfaces to avoid.
+When a concrete challenge is authored from a selected `ChallengeIntent`, persist that selection decision separately from the frozen challenge artifact as an immutable v2 authoring contract keyed by `(challenge_id, version)`. `goalId` is mandatory: it identifies the current goal execution scope that authorized the selection. The snapshot contains that goal, objective/concept/capability, task form, delivery context, novelty, selection reason, selected weakness, changed-surface requirement, and recent challenge surfaces to avoid. Migration 16 intentionally discards v1 authoring-contract rows rather than inferring missing goal authority; this development-stage contract has no compatibility path.
 
 The authoring contract answers a different question from `ChallengeSpec`:
 
@@ -666,7 +666,7 @@ authoring contract = what Learning OS selected and constrained
 frozen challenge   = what the teacher concretely authored
 ```
 
-Intent-aware registration must reject a concrete challenge that changes the selected objective, concept/capability identity, task form, delivery context, or novelty. Historical challenges created before this contract may have no authoring snapshot; a replacement teacher must not invent one from conversation memory.
+Intent-aware registration must reject a concrete challenge that changes the selected objective, concept/capability identity, task form, delivery context, or novelty. It must also reject a selected intent whose current goal execution scope no longer authorizes that objective. Direct active goal objectives qualify; objectives with an explicit inactive goal-membership row do not regain authority merely because another objective on the same concept is focused. Active study-focus prerequisite/foundation work that is not a direct goal member remains authorized through the focus envelope while its focus targets remain active. `openAttempt(...)` repeats the goal-scope check for authoring contracts and rejects attaching the challenge to a session whose topic/goal differs from the selected intent's `goalId`, so authority cannot become stale between freezing and learner acceptance. Challenges registered without a selected intent have no authoring snapshot; a replacement teacher must not invent one from conversation memory.
 
 A frozen challenge is immutable historical evidence of what was presented. Immutability does not certify that the authored question was a valid instantiation of its selection intent.
 

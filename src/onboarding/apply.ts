@@ -125,6 +125,8 @@ export interface AppliedOnboardingResult {
 
 export interface DurablePreparationObjective {
   objectiveId: string;
+  /** Current goal membership. False means historical/inactive preparation context, not executable scope. */
+  isActive: boolean;
   conceptId: string;
   capabilityId: string;
   importance: GoalImportance;
@@ -659,6 +661,7 @@ export function getDurablePreparationContext(
     }
     return {
       objectiveId: config.objective_id,
+      isActive: config.is_active,
       conceptId: objective.concept_id,
       capabilityId: objective.capability_id,
       importance: config.importance,

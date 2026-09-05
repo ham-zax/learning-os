@@ -1246,6 +1246,51 @@ const migrations: Migration[] = [
       })();
     },
   },
+  {
+    version: 16,
+    up: (db) => {
+      db.transaction(() => {
+        // Clean development migration: v1 contracts lack goal authority and are
+        // intentionally discarded instead of guessed or kept behind a legacy path.
+        db.exec(`
+          DROP TABLE challenge_authoring_contracts;
+
+          CREATE TABLE challenge_authoring_contracts (
+            challenge_id      TEXT NOT NULL,
+            version           INTEGER NOT NULL CHECK (version > 0),
+            contract_version  INTEGER NOT NULL CHECK (contract_version = 2),
+            intent_json       TEXT NOT NULL,
+            created_at        TEXT NOT NULL,
+            PRIMARY KEY(challenge_id, version),
+            FOREIGN KEY(challenge_id, version)
+              REFERENCES challenge_versions(challenge_id, version) ON DELETE RESTRICT
+          );
+
+          CREATE TRIGGER challenge_authoring_contracts_no_insert_after_freeze
+          BEFORE INSERT ON challenge_authoring_contracts
+          WHEN (
+            SELECT is_frozen FROM challenge_versions
+            WHERE challenge_id = NEW.challenge_id AND version = NEW.version
+          ) = 1
+          BEGIN
+            SELECT RAISE(ABORT, 'frozen challenge authoring contracts are immutable');
+          END;
+
+          CREATE TRIGGER challenge_authoring_contracts_no_update
+          BEFORE UPDATE ON challenge_authoring_contracts
+          BEGIN
+            SELECT RAISE(ABORT, 'challenge authoring contracts are immutable');
+          END;
+
+          CREATE TRIGGER challenge_authoring_contracts_no_delete
+          BEFORE DELETE ON challenge_authoring_contracts
+          BEGIN
+            SELECT RAISE(ABORT, 'challenge authoring contracts are immutable');
+          END;
+        `);
+      })();
+    },
+  },
 ];
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -1443,6 +1488,15 @@ export function setGoalObjective(
     .get(input.objectiveId);
   if (!objectiveExists) {
     throw new Error(`Learning objective not found: ${input.objectiveId}`);
+  }
+
+  if (input.isActive === false) {
+    const activeFocus = getActiveGoalStudyFocusEpisode(db, input.goalId);
+    if (activeFocus?.target_objective_ids.includes(input.objectiveId)) {
+      throw new Error(
+        `Cannot deactivate study-focus objective ${input.objectiveId}; clear or replace active focus ${activeFocus.id} first`,
+      );
+    }
   }
 
   const now = new Date().toISOString();
@@ -1703,9 +1757,13 @@ function resolveGoalStudyFocusObjectiveClosure(
         prerequisiteConceptId,
         prerequisiteCapabilityId,
       ) as { id: string } | undefined;
-      if (objective && !resultSet.has(objective.id)) {
-        resultSet.add(objective.id);
-        result.push(objective.id);
+      if (objective) {
+        const membership = getGoalObjective(db, goalId, objective.id);
+        if (membership && !membership.is_active) continue;
+        if (!resultSet.has(objective.id)) {
+          resultSet.add(objective.id);
+          result.push(objective.id);
+        }
       }
       queue.push(prerequisiteConceptId);
     }

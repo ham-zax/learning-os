@@ -565,7 +565,7 @@ The first implementation wave should use the existing teacher APIs:
 
 The initial first-wave design deliberately avoided new durable pedagogy state. Later replaceable-teacher use justified two narrow lifecycle additions without adding a second pedagogy engine: immutable authoring-contract provenance for selected challenges, and a terminal reject/void operation for defective assessment opportunities.
 
-One public-API detail matters for replaceable teachers: `createSession(topicId, mode)` expects the durable session topic. In a preparation-goal flow that is the resolved `goalId`; it is **not** `ChallengeIntent.conceptId`. The direct lifecycle is therefore `resolveRequestedChallenge(...) -> registerChallenge(challenge, intent) -> createSession(goalId, intent.deliveryContext) -> openAttempt(...)`, so the frozen challenge and its selection-time authoring contract survive teacher replacement together.
+One public-API detail matters for replaceable teachers: `createSession(topicId, mode)` expects the durable session topic. In a preparation-goal flow that is the resolved `goalId`; it is **not** `ChallengeIntent.conceptId`. Goal-bound selection now carries that `goalId` on the intent, `registerChallenge(challenge, intent)` revalidates that the current goal execution scope still authorizes the selected objective before freezing, and `openAttempt(...)` revalidates scope again while rejecting a mismatched session goal. The direct lifecycle remains `resolveRequestedChallenge(...) -> registerChallenge(challenge, intent) -> createSession(goalId, intent.deliveryContext) -> openAttempt(...)`, so stale selection authority cannot be promoted while valid selection-time provenance still survives teacher replacement.
 
 ## Fresh-teacher dogfood — 2026-08-28
 
