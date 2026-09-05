@@ -1,12 +1,49 @@
 # Learning OS
 
-**A local-first learning system that turns your goal, time, strengths, and weak spots into an evidence-driven study plan.**
+**Agent-native, local-first learning that remembers what you can actually do — not just what you have read.**
+
+Learning OS is an open-source learning engine designed to be used through an AI agent that can access this repository or folder. Use Codex, Claude Code, OpenCode, ChatGPT with filesystem access, or another capable agent. The agent handles the conversation; Learning OS keeps the durable learner state.
+
+> **The AI model is replaceable. Your learning history is not.**
+
+Your goals, attempts, evidence, weaknesses, review timing, active sessions, study focus, and revision history live locally in Learning OS instead of disappearing with a chat thread.
 
 Learning OS is built for programming learning, interview preparation, codebase onboarding, and other technical goals where "I read it" is not the same as "I can do it." It keeps planning separate from proof: your resume, experience, and self-reported strengths can shape the plan, but only actual attempts and assessments change learner state.
 
-The project is currently a **developer preview**. It runs locally with Node.js and SQLite, includes an offline CLI, and exposes provider-neutral APIs that a compatible ChatGPT/agent workflow can use as the conversational teacher.
+Learning OS runs locally with Node.js and SQLite. Its primary experience is agent-native and provider-neutral; the CLI remains available as an offline fallback and administrative surface.
 
-## What it does
+## How it works
+
+```text
+you
+  ↕ natural conversation
+filesystem-capable AI agent
+  ↕ public Learning OS APIs / CLI execution surface
+Learning OS
+  ├─ isolated learner profile database
+  ├─ goals + concept × capability objectives
+  ├─ attempts + evidence + exposure history
+  ├─ readiness / transfer / durability projections
+  ├─ weaknesses + misconceptions
+  ├─ FSRS review timing
+  ├─ resumable sessions + study focus
+  ├─ revision notes
+  └─ reusable curriculum under knowledge/
+```
+
+The agent is responsible for conversation, explanation style, challenge wording, and qualitative feedback. Learning OS owns durable learner truth, sequencing, evidence, scheduling, and continuation. A different compatible agent can resume from the same repository without needing the old provider conversation.
+
+## What it helps with
+
+Learning OS is strongest for technical learning where understanding has to survive contact with real work, for example:
+
+- programming languages, frameworks, databases, and distributed systems;
+- codebase onboarding and architecture understanding;
+- debugging and causal reasoning;
+- implementation and design practice against real repositories;
+- system-design and software-engineering interviews;
+- technical revision and spaced retrieval;
+- custom structured curricula you add under `knowledge/`.
 
 Give Learning OS a target such as:
 
@@ -31,16 +68,146 @@ Different objectives can start differently. One topic may need `learn`, another 
 - **Each learner is isolated.** Managed profiles use separate SQLite databases under `data/`; this repository may version those canonical files intentionally.
 - **Curriculum is reusable.** Markdown and topic manifests under `knowledge/` are shared source material, not duplicated into every learner profile.
 - **Scheduling and teaching have different owners.** FSRS decides when retrieval is useful; Learning OS decides what objective and task form should come next.
-- **The teacher is replaceable.** ChatGPT can be the conversational layer, but learner truth lives in the local kernel rather than provider memory.
+- **The teacher is replaceable.** Any compatible filesystem-capable agent can be the conversational layer; learner truth lives in the local kernel rather than provider memory.
+
+## Features
+
+### Durable learner database
+
+Each managed learner profile has its own local SQLite database. Learning OS can persist:
+
+- goals, deadlines, priorities, and preparation strategy;
+- sparse `concept × capability` objectives;
+- frozen challenges and their criteria;
+- attempts, learner responses, artifacts, and deterministic verification output;
+- hint and teaching-exposure history;
+- evidence events and append-only evidence revisions;
+- readiness, transfer, and durability projections;
+- weaknesses and registered misconceptions;
+- objective-level FSRS review cards and timing;
+- resumable sessions, required reconstruction, and study-focus episodes;
+- interaction preferences and evidence-grounded revision notes.
+
+The database is the continuity layer. A new compatible agent can reopen it and continue from durable state rather than reconstructing the learner from chat history.
+
+### Evidence-driven progress
+
+Learning OS distinguishes planning signals from proof. A resume, years of experience, confidence, or “I already know this” can influence what gets prioritized, but only actual learner work can produce qualifying evidence.
+
+Hints and explanations are tracked honestly. If the teacher supplies target reasoning, that interaction can still be useful learning, but it cannot silently become clean independent evidence. Historical evidence can be invalidated or restored append-only, and objective-scoped evidence receipts let a compatible agent explain why Learning OS currently considers something guided, independent, weak, transferable, durable, or unresolved.
+
+### Concept × capability tracking
+
+Learning OS does not collapse a topic into one mastery number. It can track separate objectives such as:
+
+```text
+transactions:explain
+transactions:predict
+transactions:debug
+connection-pooling:design
+retry-logic:implement
+```
+
+Knowing how to explain a mechanism is not automatically treated as being able to implement, debug, predict, or design with it.
+
+### Adaptive onboarding and goal planning
+
+Natural-language goals can become a structured preparation plan with minimal clarification. Learning OS keeps fuzzy matches provisional, shows a proposal before creating state, supports custom curriculum areas, and requires explicit confirmation before onboarding becomes durable learner state.
+
+### Goal-aware orchestration
+
+The next move can account for active goal objectives, prerequisite blockers, study focus, recent failures, weaknesses, deadline pressure, review timing, and unfinished work. Open sessions and required reconstruction resume before unrelated new work.
+
+### Objective-level FSRS spaced repetition
+
+FSRS owns review timing at the objective level. Learning OS separately owns challenge selection and task form, so spaced repetition can operate over explanation, prediction, implementation, debugging, and design evidence rather than only flashcard recall.
+
+### Real-project learning
+
+Learning OS can use real code, repositories, diffs, specs, traces, APIs, architecture documents, logs, query plans, and implementation tasks as learning surfaces. The agent can inspect the authoritative artifact, let the learner make the first meaningful move, verify against real behavior, and coach the smallest observed gap.
+
+### Support-aware assessment
+
+“Independent” does not have to mean “no tools.” A challenge can prospectively allow documentation, repository search, tests, a debugger, or other tools that are part of the intended performance environment. Answer-bearing teacher help remains exposure and cannot be laundered into independent evidence.
+
+### Resumable across agents and sessions
+
+Learning OS does not require provider conversation IDs. Stop a session, come back later, or switch to another compatible agent that can access the same repository and learner profile. Durable state tells the next teacher what is proven, what is exposed, what is unfinished, and what should happen next.
+
+### Personalized revision notes
+
+A compatible teacher can build revision notes from bounded durable learner context instead of inventing a recap from chat memory. Notes can target a profile, goal, concept, objective, session, current focus, or historical focus episode.
+
+### Bring your own curriculum
+
+Reusable curriculum lives under `knowledge/` as source-controlled topic manifests and Markdown. Add or replace material without duplicating the whole knowledge library into each learner profile.
+
+## Teaching playbooks
+
+The bundled `learning-os-teacher` Skill gives compatible agents a progressively loaded teaching repertoire. These are adaptive playbooks, **not** rigid session modes.
+
+### Reasoning & Retrieval
+
+Use for building and testing mental models:
+
+- free recall and brain dumps;
+- guided discovery and pattern noticing;
+- confusion-pair discrimination;
+- prediction before reveal;
+- self-verification;
+- boundary tests and thought experiments;
+- positive and negative prior-knowledge bridges;
+- progressive integration span;
+- causal chunks and scaffold withdrawal.
+
+### Debugging & Repair
+
+Use when a prediction fails or a causal model breaks:
+
+- competing hypotheses;
+- fastest falsifiers;
+- earliest consequential failure;
+- learner self-localization;
+- slip-vs-model-error distinction;
+- mental-model autopsy;
+- precision remediation;
+- reconstruction;
+- changed-surface retest authoring when Learning OS later selects it.
+
+### Problem Solving & Implementation
+
+Use for real project work:
+
+- authentic artifacts and source fidelity;
+- learner-first implementation;
+- minimal decomposition around the selected objective;
+- executable verification as the correctness owner;
+- exact-error coaching rather than generic nearby lectures;
+- compact evidence-grounded debriefs;
+- transition to debugging only when a concrete failure appears.
+
+### Performance & Interview
+
+Use for interview, mock, and fluent execution:
+
+- uninterrupted performance before coaching;
+- realistic technical artifacts;
+- reflection after assessment;
+- contrastive benchmark feedback;
+- interview-signal coaching kept separate from technical correctness;
+- realistic pressure without artificial complexity.
 
 ## Quick start
 
-### Requirements
+### Best experience: use an AI agent
 
-- Node.js 22 or newer
-- npm
+Requirements:
 
-Clone the repository and install dependencies:
+- Node.js 22 or newer;
+- npm;
+- an AI agent that can read and operate this repository/folder.
+
+Clone and install:
 
 ```bash
 git clone https://github.com/ham-zax/learning-os.git
@@ -48,53 +215,36 @@ cd learning-os
 npm ci
 ```
 
-If you are working from a different fork, use that repository URL instead.
+Then point your agent at the repository and say something like:
 
-### Option A: onboard from the terminal
+```text
+Use Learning OS as my durable learning system.
+Read AGENTS.md and skills/learning-os-teacher/SKILL.md first.
+If I do not have a learner profile, onboard me around my goal.
+If I already have one, recover the durable state and continue the current goal.
+Use Learning OS for sequencing, evidence, review timing, and progress claims;
+do not infer mastery from chat memory.
+```
 
-Run the structured offline onboarding flow:
+From there, talk normally. Ask to learn a topic, prepare for an interview, understand a codebase, debug something, continue yesterday's work, review weak areas, or explain why Learning OS thinks an objective is not yet independent. The agent should operate the local Learning OS APIs/CLI for you and return the learner-facing interaction in conversation.
+
+No proprietary model and no dedicated Learning OS MCP server are required. The only requirement for the agent-native workflow is that the agent can access and operate the folder.
+
+### CLI fallback / admin surface
+
+You can also operate Learning OS directly from the terminal. This is useful for offline use, integrations, inspection, and profile administration.
 
 ```bash
 npm run tutor -- onboard
-```
-
-The CLI will collect the minimum structured information it needs, show the proposed preparation plan, and ask for explicit confirmation. **Declining confirmation creates no learner profile.**
-
-After confirmation it prints the new profile ID, goal ID, number of activated objectives, and the next action.
-
-Then ask Learning OS to resume unfinished work or choose one next action:
-
-```bash
 npm run tutor -- continue <goal-id>
-```
-
-If nothing is open, continuation asks for the active-study time you actually have left. Supply it with:
-
-```bash
 npm run tutor -- continue <goal-id> --minutes 20
+npm run tutor -- stats
+npm run tutor -- due
 ```
 
-A break of two minutes, two hours, or longer does not expire an attempt. Open work resumes before budget collection or new planning. Wall-clock break time is never counted as study time.
+The CLI uses the same durable profile, evidence, review, and continuation semantics as an agent integration. Declining onboarding confirmation creates no learner profile, and a break does not expire an unfinished attempt.
 
-### Option B: use a compatible AI teacher
-
-The deterministic Learning OS kernel does not parse resumes or job descriptions with an embedded model. A conversational teacher can do that semantic extraction, then call the provider-neutral workspace API:
-
-```text
-conversation / resume / JD
-        ↓
-structured OnboardingIntake
-        ↓
-createTeacherWorkspace()
-        ↓
-information needs → proposal → explicit confirmation
-        ↓
-new learner profile + goal + objectives
-        ↓
-createTeacherKernel(db)
-```
-
-This keeps model/provider behavior outside durable learner semantics. Compatible teachers should follow the [teacher-agent protocol](docs/teacher-agent-protocol.md). The current evidence-safe pedagogy—prediction before reveal, learner-built models, failure autopsy/reconstruction, progressive scaffolding, discriminating challenges, and interview-signal separation—is described in the [teacher pedagogy design](docs/teacher-pedagogy-design.md). The portable `learning-os-teacher` Skill source lives under [`skills/learning-os-teacher/`](skills/learning-os-teacher/) for ChatGPT/web packaging and local-agent reuse. See [Getting started](docs/getting-started.md) for the full flow.
+For the complete setup and agent integration flow, see [Getting started](docs/getting-started.md) and the [teacher-agent protocol](docs/teacher-agent-protocol.md). The portable agent guidance lives under [`skills/learning-os-teacher/`](skills/learning-os-teacher/).
 
 ## Profiles
 
@@ -266,9 +416,19 @@ For contributors and integrators:
 
 ## Project status
 
-The core local product loop is implemented: profile isolation, confirmed adaptive onboarding, sparse objectives, evidence/projections, objective-level FSRS scheduling, challenge selection, interview evidence, resume-first continuation, safe profile checkpointing, and daily orchestration.
+Learning OS is an early open-source product with the core local learning loop implemented: isolated profiles, adaptive onboarding, sparse objectives, evidence/projections, objective-level FSRS scheduling, challenge selection, inspectable evidence, real-artifact pedagogy, interview evidence, resume-first continuation, study focus, revision notes, and safe profile checkpointing.
 
-This is still a developer preview rather than a polished hosted application. The CLI is the concrete offline surface today; AI-teacher integrations are intentionally provider-neutral and are expected to run in an environment that can call the workspace/kernel APIs.
+It is intentionally **not** a hosted SaaS. The recommended experience is a capable AI agent operating the local repository; the CLI remains available as a deterministic fallback/admin interface.
+
+## Contributing
+
+Contributions are welcome. Before changing learner-state semantics, evidence qualification, scheduling, challenge selection, or teacher authority boundaries, read [`AGENTS.md`](AGENTS.md), the [architecture](docs/architecture.md), [evidence model](docs/evidence-model.md), and [kernel contracts](docs/kernel-contracts.md). Keep provider-specific behavior outside the durable learner kernel unless the architecture explicitly requires otherwise.
+
+For ordinary documentation, curriculum, integration, or usability improvements, prefer small focused changes that preserve the local-first and provider-neutral design.
+
+## License
+
+Learning OS is released under the [MIT License](LICENSE).
 
 ## Provenance
 

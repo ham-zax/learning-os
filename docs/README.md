@@ -1,15 +1,20 @@
 # Learning OS documentation
 
-Use this page to choose the right documentation for what you are trying to do.
+Learning OS is easiest to use through an AI agent that can access the repository/folder. Start with the learner-facing guides; the architecture and ADRs are for people extending the kernel or integrating a new teacher client.
 
-## Use the product
+## Start learning
 
-- [Getting started](getting-started.md) — install Learning OS, onboard a learner, manage profiles, and run a daily mission.
-- [Customizing Learning OS](customization.md) — add your own curriculum, local defaults, profiles, and conversational teacher integration.
-- [Teacher-agent protocol](teacher-agent-protocol.md) — normative rules a ChatGPT/CLI/IDE teacher follows so Learning OS, not the model's default tutoring policy, controls learner state, sequencing, evidence-safe pedagogy, and next-action ownership.
-- [Backend Systems personalized lesson example](examples/backend-systems-personalized-lesson.md) — a source-controlled, non-default seven-day lesson blueprint showing how a personal learning goal can travel with the repository while live learner evidence remains under Learning OS ownership.
+- [Getting started](getting-started.md) — clone Learning OS, connect a filesystem-capable AI agent, onboard or resume a learner, and understand the CLI fallback.
+- [Customizing Learning OS](customization.md) — bring your own curriculum, local defaults, profiles, and agent integration.
+- [Backend Systems personalized lesson example](examples/backend-systems-personalized-lesson.md) — see how a source-controlled learning plan can coexist with live evidence-driven learner state.
 
-If you only want to try the product, start with `getting-started.md`. You do not need to understand the evidence kernel first.
+If you only want to use the product, start with `getting-started.md`. You do not need to understand the evidence kernel or database schema first.
+
+## Integrate an AI teacher
+
+- [Teacher-agent protocol](teacher-agent-protocol.md) — normative rules for any compatible conversational agent so Learning OS retains ownership of learner state, sequencing, evidence, exposure, and next-action decisions.
+- [`learning-os-teacher` Skill](../skills/learning-os-teacher/SKILL.md) — portable agent instructions and progressively loaded pedagogy playbooks for reasoning/retrieval, debugging/repair, problem-solving/implementation, and performance/interview work.
+- [Teacher pedagogy design](teacher-pedagogy-design.md) — rationale behind the evidence-safe teaching repertoire and challenge-authoring guidance.
 
 ## Understand the learning model
 

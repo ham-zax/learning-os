@@ -2,7 +2,7 @@
   "name": "learning-os",
   "version": "0.1.0",
   "type": "module",
-  "description": "Evidence-driven adaptive programming learning system with isolated learner profiles and interview preparation",
+  "description": "Agent-native, local-first learning system with durable learner state, evidence-driven progress, adaptive technical study, and interview preparation",
   "bin": {
     "tutor": "./dist/cli.js"
   },
@@ -15,10 +15,15 @@
     "prepublishOnly": "npm run build"
   },
   "keywords": [
+    "agent-native-learning",
+    "local-first",
+    "adaptive-learning",
+    "evidence-based-learning",
+    "technical-learning",
+    "ai-tutor",
     "tutor",
     "spaced-repetition",
     "fsrs",
-    "adaptive-learning",
     "interview-prep",
     "learning"
   ],

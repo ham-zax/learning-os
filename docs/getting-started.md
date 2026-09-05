@@ -1,8 +1,8 @@
 # Getting started with Learning OS
 
-Learning OS is a local-first learning product for technical study. The concrete product surface today is the CLI; a compatible AI teacher can use the same onboarding and learner-state APIs when it can run against this repository.
+Learning OS is a local-first, agent-native learning product for technical study. The recommended experience is to give a capable AI agent access to this repository/folder and learn through normal conversation while Learning OS owns durable learner state, evidence, sequencing, and review timing.
 
-This guide takes you from a fresh clone to an isolated learner profile, a resumable study action, and a safe learner-state checkpoint.
+This guide takes you from a fresh clone to an agent-operated learner profile, a resumable study action, and a safe learner-state checkpoint. The CLI remains available as an offline fallback and administrative surface.
 
 ## 1. Install
 
@@ -25,82 +25,70 @@ npm run tutor -- --help
 
 You can also build the package with `npm run build`; the package exposes `tutor` from `dist/cli.js` after build.
 
-## 2. Choose how to onboard
+## 2. Start with an AI agent (recommended)
 
-Learning OS has one onboarding model with two front ends:
+Use any AI agent that can read and operate this repository/folder: Codex, Claude Code, OpenCode, ChatGPT with filesystem access, or another compatible agent. Learning OS does not require a particular model, provider, IDE, or dedicated MCP server.
 
-- `tutor onboard` is the structured offline fallback.
-- A compatible ChatGPT/agent workflow can translate natural-language input, a resume, or a job description into `OnboardingIntake` and call `createTeacherWorkspace()`.
+Point the agent at the repository and start with:
 
-For learner-facing agent sessions, use the [teacher-agent protocol](teacher-agent-protocol.md) or the portable `skills/learning-os-teacher/` Skill. It uses a semi-strict policy: harmless factual help can stay conversational, while next-action, challenge, evidence, exposure, progress, and scheduling decisions remain under Learning OS ownership.
+```text
+Use Learning OS as my durable learning system.
+Read AGENTS.md and skills/learning-os-teacher/SKILL.md first.
+If I do not have a learner profile, onboard me around my goal.
+If I already have one, recover the durable state and continue the current goal.
+Use Learning OS for sequencing, evidence, review timing, and progress claims;
+do not infer mastery from chat memory.
+```
 
-Both routes should end at the same boundary: Learning OS shows a deterministic proposal and does not create learner state until explicit confirmation.
+For learner-facing agent sessions, [`teacher-agent-protocol.md`](teacher-agent-protocol.md) is the repository authority and [`learning-os-teacher`](../skills/learning-os-teacher/SKILL.md) is the portable teacher Skill. The agent should use public Learning OS boundaries rather than writing SQLite state directly.
 
-### Offline onboarding
+The conversational path is:
 
-Run:
+```text
+natural-language goal / resume / job description / current project
+        ↓
+agent extracts structured planning input
+        ↓
+createTeacherWorkspace()
+        ↓
+Learning OS returns information needs
+        ↓
+agent asks only useful clarifications
+        ↓
+Learning OS builds a deterministic proposal
+        ↓
+learner reviews / revises / explicitly confirms
+        ↓
+new isolated profile + goal + objectives
+        ↓
+createTeacherKernel(db)
+        ↓
+resume or select one evidence-producing next action
+```
+
+A conversational teacher can collect richer context naturally. For example:
+
+> I have backend interviews in six weeks. I know Node APIs well, but I do not properly understand concurrency, transactions, connection pools, caching, or load balancing. I can study 45 minutes a day, five days a week.
+
+Resume and job-description claims remain planning input only. A claim such as "PostgreSQL — 5 years" may influence whether Learning OS starts with refresh or diagnostic work, but it cannot create `guided`, `independent`, transfer, durability, evidence, or review scheduling.
+
+Learning OS has one onboarding model regardless of front end. Before anything becomes durable, the learner must see and explicitly confirm the current proposal. Fuzzy curriculum matches remain provisional until confirmed.
+
+### CLI fallback onboarding
+
+If you do not have a filesystem-capable agent, run:
 
 ```bash
 npm run tutor -- onboard
 ```
 
-The CLI asks for structured information such as:
-
-- what you are preparing for;
-- whether the goal is an interview, role readiness, or long-term mastery;
-- deadline when relevant;
-- normal study time;
-- must-cover areas;
-- strengths and weak areas.
-
-It then asks only the additional questions the planner says materially change coverage, depth, strategy, or schedule.
-
-Before anything is applied, you will see:
-
-- included and deferred coverage;
-- per-objective strategy (`learn`, `refresh`, `diagnose_first`, or `transfer_practice`);
-- objective importance and target readiness;
-- transfer/durability requirements where relevant;
-- planning assumptions explicitly separated from mastery evidence;
-- initial diagnostic intents.
-
-The final prompt is explicit:
+The structured CLI asks for the same core planning information, shows included/deferred coverage and per-objective strategy, and asks:
 
 ```text
 Apply this plan and create a NEW learner profile? [y/N]
 ```
 
-Answering no creates no learner profile.
-
-### Conversational onboarding with a compatible teacher
-
-A conversational teacher can collect richer input naturally. For example:
-
-> I have backend interviews in six weeks. I know Node APIs well, but I do not properly understand concurrency, transactions, connection pools, caching, or load balancing. I can study 45 minutes a day, five days a week.
-
-The teacher should convert that into structured `OnboardingIntake`, then let Learning OS decide which information needs remain.
-
-The intended sequence is:
-
-```text
-natural-language learner input
-        ↓
-structured OnboardingIntake
-        ↓
-planOnboardingInformationNeeds()
-        ↓
-ask only useful follow-up questions
-        ↓
-buildOnboardingProposal()
-        ↓
-show / discuss / revise proposal
-        ↓
-explicit learner confirmation
-        ↓
-applyConfirmedOnboarding()
-```
-
-Resume and job-description claims are planning input only. A claim such as "PostgreSQL — 5 years" can influence whether the system starts with a refresh or diagnostic, but it cannot create `guided`, `independent`, transfer, durability, evidence, or review scheduling.
+Answering no creates no learner profile. The resulting profile uses the same evidence, scheduling, and continuation model as the agent-native path.
 
 ## 3. Understand what confirmation creates
 
