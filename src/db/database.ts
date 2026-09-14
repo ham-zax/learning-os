@@ -1291,6 +1291,102 @@ const migrations: Migration[] = [
       })();
     },
   },
+  {
+    version: 17,
+    up: (db) => {
+      db.transaction(() => {
+        db.exec(`
+          ALTER TABLE attempts ADD COLUMN reconstruction_response_text TEXT;
+
+          CREATE TABLE attempt_subquestions (
+            seq           INTEGER PRIMARY KEY AUTOINCREMENT,
+            attempt_id    INTEGER NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
+            prompt_text   TEXT NOT NULL CHECK (length(trim(prompt_text)) > 0),
+            response_text TEXT CHECK (response_text IS NULL OR length(trim(response_text)) > 0),
+            opened_at     TEXT NOT NULL,
+            answered_at   TEXT,
+            CHECK (
+              (response_text IS NULL AND answered_at IS NULL) OR
+              (response_text IS NOT NULL AND answered_at IS NOT NULL)
+            )
+          );
+
+          CREATE INDEX idx_attempt_subquestions_attempt_seq
+            ON attempt_subquestions(attempt_id, seq);
+          CREATE UNIQUE INDEX idx_attempt_subquestions_one_pending
+            ON attempt_subquestions(attempt_id)
+            WHERE response_text IS NULL;
+
+          CREATE TRIGGER attempt_subquestions_require_active_attempt
+          BEFORE INSERT ON attempt_subquestions
+          WHEN NOT EXISTS (
+            SELECT 1
+            FROM attempts attempt
+            JOIN sessions session ON session.id = attempt.session_id
+            WHERE attempt.id = NEW.attempt_id
+              AND attempt.challenge_id IS NOT NULL
+              AND attempt.submitted_at IS NULL
+              AND session.active_attempt_id = attempt.id
+              AND session.phase = 'awaiting_response'
+              AND session.pending_action = 'collect_response'
+          )
+          BEGIN
+            SELECT RAISE(ABORT, 'subquestions require the active unsubmitted session attempt');
+          END;
+
+          CREATE TRIGGER attempt_subquestions_identity_immutable
+          BEFORE UPDATE OF seq, attempt_id, prompt_text, opened_at ON attempt_subquestions
+          BEGIN
+            SELECT RAISE(ABORT, 'attempt subquestion identity is immutable');
+          END;
+
+          CREATE TRIGGER attempt_subquestions_answer_once
+          BEFORE UPDATE OF response_text, answered_at ON attempt_subquestions
+          WHEN OLD.response_text IS NOT NULL
+            OR OLD.answered_at IS NOT NULL
+            OR NEW.response_text IS NULL
+            OR NEW.answered_at IS NULL
+          BEGIN
+            SELECT RAISE(ABORT, 'attempt subquestions may be answered exactly once');
+          END;
+
+          CREATE TRIGGER attempt_subquestions_answer_before_submission
+          BEFORE UPDATE OF response_text, answered_at ON attempt_subquestions
+          WHEN EXISTS (
+            SELECT 1 FROM attempts
+            WHERE id = OLD.attempt_id AND submitted_at IS NOT NULL
+          )
+          BEGIN
+            SELECT RAISE(ABORT, 'cannot answer a subquestion after attempt submission');
+          END;
+
+          CREATE TRIGGER attempt_subquestions_no_delete
+          BEFORE DELETE ON attempt_subquestions
+          BEGIN
+            SELECT RAISE(ABORT, 'attempt subquestions are durable interaction observations');
+          END;
+
+          CREATE TRIGGER attempts_reconstruction_response_requires_submission
+          BEFORE UPDATE OF reconstruction_response_text ON attempts
+          WHEN NEW.reconstruction_response_text IS NOT NULL
+            AND (
+              NEW.submitted_at IS NULL OR
+              length(trim(NEW.reconstruction_response_text)) = 0
+            )
+          BEGIN
+            SELECT RAISE(ABORT, 'reconstruction response requires submitted non-empty learner text');
+          END;
+
+          CREATE TRIGGER attempts_reconstruction_response_immutable
+          BEFORE UPDATE OF reconstruction_response_text ON attempts
+          WHEN OLD.reconstruction_response_text IS NOT NULL
+          BEGIN
+            SELECT RAISE(ABORT, 'reconstruction response is immutable once recorded');
+          END;
+        `);
+      })();
+    },
+  },
 ];
 
 // ─── Public API ──────────────────────────────────────────────────────────────

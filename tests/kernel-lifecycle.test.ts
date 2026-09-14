@@ -19,8 +19,8 @@ import {
   OBJECTIVE_ID,
 } from "./helpers/kernel-fixture.js";
 
-function moveToRequiredReconstruction() {
-  const fixture = createKernelFixture();
+function moveToRequiredReconstruction(dbPath = ":memory:") {
+  const fixture = createKernelFixture(dbPath);
   const { sessionId, attemptId } = fixture.openPracticeAttempt();
   submitAttempt(fixture.db, attemptId, { responseText: "I do not know." });
   recordAssessment(fixture.db, attemptId, {
@@ -98,10 +98,13 @@ describe("durable kernel lifecycle", () => {
 
       resolveSessionReconstruction(state.db, state.sessionId, {
         outcome: "completed",
+        responseText: "  The mechanism changes state because of an input.\n",
         activeTimeSeconds: 600,
       });
 
       expect(getAttempt(state.db, state.attemptId)?.time_spent_seconds).toBe(600);
+      expect(getAttempt(state.db, state.attemptId)?.reconstruction_response_text)
+        .toBe("  The mechanism changes state because of an input.\n");
       expect(getSession(state.db, state.sessionId)).toMatchObject({
         phase: "complete",
         reconstruction_status: "completed",
@@ -124,6 +127,61 @@ describe("durable kernel lifecycle", () => {
         reconstruction_status: "opted_out",
       });
       expect(getAttempt(state.db, state.attemptId)?.time_spent_seconds).toBeNull();
+      expect(getAttempt(state.db, state.attemptId)?.reconstruction_response_text).toBeNull();
+    } finally {
+      state.db.close();
+    }
+  });
+
+  it("preserves reconstruction after reopening without adding independent evidence", () => {
+    const root = mkdtempSync(join(tmpdir(), "learning-os-reconstruction-"));
+    const dbPath = join(root, "tutor.db");
+    let db: ReturnType<typeof createDatabase> | undefined;
+    try {
+      const state = moveToRequiredReconstruction(dbPath);
+      db = state.db;
+      const evidenceBefore = db.prepare("SELECT * FROM evidence_events").all();
+      const cardsBefore = db.prepare("SELECT * FROM review_cards").all();
+      db.close();
+      db = createDatabase(dbPath);
+      expect(resumeSession(db, state.sessionId).reconstructionRequired).toBe(true);
+      resolveSessionReconstruction(db, state.sessionId, {
+        outcome: "completed",
+        responseText: "An input causes a transition from the prior state to the next.",
+      });
+      db.close();
+      db = createDatabase(dbPath);
+      expect(getAttempt(db, state.attemptId)?.reconstruction_response_text)
+        .toBe("An input causes a transition from the prior state to the next.");
+      expect(db.prepare("SELECT * FROM evidence_events").all()).toEqual(evidenceBefore);
+      expect(db.prepare("SELECT * FROM review_cards").all()).toEqual(cardsBefore);
+      expect(() => db!.prepare(
+        "UPDATE attempts SET reconstruction_response_text = 'replacement' WHERE id = ?",
+      ).run(state.attemptId)).toThrow("immutable");
+    } finally {
+      if (db?.open) db.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps reconstruction required and active time unchanged when completion is invalid", () => {
+    const state = moveToRequiredReconstruction();
+    try {
+      for (const input of [
+        { outcome: "completed", activeTimeSeconds: 600 },
+        { outcome: "completed", responseText: " \n", activeTimeSeconds: 600 },
+        { outcome: "opted_out", responseText: "fabricated", activeTimeSeconds: 600 },
+        { outcome: "not_required", activeTimeSeconds: 600 },
+      ]) {
+        // Model/JS callers can bypass TypeScript; validate the runtime boundary too.
+        expect(() => resolveSessionReconstruction(state.db, state.sessionId, JSON.parse(JSON.stringify(input))))
+          .toThrow();
+        expect(getSession(state.db, state.sessionId)?.reconstruction_status).toBe("required");
+        expect(getAttempt(state.db, state.attemptId)).toMatchObject({
+          time_spent_seconds: null,
+          reconstruction_response_text: null,
+        });
+      }
     } finally {
       state.db.close();
     }

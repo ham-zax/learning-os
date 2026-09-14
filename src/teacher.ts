@@ -25,6 +25,8 @@ import {
   listCapabilities,
   listResumableSessions,
   openAttempt,
+  openAttemptSubquestion,
+  answerAttemptSubquestion,
   recordExposure,
   recordHintUse,
   registerChallenge,
@@ -33,8 +35,10 @@ import {
   submitAttempt,
 } from "./kernel/foundation.js";
 import type {
+  AnswerAttemptSubquestionInput,
   CompleteSessionFeedbackInput,
   LearningObjectiveInput,
+  OpenAttemptSubquestionInput,
   RecordExposureInput,
   RecordHintUseInput,
   ResolveSessionReconstructionInput,
@@ -136,6 +140,10 @@ export function createTeacherKernel(db: Database.Database) {
       registerChallenge(db, challenge, intent),
     openAttempt: (challengeId: string, version: number, sessionId: number) =>
       openAttempt(db, challengeId, version, sessionId),
+    openAttemptSubquestion: (attemptId: number, input: OpenAttemptSubquestionInput) =>
+      openAttemptSubquestion(db, attemptId, input),
+    answerAttemptSubquestion: (attemptId: number, input: AnswerAttemptSubquestionInput) =>
+      answerAttemptSubquestion(db, attemptId, input),
     recordHintUse: (attemptId: number, input: RecordHintUseInput) =>
       recordHintUse(db, attemptId, input),
     recordExposure: (sessionId: number | null, input: RecordExposureInput) =>

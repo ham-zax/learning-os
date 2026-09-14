@@ -4,7 +4,7 @@ Date: 2026-09-14
 
 Status: Review findings and proposed priorities; not an accepted implementation specification.
 
-Reviewed baseline: `main` at `440be26ab63d27aaec124a2119ce866762b6cb11`, plus the current working-tree changes, including the frontend/backend course additions.
+Reviewed baseline at the time of review: `main` at `440be26ab63d27aaec124a2119ce866762b6cb11`, plus the then-current working-tree changes, including the frontend/backend course additions. Subsequent implementation notes are called out explicitly below.
 
 ## 1. Conclusion and confirmed product direction
 
@@ -68,19 +68,17 @@ Evidence: [teacher protocol — pedagogical execution](teacher-agent-protocol.md
 
 **Acceptance examples:** A vocabulary clarification does not become a concept failure; a sufficient answer closes the episode; an ambiguous impasse receives one useful clarification; a missing foundation receives direct teaching rather than repeated guessing prompts.
 
-### F2. Durable continuation does not preserve every useful intermediate response
+### F2. Durable continuation did not preserve every useful intermediate response
 
-**Classification:** Verified bounded persistence gap; high product priority when interruption exposes it.
+**Classification:** Verified bounded persistence gap in the reviewed baseline; first bounded implementation wave implemented and regression-tested.
 
-The kernel persists frozen challenges, submitted responses, hint/exposure history, active attempts, and reconstruction status. `resumeSession()` can recover these and identify pending verification or assessment. This is meaningful existing continuity.
+At review time, the kernel persisted frozen challenges, submitted responses, hint/exposure history, active attempts, and reconstruction status. `resumeSession()` could recover these and identify pending verification or assessment, but deliberate split-question state and the learner's reconstruction response were not first-class durable observations.
 
-However, `submitAttempt()` provides one final response/artifact submission and rejects a second submission for the same attempt. `ResolveSessionReconstructionInput` accepts completion or opt-out plus optional active time; it has no reconstruction-response field. The resolution operation changes coordination state without itself retaining what the learner reconstructed. The flexible runtime design explicitly says response-segment persistence remains skipped.
+**Implementation note — 2026-09-14:** migration 17 adds `attempt_subquestions` for deliberate multi-turn decomposition and `attempts.reconstruction_response_text` for completed causal-repair reconstruction. `openAttemptSubquestion(...)` persists the exact learner-visible subquestion before delivery; `answerAttemptSubquestion(...)` records the learner's exact response; `resumeSession()` surfaces the ordered rows; `submitAttempt(...)` refuses to finalize while a subquestion remains unanswered; and completed `resolveSessionReconstruction(...)` now requires the actual reconstruction text. These records are bounded interaction observations/coordination state, not evidence or mastery. Generic transcript persistence remains intentionally absent.
 
-Evidence: `SubmitAttemptInput`, `submitAttempt()`, `ResolveSessionReconstructionInput`, `resolveSessionReconstruction()`, and `resumeSession()` in [foundation](../src/kernel/foundation.ts); [flexible runtime status](flexible-learning-runtime-design.md#status); [lifecycle tests](../tests/kernel-lifecycle.test.ts).
+Evidence: `SubmitAttemptInput`, `openAttemptSubquestion()`, `answerAttemptSubquestion()`, `resolveSessionReconstruction()`, and `resumeSession()` in [foundation](../src/kernel/foundation.ts); [kernel contracts](kernel-contracts.md); and [flexible runtime status](flexible-learning-runtime-design.md#status).
 
-**Impact:** A teacher can recover the overall challenge while losing exactly which neutral subquestion was pending or what partial reasoning had already been supplied. Reconstruction completion alone cannot show the learner's exact reconstruction. Existing APIs do not prevent an adapter from arranging additional capture; they simply do not provide a first-class contract for it.
-
-**Proposed improvement:** First demonstrate interruption failures, then retain only the bounded observations and commitments needed to resume: outstanding subquestion, committed partial answers when necessary, and reconstruction response. Associate them with the existing attempt/session. Do not persist whole provider transcripts or a generic teacher-memory object.
+**Validation:** Automated tests reopen the database and create a fresh teacher kernel to recover answered and pending subquestions together with assistance provenance. They also verify that reconstruction text survives reopening without adding evidence or changing review cards. A live conversational handoff remains a separate evaluation of teacher behavior; these tests establish the persistence contract.
 
 These records must not automatically count as new independent evidence. An assisted reconstruction remains assisted, and an informal clarification is not retroactively graded work.
 
@@ -257,3 +255,17 @@ Corrections made before commit:
 Final validation: all 38 tests across seven files passed, and `npm run build` passed. The local documentation check resolved 193 links and validated four course/manifest JSON files. Both changed canonical profiles were checkpointed, passed SQLite integrity checks, and had no foreign-key violations; SQLite sidecars were excluded from staging.
 
 These checks establish a reviewed baseline for the proposed priorities. They do not demonstrate end-to-end adaptive tutoring quality or enact the future persistence and optional execution designs in this report.
+
+## 10. Continuity implementation review
+
+The next implementation wave addresses F2 through migration 17, the existing attempt/session owner, and teacher protocol updates. It does not implement the full adaptive-conversation evaluation in F1 or the optional workspace/verifier designs in F5–F7.
+
+Review corrections:
+
+- Answers now require the specific pending subquestion's `seq`. Previously, retrying an earlier answer after the next question opened could silently store it against the next prompt. Sequence identity is also immutable in SQLite.
+- The existing reconstruction lifecycle test was updated for the required learner response. Invalid runtime requests now produce validation errors; rejected completion leaves the reconstruction obligation and active time unchanged.
+- Restart tests verify exact prompt/response text, ordered partial answers, exposure provenance, and no automatic evidence or review-card creation. Additional checks cover stale answers, one pending question, submission guards, learner abandonment, immutable history, and a version 16 schema with active work migrating to version 17.
+
+Validation: `npm test` passed all 45 tests across eight files; `npm run build` passed; the two affected test files also passed a separate strict TypeScript check because the production `tsconfig.json` excludes tests. Review used current source directly where the graph reported stale metadata or excluded paths. Canonical learner databases were not opened or changed; migration behavior was exercised on temporary fixtures.
+
+The continuity implementation is ready within this scope. Evaluate representative learner conversations next before claiming reliable adaptive teaching across agents. Exercises and scratchpads remain optional.

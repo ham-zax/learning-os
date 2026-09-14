@@ -628,6 +628,7 @@ export const AttemptSchema = z.object({
   response_text: z.string().nullable().default(null),
   artifact_ref_json: jsonRecord.nullable().default(null),
   verification_output_json: verificationOutputJson.nullable().default(null),
+  reconstruction_response_text: z.string().nullable().default(null),
   score: z.number().nullable().default(null),
   feedback: z.string().nullable().default(null),
   time_spent_seconds: z.number().int().nullable().default(null),
@@ -659,6 +660,16 @@ export const HintObservationSchema = z.object({
   recorded_at: z.string(),
 });
 export type HintObservation = z.infer<typeof HintObservationSchema>;
+
+export const AttemptSubquestionSchema = z.object({
+  seq: z.number().int().positive(),
+  attempt_id: z.number().int().positive(),
+  prompt_text: z.string().min(1),
+  response_text: z.string().nullable().default(null),
+  opened_at: z.string(),
+  answered_at: z.string().nullable().default(null),
+});
+export type AttemptSubquestion = z.infer<typeof AttemptSubquestionSchema>;
 
 export const TeachingArtifactSchema = z.object({
   id: z.string(),
@@ -815,6 +826,7 @@ export const schemas = {
   attempts: AttemptSchema,
   challenge_attempt_dispositions: ChallengeAttemptDispositionRowSchema,
   hint_observations: HintObservationSchema,
+  attempt_subquestions: AttemptSubquestionSchema,
   teaching_artifacts: TeachingArtifactSchema,
   exposure_events: ExposureEventSchema,
   revision_notes: RevisionNoteSchema,

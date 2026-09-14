@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented through the learner-facing contract and episode-aware orchestration waves on `main` (`9ef1040` and `4e520748`). Later live use demonstrated that curriculum-phase focus also needs durable orchestration ownership, so active and historical study focus now belongs to `study_focus_episodes`. The pure `TurnDirective` helper and response-segment persistence remain skipped. Later fresh-teacher use supplied the missing evidence for two Wave 4 items: a durable reconstruction checkpoint now prevents marked causal repair from closing early, and a small profile-local interaction preference store carries explicit speech/atomic-question settings across teachers.
+Implemented through the learner-facing contract and episode-aware orchestration waves on `main` (`9ef1040` and `4e520748`). Later live use demonstrated that curriculum-phase focus also needs durable orchestration ownership, so active and historical study focus now belongs to `study_focus_episodes`. The pure `TurnDirective` helper and generic response-segment/transcript persistence remain skipped. Later fresh-teacher use supplied the missing evidence for bounded continuity: a durable reconstruction checkpoint prevents marked causal repair from closing early; completed reconstruction now preserves the learner's exact response on the attempt; deliberate multi-turn decomposition can persist only its ordered subquestions/responses through `attempt_subquestions`; and a small profile-local interaction preference store carries explicit speech/atomic-question settings across teachers.
 
 This design is based on two live Backend Systems learner sessions, the current Learning OS implementation, and the learner's prior systems-first mentor material.
 

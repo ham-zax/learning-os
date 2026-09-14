@@ -159,7 +159,7 @@ Do not persist raw resumes, job descriptions, chat transcripts, provider identif
 
 ### `sessions` repair checkpoint
 
-`reconstruction_status` is profile-local interaction state with values `not_required`, `required`, `completed`, or `opted_out`. It is not evidence or mastery. When answer-bearing feedback repairs a causal/foundational error, `recordExposure(..., requireReconstruction: true)` marks the current feedback episode `required` in the same transaction as the exposure. Until `resolveSessionReconstruction(...)` records learner reconstruction or explicit opt-out, `completeSessionFeedback(...)` must refuse closure, `openAttempt(...)` must refuse another attempt in that session, and `createSession(...)` must refuse another session for the same goal/topic. Continuation prioritizes required reconstruction over newer resumable work so a replacement teacher cannot lose an unfinished repair merely because another session exists or the provider conversation changed.
+`reconstruction_status` is profile-local interaction state with values `not_required`, `required`, `completed`, or `opted_out`. It is not evidence or mastery. When answer-bearing feedback repairs a causal/foundational error, `recordExposure(..., requireReconstruction: true)` marks the current feedback episode `required` in the same transaction as the exposure. Until `resolveSessionReconstruction(...)` records the learner's reconstruction response or explicit opt-out, `completeSessionFeedback(...)` must refuse closure, `openAttempt(...)` must refuse another attempt in that session, and `createSession(...)` must refuse another session for the same goal/topic. A completed reconstruction stores the learner's actual reconstruction text on the active attempt; it remains an assisted interaction observation, not independent retrieval evidence. Continuation prioritizes required reconstruction over newer resumable work so a replacement teacher cannot lose an unfinished repair merely because another session exists or the provider conversation changed.
 
 ### `interaction_preferences`
 
@@ -199,11 +199,18 @@ Expected additions or equivalent fields:
 | `challenge_version` | text/integer | Exact persisted challenge version delivered. |
 | `response_text` | text/null | Learner answer when text-based. |
 | `artifact_ref_json` | JSON/text/null | File/commit/diff/runtime artifact reference. |
+| `reconstruction_response_text` | text/null | Learner's actual reconstruction after answer-bearing causal/foundational repair. Stored only when the reconstruction checkpoint is completed; never independent evidence by itself. |
 | `time_spent_seconds` | integer/null | Reliable active learner/episode time when supplied by the caller; null means unknown. Never derive it from wall-clock session duration or the challenge planning estimate. |
 | `started_at` | timestamp | Attempt start. |
 | `submitted_at` | timestamp/null | Submission time. |
 
 Do not duplicate a large learner response into each per-objective evidence event.
+
+### `attempt_subquestions`
+
+Bounded restart state for a frozen challenge that the teacher deliberately splits across turns. Each row stores one learner-visible subquestion and, once supplied, the learner's exact response. At most one unanswered subquestion may exist for an attempt. Rows belong only to the active unsubmitted session attempt; the prompt identity is immutable, an answer may be recorded exactly once, and rows are never deleted.
+
+This table is not a provider transcript and must not be used as generic teacher memory. Persist only decomposition needed to resume the current frozen challenge without repeating answered parts or inventing learner responses. Subquestion responses are interaction observations, not independent evidence; assessment still uses the final submitted attempt under the frozen criteria.
 
 ### `hint_observations`
 
@@ -957,6 +964,24 @@ openAttempt(challengeId, version, sessionId)
 
 The learner-visible payload excludes private solution material.
 
+### 3a. Persist deliberate split subquestions
+
+When the teacher decomposes one frozen challenge across multiple turns and interruption would otherwise lose what is pending, persist the exact learner-visible subquestion before presenting it:
+
+```text
+openAttemptSubquestion(attemptId, { promptText })
+→ durable pending subquestion
+```
+
+After the learner answers that subquestion, persist the exact response before moving to the next split:
+
+```text
+answerAttemptSubquestion(attemptId, { seq, responseText })
+→ same subquestion with durable learner response
+```
+
+Use the `seq` returned by `openAttemptSubquestion(...)` or recovered from the pending row in `resumeSession(...)`. An answer must identify that specific pending question; a stale/retried answer cannot answer its successor. Only the active unsubmitted session attempt may use this boundary. At most one subquestion may be pending. `submitAttempt(...)` refuses submission while a subquestion remains unanswered. `resumeSession(...)` returns the ordered subquestions as part of `activeAttemptState`, so a fresh teacher can continue the same frozen challenge without relying on provider chat history. A learner who stops can use `abandonUnsubmittedSession(...)`; the unanswered observation remains preserved without failure evidence. Do not use this API for ordinary unsplit questions or as a transcript sink.
+
 ### 4. Record hint use
 
 ```text
@@ -1063,8 +1088,12 @@ resumeSession(sessionId)
 completeSessionFeedback(sessionId, { activeTimeSeconds? })
 → closes feedback only when reconstruction is not required
 
-resolveSessionReconstruction(sessionId, { outcome: completed | opted_out, activeTimeSeconds? })
-→ resolves the durable repair checkpoint and closes the episode
+resolveSessionReconstruction(
+  sessionId,
+  { outcome: completed, responseText, activeTimeSeconds? }
+  | { outcome: opted_out, activeTimeSeconds? }
+)
+→ stores the learner reconstruction when completed, resolves the durable repair checkpoint, and closes the episode
 
 abandonUnsubmittedSession(sessionId)
 → completed session
