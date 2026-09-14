@@ -10,11 +10,10 @@ import {
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type Database from "better-sqlite3";
 import { createDatabase } from "../db/database.js";
-import {
-  LEGACY_PROFILE_ID,
-  type CreateProfileInput,
-  type LearnerProfile,
-  type ProfileStoreOptions,
+import type {
+  CreateProfileInput,
+  LearnerProfile,
+  ProfileStoreOptions,
 } from "./types.js";
 
 export type {
@@ -22,8 +21,6 @@ export type {
   LearnerProfile,
   ProfileStoreOptions,
 } from "./types.js";
-export { LEGACY_PROFILE_ID } from "./types.js";
-
 const REGISTRY_VERSION = 1;
 const PROFILE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_PROFILE_ID_LENGTH = 64;
@@ -46,10 +43,8 @@ interface ProfileRegistry {
 }
 
 interface ProfilePaths {
-  dataDir: string;
   profilesDir: string;
   registryPath: string;
-  legacyDatabasePath: string;
 }
 
 interface WalCheckpointResult {
@@ -74,14 +69,12 @@ function profilePaths(options: ProfileStoreOptions = {}): ProfilePaths {
   const dataDir = resolve(options.dataDir ?? "data");
   const profilesDir = join(dataDir, "profiles");
   return {
-    dataDir,
     profilesDir,
     registryPath: join(profilesDir, "registry.json"),
-    legacyDatabasePath: join(dataDir, "tutor.db"),
   };
 }
 
-function assertProfileId(value: string, allowLegacy = false): string {
+function assertProfileId(value: string): string {
   if (
     value.length === 0 ||
     value.length > MAX_PROFILE_ID_LENGTH ||
@@ -90,9 +83,6 @@ function assertProfileId(value: string, allowLegacy = false): string {
     throw new Error(
       "Profile ID must contain only lowercase letters, numbers, and single hyphen separators.",
     );
-  }
-  if (!allowLegacy && value === LEGACY_PROFILE_ID) {
-    throw new Error(`Profile ID "${LEGACY_PROFILE_ID}" is reserved for legacy data.`);
   }
   return value;
 }
@@ -116,9 +106,7 @@ function managedDatabasePath(paths: ProfilePaths, profileId: string): string {
 }
 
 function databasePathForProfile(paths: ProfilePaths, profile: LearnerProfile): string {
-  return profile.source === "legacy"
-    ? paths.legacyDatabasePath
-    : managedDatabasePath(paths, profile.id);
+  return managedDatabasePath(paths, profile.id);
 }
 
 function emptyRegistry(): ProfileRegistry {
@@ -174,7 +162,7 @@ function loadRegistry(paths: ProfilePaths): ProfileRegistry {
     throw new Error("Profile registry activeProfileId must be a string or null.");
   }
   if (typeof activeProfileId === "string") {
-    assertProfileId(activeProfileId, true);
+    assertProfileId(activeProfileId);
   }
 
   return {
@@ -232,21 +220,8 @@ function withRegistryLock<T>(paths: ProfilePaths, operation: () => T): T {
   }
 }
 
-function toManagedProfile(profile: RegistryProfile): LearnerProfile {
-  return { ...profile, source: "managed" };
-}
-
-function legacyProfile(paths: ProfilePaths): LearnerProfile | null {
-  if (!existsSync(paths.legacyDatabasePath)) return null;
-  const stats = statSync(paths.legacyDatabasePath);
-  const created = stats.birthtimeMs > 0 ? stats.birthtime : stats.ctime;
-  return {
-    id: LEGACY_PROFILE_ID,
-    displayName: "Legacy tutor.db",
-    createdAt: created.toISOString(),
-    description: "Pre-profile Learning OS database preserved at data/tutor.db.",
-    source: "legacy",
-  };
+function toLearnerProfile(profile: RegistryProfile): LearnerProfile {
+  return { ...profile };
 }
 
 export function deriveProfileId(displayName: string): string {
@@ -264,10 +239,9 @@ export function deriveProfileId(displayName: string): string {
 export function listProfiles(options: ProfileStoreOptions = {}): LearnerProfile[] {
   const paths = profilePaths(options);
   const registry = loadRegistry(paths);
-  const profiles = registry.profiles.map(toManagedProfile);
-  const legacy = legacyProfile(paths);
-  if (legacy) profiles.push(legacy);
-  return profiles.sort((left, right) => left.id.localeCompare(right.id));
+  return registry.profiles
+    .map(toLearnerProfile)
+    .sort((left, right) => left.id.localeCompare(right.id));
 }
 
 export function getProfile(
@@ -275,10 +249,9 @@ export function getProfile(
   options: ProfileStoreOptions = {},
 ): LearnerProfile | null {
   const paths = profilePaths(options);
-  const id = assertProfileId(profileId, true);
-  if (id === LEGACY_PROFILE_ID) return legacyProfile(paths);
+  const id = assertProfileId(profileId);
   const profile = loadRegistry(paths).profiles.find((candidate) => candidate.id === id);
-  return profile ? toManagedProfile(profile) : null;
+  return profile ? toLearnerProfile(profile) : null;
 }
 
 export function createProfile(
@@ -320,7 +293,7 @@ export function createProfile(
       registry.profiles.push(profile);
       registry.profiles.sort((left, right) => left.id.localeCompare(right.id));
       saveRegistry(paths, registry);
-      return toManagedProfile(profile);
+      return toLearnerProfile(profile);
     } catch (error) {
       rmSync(profileDir, { recursive: true, force: true });
       throw error;
@@ -337,9 +310,6 @@ export function discardCreatedProfile(
   profile: LearnerProfile,
   options: ProfileStoreOptions = {},
 ): void {
-  if (profile.source !== "managed") {
-    throw new Error("Legacy profiles cannot be discarded by provisioning recovery.");
-  }
   const paths = profilePaths(options);
   withRegistryLock(paths, () => {
     const registry = loadRegistry(paths);
@@ -399,7 +369,7 @@ export function getActiveProfile(
     return active;
   }
 
-  return legacyProfile(paths);
+  return null;
 }
 
 export function resolveProfile(

@@ -1,5 +1,5 @@
 /**
- * Explore mode — guided discovery.
+ * Guided-discovery presentation strategy.
  *
  * Generates a Socratic sequence of prompts for exploring a concept.
  * This module does NOT interact with the user directly; it returns
@@ -19,16 +19,16 @@ import type { ConceptFile } from "../../knowledge/types.js";
 
 // ─── Exported Types ──────────────────────────────────────────────────────────
 
-export interface ExploreStep {
+export interface GuidedDiscoveryStep {
   type: "question" | "reveal";
   content: string;
   section?: string; // which section of the concept file this relates to
 }
 
-export interface ExploreSequence {
+export interface GuidedDiscoverySequence {
   conceptId: string;
   title: string;
-  steps: ExploreStep[];
+  steps: GuidedDiscoveryStep[];
   assessmentPrompt: string;
   surfaceId: "restatement";
 }
@@ -41,11 +41,13 @@ export interface ExploreSequence {
  * The caller presents each step in order, collecting the learner's
  * responses between question steps and showing reveal content directly.
  */
-export function generateExploreSequence(concept: ConceptFile): ExploreSequence {
+export function generateGuidedDiscoverySequence(
+  concept: ConceptFile,
+): GuidedDiscoverySequence {
   const { frontmatter, summary, keyPoints, deepDive } = concept;
   const { id, title } = frontmatter;
 
-  const steps: ExploreStep[] = [];
+  const steps: GuidedDiscoveryStep[] = [];
 
   // Step 1: Activate prior knowledge
   steps.push({

@@ -434,13 +434,9 @@ These are reasonable planning estimates, not a dynamic teaching clock.
 
 The teacher should not infer "the learner needs 20 minutes" merely because the task form is `design`.
 
-## P16. The legacy pacer is not the current adaptive answer
+## P16. Adaptive pacing must use current evidence
 
-`src/plan/pacer.ts` calculates session duration from completed sessions and legacy review grades, but it is not wired into `createTeacherKernel()` or `getTodayMission()` and still depends on legacy `reviews` semantics.
-
-Do not revive it unchanged.
-
-If adaptive pacing is implemented, rebuild it from current evidence/session contracts rather than legacy scalar grades.
+If adaptive pacing is introduced, derive it from current objective evidence, reliable active-time observations, and session contracts. Do not create a parallel grading or pacing truth source.
 
 ## P17. The current teacher API does not record active learning time
 

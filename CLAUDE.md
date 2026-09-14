@@ -2,7 +2,7 @@
 
 Read `AGENTS.md` first. It describes the current runtime and state ownership.
 
-Learning OS is no longer the upstream scalar SM-2 tutor. The current learner truth is objective-specific append-only evidence plus rebuildable projections and FSRS review state.
+Learning OS learner truth is objective-specific append-only evidence plus rebuildable projections and FSRS review state.
 
 ## Non-negotiable model
 
@@ -28,14 +28,13 @@ Delivery contexts:
 learn | practice | review | interview | mock
 ```
 
-Do not use `concepts.status`, `ef`, `interval`, `repetitions`, `next_review`, or `last_grade` as authoritative learner state.
+Concept rows are descriptive curriculum metadata, never learner-progress state.
 
 ## Profiles and onboarding
 
 - Global curriculum: `knowledge/`
 - Managed learner persistence: `data/profiles/<profile-id>/tutor.db`
 - Profile registry: `data/profiles/registry.json`
-- Legacy compatibility DB: `data/tutor.db`
 
 Use `src/workspace.ts` before a learner profile exists. Use `createTeacherKernel(db)` after opening a profile.
 

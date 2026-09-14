@@ -75,7 +75,7 @@ function slugify(text: string): string {
 }
 
 /**
- * Estimate an SM-2 difficulty (1-5) from a free-form difficulty string
+ * Estimate the curriculum difficulty (1-5) from a free-form difficulty string
  * commonly found in learning resources.
  */
 function difficultyFromLabel(label: string | null): number {

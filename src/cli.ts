@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * CLI entry point for the generic tutor engine.
+ * CLI entry point for Learning OS.
  *
  * Commands:
  *   tutor <topic>              Auto-detect: session or ingestion mode
@@ -89,9 +89,9 @@ import {
   sectionText,
   extraSectionHeadings,
 } from "./knowledge/loader.js";
-import { generateExploreSequence } from "./session/modes/explore.js";
+import { generateGuidedDiscoverySequence } from "./session/modes/guided-discovery.js";
 import { generateTeachBackSession } from "./session/modes/teach-back.js";
-import { generateQuizBatch } from "./session/modes/quiz.js";
+import { generateRetrievalBatch } from "./session/modes/retrieval.js";
 
 import type { ConceptMap, ConceptProposal, ConceptFile } from "./knowledge/types.js";
 import { DeliveryContext, GoalImportance, GoalTargetReadiness } from "./db/types.js";
@@ -294,10 +294,10 @@ function challengeReferenceMaterial(file: ConceptFile | null): string[] {
 // ─── Mode presenters ─────────────────────────────────────────────────────────
 
 /**
- * Explore acquisition material before the frozen restatement response.
+ * Present guided-discovery material before the frozen restatement response.
  * Every material reveal is recorded before it is shown.
  */
-async function presentExploreAcquisition(
+async function presentGuidedDiscoveryAcquisition(
   rl: ReturnType<typeof createInterface>,
   file: ConceptFile | null,
   recordMaterialExposure: MaterialRevealRecorder,
@@ -307,7 +307,7 @@ async function presentExploreAcquisition(
     return;
   }
 
-  const sequence = generateExploreSequence(file);
+  const sequence = generateGuidedDiscoverySequence(file);
 
   for (const step of sequence.steps) {
     if (step.type === "question") {
@@ -364,7 +364,7 @@ function revealTeachBackReference(
   );
 }
 
-function revealQuizReference(
+function revealRetrievalReference(
   file: ConceptFile | null,
   recordMaterialExposure: MaterialRevealRecorder,
 ): void {
@@ -386,23 +386,11 @@ function revealQuizReference(
 
 // ─── Session delivery context ────────────────────────────────────────────────
 
-function normalizeSessionDeliveryContext(value: string): DeliveryContext {
-  switch (value) {
-    case "learn":
-    case "practice":
-    case "review":
-      return value;
-    case "explore":
-      return "learn";
-    case "quiz":
-      return "review";
-    case "teach-back":
-      return "practice";
-    default:
-      throw new Error(
-        `Unknown session delivery context "${value}". Use learn, practice, or review.`,
-      );
-  }
+function parseSessionDeliveryContext(value: string): DeliveryContext {
+  if (value === "learn" || value === "practice" || value === "review") return value;
+  throw new Error(
+    `Unknown session delivery context "${value}". Use learn, practice, or review.`,
+  );
 }
 
 async function runSession(
@@ -438,7 +426,7 @@ async function runSession(
     let prompt: string;
 
     if (mode === "learn") {
-      const sequence = file ? generateExploreSequence(file) : null;
+      const sequence = file ? generateGuidedDiscoverySequence(file) : null;
       surfaceId = sequence?.surfaceId ?? "restatement";
       prompt =
         sequence?.assessmentPrompt ??
@@ -450,7 +438,7 @@ async function runSession(
         teachBack?.openingPrompt ??
         `Explain **${concept.title}** to me like I'm new to this topic. Focus on the mechanism and intuition.`;
     } else if (mode === "review") {
-      const question = file ? generateQuizBatch([file], 1).questions[0] : undefined;
+      const question = file ? generateRetrievalBatch([file], 1).questions[0] : undefined;
       surfaceId = question?.surfaceId ?? "general-explanation";
       prompt =
         question?.question ??
@@ -494,7 +482,7 @@ async function runSession(
       console.log(
         chalk.dim(`  Prerequisites: ${concept.prerequisites.join(", ") || "none"}`),
       );
-      await presentExploreAcquisition(rl, file, recordLearnExposure);
+      await presentGuidedDiscoveryAcquisition(rl, file, recordLearnExposure);
     }
 
     const response = await ask(
@@ -506,7 +494,7 @@ async function runSession(
     if (mode === "practice") {
       revealTeachBackReference(file, recordPostResponseExposure);
     } else if (mode === "review") {
-      revealQuizReference(file, recordPostResponseExposure);
+      revealRetrievalReference(file, recordPostResponseExposure);
     }
 
     info("  Response submitted. Assessment pending; no trusted evaluator is configured in this CLI.");
@@ -807,8 +795,7 @@ profileCommand
       header("Learner Profiles");
       for (const profile of profiles) {
         const marker = profile.id === active?.id ? "*" : " ";
-        const source = profile.source === "legacy" ? " [legacy]" : "";
-        console.log(`${marker} ${profile.id.padEnd(20)} ${profile.displayName}${source}`);
+        console.log(`${marker} ${profile.id.padEnd(20)} ${profile.displayName}`);
       }
     } catch (err) {
       error(err instanceof Error ? err.message : String(err));
@@ -851,7 +838,6 @@ profileCommand
       console.log(`  ID:          ${profile.id}`);
       console.log(`  Name:        ${profile.displayName}`);
       console.log(`  Created:     ${profile.createdAt}`);
-      console.log(`  Source:      ${profile.source}`);
       console.log(`  Description: ${profile.description ?? "(none)"}`);
     } catch (err) {
       error(err instanceof Error ? err.message : String(err));
@@ -1014,7 +1000,7 @@ program
   .argument("<topic>", "Topic to study (auto-detects session vs ingestion)")
   .option(
     "-m, --mode <mode>",
-    "Session delivery context: learn, practice, review (legacy: explore, quiz, teach-back)",
+    "Session delivery context: learn, practice, or review",
     "learn",
   )
   .action(async (topic: string, opts: { mode: string }) => {
@@ -1024,8 +1010,7 @@ program
       const topicId = topic.toLowerCase().replace(/\s+/g, "-");
 
       if (topicExists(db, topicId) && topicHasConcepts(db, topicId)) {
-        // Normalize legacy spelling only at the CLI boundary.
-        const mode = normalizeSessionDeliveryContext(opts.mode);
+        const mode = parseSessionDeliveryContext(opts.mode);
         await runSession(db, topicId, mode);
       } else {
         // Ingestion mode

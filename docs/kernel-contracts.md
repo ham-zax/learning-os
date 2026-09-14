@@ -49,7 +49,7 @@ If the stronger claim cannot be justified, do not coerce it through the boundary
 
 ## V1 logical schema
 
-The exact SQLite migration syntax may follow upstream conventions, but these logical tables and ownership rules are fixed.
+These logical tables and ownership rules are fixed by the single current SQLite schema in `src/db/schema.ts`.
 
 ### `capabilities`
 
@@ -565,20 +565,6 @@ The mapper version is persisted on every `review_event` so a future policy can b
 - If source evidence is invalidated/restored or card state becomes suspect, rebuild by replaying only effective `review_events` with their recorded scheduler version/parameters.
 - If no effective review event remains after correction, remove the `review_cards` projection for that objective.
 
-### Legacy SM-2 migration
-
-Do not mathematically convert concept-level SM-2 state into objective-level FSRS state. The semantics and unit of scheduling differ.
-
-For imported upstream learner data:
-
-1. Preserve legacy concept/review data for provenance.
-2. If useful, create `legacy_import`/exposure records that are explicitly non-authoritative and `retrieval_valid=false`.
-3. Do not promote objective readiness from legacy scalar grades alone.
-4. Do not seed FSRS cards from old `ef`, `interval`, or `repetitions` values.
-5. Schedule a baseline diagnostic through ordinary selection for active objectives.
-
-This is conservative by design: missing trustworthy evidence is represented as uncertainty rather than manufactured mastery.
-
 ## Challenge contract
 
 A challenge that can produce evidence must be registered/frozen before learner response.
@@ -666,7 +652,7 @@ Interruption or agent replacement must not require regenerating the challenge or
 
 ### Authoring-contract persistence invariant
 
-When a concrete challenge is authored from a selected `ChallengeIntent`, persist that selection decision separately from the frozen challenge artifact as an immutable v2 authoring contract keyed by `(challenge_id, version)`. `goalId` is mandatory: it identifies the current goal execution scope that authorized the selection. The snapshot contains that goal, objective/concept/capability, task form, delivery context, novelty, selection reason, selected weakness, changed-surface requirement, and recent challenge surfaces to avoid. Migration 16 intentionally discards v1 authoring-contract rows rather than inferring missing goal authority; this development-stage contract has no compatibility path.
+When a concrete challenge is authored from a selected `ChallengeIntent`, persist that selection decision separately from the frozen challenge artifact as an immutable v2 authoring contract keyed by `(challenge_id, version)`. `goalId` is mandatory: it identifies the current goal execution scope that authorized the selection. The snapshot contains that goal, objective/concept/capability, task form, delivery context, novelty, selection reason, selected weakness, changed-surface requirement, and recent challenge surfaces to avoid.
 
 The authoring contract answers a different question from `ChallengeSpec`:
 

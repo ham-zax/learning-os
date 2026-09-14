@@ -336,7 +336,7 @@ The learner should not feel like they are operating a database protocol.
 
 - Never infer mastery from resume years, confidence, familiarity, or previous chat claims.
 - Never write readiness, transfer, durability, weakness, review-card, or evidence state directly.
-- Never use legacy scalar/SM-2 concept fields as learner truth.
+- Treat concept rows as descriptive curriculum metadata only; learner truth comes from objective evidence/projections and FSRS review state.
 - Never reveal private solution/rubric material before learner response when it would compromise assessment.
 - Never show a hint before its hint observation is recorded.
 - Never silently switch learner profiles.

@@ -2,16 +2,14 @@ import { describe, it, expect } from 'vitest'
 import {
   TopicSchema,
   ConceptSchema,
+  CapabilitySchema,
   SessionSchema,
-  ReviewSchema,
   SyncedGapSchema,
   SyncedSignalSchema,
   ProblemSchema,
   AttemptSchema,
   InteractionPreferencesRowSchema,
   schemas,
-  type Topic,
-  type Concept,
 } from '../src/db/types.js'
 
 describe('Database Types (Zod Schemas)', () => {
@@ -20,19 +18,17 @@ describe('Database Types (Zod Schemas)', () => {
       const topic = TopicSchema.parse({
         id: 'git-basics',
         name: 'Git Basics',
-        phase: 1,
         goal: null,
         deadline: null,
         created_at: '2026-06-07',
         last_session: null,
       })
       expect(topic.id).toBe('git-basics')
-      expect(topic.phase).toBe(1)
+      expect(topic.name).toBe('Git Basics')
     })
 
     it('applies defaults for optional fields', () => {
       const topic = TopicSchema.parse({ id: 'test', name: 'Test' })
-      expect(topic.phase).toBe(1)
       expect(topic.goal).toBeNull()
       expect(topic.deadline).toBeNull()
     })
@@ -49,8 +45,7 @@ describe('Database Types (Zod Schemas)', () => {
       })
       expect(concept.prerequisites).toEqual(['git-commit'])
       expect(concept.tags).toEqual(['core'])
-      expect(concept.status).toBe('unseen')
-      expect(concept.ef).toBe(2.5)
+      expect(concept.difficulty).toBe(1)
     })
 
     it('parses already-parsed arrays', () => {
@@ -64,28 +59,28 @@ describe('Database Types (Zod Schemas)', () => {
       expect(concept.prerequisites).toEqual(['a', 'b'])
     })
 
-    it('applies SM-2 defaults', () => {
+    it('applies current concept defaults', () => {
       const concept = ConceptSchema.parse({
         id: 'test',
         topic_id: 'topic',
         title: 'Test',
       })
-      expect(concept.ef).toBe(2.5)
-      expect(concept.interval).toBe(0)
-      expect(concept.repetitions).toBe(0)
-      expect(concept.status).toBe('unseen')
+      expect(concept.difficulty).toBe(1)
+      expect(concept.prerequisites).toEqual([])
+      expect(concept.tags).toEqual([])
     })
   })
 
   describe('SessionSchema', () => {
-    it('parses a session with concepts_reviewed as JSON string', () => {
+    it('applies current lifecycle defaults', () => {
       const session = SessionSchema.parse({
         id: 1,
         topic_id: 'git-basics',
         mode: 'learn',
-        concepts_reviewed: '["git-init", "git-commit"]',
       })
-      expect(session.concepts_reviewed).toEqual(['git-init', 'git-commit'])
+      expect(session.phase).toBe('idle')
+      expect(session.pending_action).toBe('none')
+      expect(session.reconstruction_status).toBe('not_required')
     })
   })
 
@@ -104,12 +99,13 @@ describe('Database Types (Zod Schemas)', () => {
   })
 
   describe('Schema registry', () => {
-    it('registers current session and interaction schemas', () => {
+    it('registers only current learner-state schemas', () => {
       expect(schemas.topics).toBe(TopicSchema)
       expect(schemas.concepts).toBe(ConceptSchema)
+      expect(schemas.capabilities).toBe(CapabilitySchema)
       expect(schemas.sessions).toBe(SessionSchema)
       expect(schemas.interaction_preferences).toBe(InteractionPreferencesRowSchema)
-      expect(schemas.reviews).toBe(ReviewSchema)
+      expect('reviews' in schemas).toBe(false)
       expect(schemas.synced_gaps).toBe(SyncedGapSchema)
       expect(schemas.synced_signals).toBe(SyncedSignalSchema)
       expect(schemas.problems).toBe(ProblemSchema)

@@ -1,8 +1,8 @@
 /**
  * Topic/concept state helpers.
  *
- * Legacy concept scheduling columns remain readable provenance, while active
- * due queries use objective-level review cards.
+ * Concept metadata is descriptive curriculum state; learner progress and due
+ * work come from objective evidence/projections and review cards.
  */
 
 import { readFileSync } from "node:fs";
@@ -50,7 +50,7 @@ interface Manifest {
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-/** Retrieve concept metadata, including preserved legacy scheduling fields. */
+/** Retrieve descriptive concept metadata. */
 export function getConceptState(
   db: Database.Database,
   conceptId: string,
@@ -121,7 +121,6 @@ export function getTopicSummary(
  *
  * Creates the topic record (skips if already exists) and creates concept
  * records for each manifest entry that does not yet exist in the DB.
- * Legacy concept scheduling columns retain their database defaults for provenance.
  */
 export function initializeTopic(
   db: Database.Database,

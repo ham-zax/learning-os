@@ -273,7 +273,7 @@ npm run tutor -- --profile alice continue <goal-id>
 npm run tutor -- profile checkpoint alice
 ```
 
-An existing pre-profile `data/tutor.db` is preserved as a legacy profile instead of being copied into new learners.
+Learning OS uses managed profiles only. Databases from retired pre-profile layouts must be migrated explicitly outside the runtime before use.
 
 ### Save learner state to Git
 
@@ -419,7 +419,6 @@ For contributors and integrators:
 - [Architecture](docs/architecture.md)
 - [Evidence model](docs/evidence-model.md)
 - [Kernel contracts](docs/kernel-contracts.md)
-- [Implementation plan](docs/implementation-plan.md)
 - [Design decisions](docs/decisions/)
 - [Source comparison](docs/research/source-comparison.md)
 

@@ -4,7 +4,7 @@
 
 Learning OS is an evidence-driven programming learning system. It uses a TypeScript CLI and SQLite, with ChatGPT or another compatible agent acting as a replaceable teacher.
 
-The authoritative learner model is objective-specific evidence, not legacy concept scores or self-ratings.
+The authoritative learner model is objective-specific evidence, not scalar concept scores or self-ratings.
 
 ```text
 concept × capability
@@ -34,18 +34,11 @@ learn | practice | review | interview | mock
 - Global reusable curriculum lives under `knowledge/`. Coding routes are `knowledge/frontend-revision/` and `knowledge/backend-systems/`; read `docs/coding-courses.md` for discovery, exact scope, source references, practical work and profile attachment. Existing sibling source registries remain references; do not clone their corpora into learner databases.
 - Managed learner profiles live under `data/profiles/<profile-id>/tutor.db`.
 - `data/profiles/registry.json` stores profile metadata and the active profile only; registry writes are serialized across concurrent processes.
-- `data/tutor.db` is supported only as the preserved legacy compatibility profile.
 - Learner evidence, goals, review cards, weaknesses, sessions, and resumable state are profile-local.
 - Canonical managed `registry.json` and `tutor.db` files are intentionally versioned learner state. When they change and a commit is being made, checkpoint the affected profile and include the canonical files; do not omit them as disposable runtime state.
 - Raw resumes, job descriptions, chat transcripts, provider IDs, and API keys are not learner-state persistence.
 
-Never treat these legacy `concepts` columns as authoritative mastery:
-
-```text
-status | ef | interval | repetitions | next_review | last_grade
-```
-
-They remain compatibility/provenance fields.
+Concept rows are descriptive curriculum metadata only. Learner progress belongs to objective evidence/projections and FSRS review state.
 
 ## Core paths
 
@@ -63,7 +56,8 @@ They remain compatibility/provenance fields.
 | `src/study/continuation.ts` | Read-only resume-before-budget-before-plan orchestration |
 | `src/session/` | Ordinary learning-session flow |
 | `src/interview/` | Coding and system-design interview flows |
-| `src/db/database.ts` | SQLite schema, migrations, CRUD |
+| `src/db/schema.ts` | Single current SQLite schema |
+| `src/db/database.ts` | Database lifecycle and CRUD |
 | `docs/kernel-contracts.md` | Authoritative V1 kernel contract |
 | `docs/teacher-agent-protocol.md` | Learner-facing agent behavior and semi-strict tutoring policy |
 | `skills/learning-os-teacher/` | Installable/portable teacher skill source |
@@ -116,7 +110,7 @@ Environment routing:
 - Connected web sessions should use the user-named repository/worktree; the normal local path is `/home/hamza/repo/learning-os`.
 - If repository access is unavailable, do not claim to have read or changed learner state.
 
-The portable skill source is `skills/learning-os-teacher/`. Claude-compatible local sessions also expose `.claude/skills/learning-os-teacher/SKILL.md` as a thin wrapper over the same protocol.
+The portable skill source is `skills/learning-os-teacher/`; provider-specific repository wrappers are intentionally not maintained.
 
 ## Important invariants
 
@@ -167,8 +161,8 @@ When documentation conflicts, use this order:
 accepted ADRs
 → docs/kernel-contracts.md
 → docs/architecture.md + docs/evidence-model.md
-→ docs/implementation-plan.md
+→ approved focused design docs
 → research notes
 ```
 
-Inspect the current implementation before changing contracts. The repository preserves Generic Tutor ancestry, but current Learning OS contracts override obsolete upstream SM-2 guidance.
+Inspect the current implementation before changing contracts. Historical Generic Tutor ancestry remains in Git/ADRs, not in the active learner-state contract.

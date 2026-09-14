@@ -3,7 +3,7 @@
  *
  * The coding surface never treats source inspection as executable correctness. A compatible
  * agent may run a real verifier in the local workspace and return A2's VerificationOutput;
- * legacy descriptive `test_cases` remain explicitly unverified.
+ * stored descriptive `test_cases` remain explicitly unverified.
  */
 
 import type { Database } from "better-sqlite3";

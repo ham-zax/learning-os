@@ -1,8 +1,8 @@
 /**
  * Obsidian vault sync for concept material plus objective-level learner state.
  *
- * Legacy scalar concept mastery/SM-2 columns are provenance only and are not
- * exported as current progress.
+ * Objective evidence/projections are the learner-progress authority; concept
+ * rows remain descriptive curriculum metadata.
  */
 
 import type Database from "better-sqlite3";

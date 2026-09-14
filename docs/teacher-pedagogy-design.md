@@ -33,7 +33,7 @@ This design adds that missing pedagogical layer without creating a second learne
 7. Preserve Learning OS as the sole authority for sequencing, mastery-related projections, weaknesses, review timing, and resumable learner state.
 8. Avoid new kernel state until an observed teaching requirement cannot be represented by existing contracts.
 
-First-wave scope is the replaceable AI teacher/agent experience. Existing built-in CLI presenters such as `generateExploreSequence()`, `generateTeachBackSession()`, and `generateQuizBatch()` are not being brought to pedagogy parity in this wave.
+The replaceable AI teacher/agent is the primary experience. Built-in CLI presenters such as `generateGuidedDiscoverySequence()`, `generateTeachBackSession()`, and `generateRetrievalBatch()` remain fallback presentation strategies rather than a second pedagogy engine.
 
 ## Non-goals
 

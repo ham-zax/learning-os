@@ -1,10 +1,7 @@
+# Retired Generic Tutor local state may still exist in older checkouts; keep it private.
 state/
-!state/.gitkeep
 .pipeline/
 CLAUDE.local.md
-.claude/settings.local.json
-# User config overrides (personal, not shared)
-~/.claude/config/
 # TypeScript
 node_modules/
 dist/
@@ -23,7 +20,6 @@ knowledge/grpc-basics.md
 knowledge/payment-systems.md
 knowledge/sql-fundamentals.md
 .DS_Store
-.claude/worktrees/
 knowledge/coding-interview/behavioral-prep.md
 
 # Canonical profile registry.json and tutor.db files may be versioned.

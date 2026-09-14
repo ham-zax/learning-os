@@ -131,30 +131,12 @@ describe("durable attempt subquestions", () => {
       .run(question.seq)).toThrow("durable interaction observations");
   });
 
-  it("migrates a version 16 database with an active attempt without inventing observations", () => {
-    // Remove only migration 17's additions to recreate its pre-migration schema.
-    db.exec(`
-      DROP TABLE attempt_subquestions;
-      DROP TRIGGER attempts_reconstruction_response_requires_submission;
-      DROP TRIGGER attempts_reconstruction_response_immutable;
-      ALTER TABLE attempts DROP COLUMN reconstruction_response_text;
-      PRAGMA user_version = 16;
-    `);
-    const attemptsBefore = db.prepare<[], Record<string, unknown>>("SELECT * FROM attempts").all();
-    const sessionsBefore = db.prepare("SELECT * FROM sessions").all();
+  it("rejects an unsupported historical schema instead of replaying migrations", () => {
+    db.pragma("user_version = 20");
     db.close();
-    db = createDatabase(dbPath);
-    kernel = createTeacherKernel(db);
-    expect(db.pragma("user_version", { simple: true })).toBe(20);
-    expect(db.prepare("SELECT * FROM attempts").all()).toEqual(
-      attemptsBefore.map((attempt) => ({ ...attempt, reconstruction_response_text: null })),
+
+    expect(() => createDatabase(dbPath)).toThrow(
+      "Unsupported learner database schema v20. Learning OS now requires schema v21",
     );
-    expect(db.prepare("SELECT * FROM sessions").all()).toEqual(sessionsBefore);
-    expect(kernel.resumeSession(sessionId).activeAttemptState?.subquestions).toEqual([]);
-    expect(db.pragma("foreign_key_check")).toEqual([]);
-    expect(db.pragma("integrity_check")).toEqual([{ integrity_check: "ok" }]);
-    kernel.openAttemptSubquestion(attemptId, {
-      contextText, promptText: "Continue the interrupted task?", questionChunking: "default",
-    });
   });
 });

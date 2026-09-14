@@ -1,7 +1,7 @@
 /**
- * Quiz mode — retrieval practice generator.
+ * Retrieval-practice presentation strategy.
  *
- * Generates quiz batches from concept files. Each batch contains one
+ * Generates retrieval batches from concept files. Each batch contains one
  * random practice question per concept (falling back to key-point-based
  * generation if none exist). This module produces prompts only; it does
  * not interact with the user or mutate state.
@@ -11,7 +11,7 @@ import type { ConceptFile } from "../../knowledge/types.js";
 
 // ─── Exported Types ──────────────────────────────────────────────────────────
 
-export interface QuizQuestion {
+export interface RetrievalQuestion {
   conceptId: string;
   conceptTitle: string;
   question: string;
@@ -20,8 +20,8 @@ export interface QuizQuestion {
   surfaceId: string;
 }
 
-export interface QuizBatch {
-  questions: QuizQuestion[];
+export interface RetrievalBatch {
+  questions: RetrievalQuestion[];
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ const DEFAULT_COUNT = 5;
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Generate a batch of quiz questions from concept files.
+ * Generate a batch of retrieval questions from concept files.
  *
  * Selection strategy:
  * - Pick 1 random practice question per concept.
@@ -40,14 +40,14 @@ const DEFAULT_COUNT = 5;
  *
  * @param concepts  Concept files to draw questions from.
  * @param count     Maximum number of questions (default 5).
- * @returns         A QuizBatch with ordered learner-facing questions.
+ * @returns         A retrieval batch with ordered learner-facing questions.
  */
-export function generateQuizBatch(
+export function generateRetrievalBatch(
   concepts: ConceptFile[],
   count: number = DEFAULT_COUNT,
-): QuizBatch {
+): RetrievalBatch {
   const selected = concepts.slice(0, count);
-  const questions: QuizQuestion[] = selected.map((concept, index) =>
+  const questions: RetrievalQuestion[] = selected.map((concept, index) =>
     buildQuestion(concept, index + 1),
   );
 
@@ -57,10 +57,10 @@ export function generateQuizBatch(
 // ─── Internals ───────────────────────────────────────────────────────────────
 
 /**
- * Build a single QuizQuestion from a concept file.
+ * Build one retrieval question from a concept file.
  * Prefers a random practice question; falls back to generating one from key points.
  */
-function buildQuestion(concept: ConceptFile, questionIndex: number): QuizQuestion {
+function buildQuestion(concept: ConceptFile, questionIndex: number): RetrievalQuestion {
   const { id, title, difficulty } = concept.frontmatter;
 
   let question: string;

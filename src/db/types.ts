@@ -14,14 +14,6 @@ import { z } from "zod";
 
 // ─── Shared enums / constants ───────────────────────────────────────────────
 
-export const ConceptStatus = z.enum([
-  "unseen",
-  "learning",
-  "reviewing",
-  "mastered",
-]);
-export type ConceptStatus = z.infer<typeof ConceptStatus>;
-
 export const DeliveryContext = z.enum([
   "learn",
   "practice",
@@ -357,7 +349,6 @@ export type HintScope = z.infer<typeof HintScopeSchema>;
 export const TopicSchema = z.object({
   id: z.string(),
   name: z.string(),
-  phase: z.number().int().default(1),
   goal: z.string().nullable().default(null),
   deadline: z.string().nullable().default(null),
   created_at: z.string().nullable().default(null),
@@ -375,12 +366,6 @@ export const ConceptSchema = z.object({
   prerequisites: jsonArrayOfStrings.default([]),
   tags: jsonArrayOfStrings.default([]),
   file_path: z.string().nullable().default(null),
-  status: ConceptStatus.default("unseen"),
-  ef: z.number().default(2.5),
-  interval: z.number().int().default(0),
-  repetitions: z.number().int().default(0),
-  next_review: z.string().nullable().default(null),
-  last_grade: z.number().int().nullable().default(null),
   source: z.string().nullable().default(null),
   source_id: z.string().nullable().default(null),
   created_at: z.string().nullable().default(null),
@@ -489,7 +474,6 @@ export const SessionSchema = z.object({
   mode: DeliveryContext,
   started_at: z.string().nullable().default(null),
   ended_at: z.string().nullable().default(null),
-  concepts_reviewed: jsonArrayOfStrings.default([]),
   phase: SessionPhase.default("idle"),
   pending_action: SessionPendingAction.default("none"),
   active_challenge_id: z.string().nullable().default(null),
@@ -507,20 +491,6 @@ export const InteractionPreferencesRowSchema = z.object({
   updated_at: z.string(),
 });
 export type InteractionPreferencesRow = z.infer<typeof InteractionPreferencesRowSchema>;
-
-// ─── reviews ────────────────────────────────────────────────────────────────
-
-export const ReviewSchema = z.object({
-  id: z.number().int(),
-  session_id: z.number().int().nullable().default(null),
-  concept_id: z.string(),
-  grade: z.number().int(),
-  mode: DeliveryContext,
-  response: z.string().nullable().default(null),
-  feedback: z.string().nullable().default(null),
-  created_at: z.string().nullable().default(null),
-});
-export type Review = z.infer<typeof ReviewSchema>;
 
 // ─── synced_gaps ────────────────────────────────────────────────────────────
 
@@ -831,7 +801,6 @@ export const schemas = {
   objective_projections: ObjectiveProjectionSchema,
   sessions: SessionSchema,
   interaction_preferences: InteractionPreferencesRowSchema,
-  reviews: ReviewSchema,
   synced_gaps: SyncedGapSchema,
   synced_signals: SyncedSignalSchema,
   problems: ProblemSchema,

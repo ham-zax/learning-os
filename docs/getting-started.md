@@ -154,7 +154,7 @@ npm run tutor -- profile create "My Profile"
 
 That command intentionally creates no mastery, curriculum, or goal by itself.
 
-If an older installation has `data/tutor.db`, Learning OS exposes it as a preserved legacy profile rather than copying or resetting it.
+Learning OS uses managed profiles only. A database from a retired pre-profile layout must be migrated explicitly before it can be opened by the current runtime.
 
 ## 5. Resume or choose one next action
 
@@ -204,7 +204,7 @@ npm run tutor -- stats
 npm run tutor -- goal <goal-id>
 ```
 
-Ordinary learning sessions, interviews, reviews, and resumed sessions all feed the same evidence model. `due` and `stats` report objective-level FSRS/readiness state rather than legacy scalar concept status. A learner does not get a separate interview-only notion of mastery.
+Ordinary learning sessions, interviews, reviews, and resumed sessions all feed the same evidence model. `due` and `stats` report objective-level FSRS/readiness state. A learner does not get a separate interview-only notion of mastery.
 
 Run:
 

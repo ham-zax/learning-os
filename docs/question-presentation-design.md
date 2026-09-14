@@ -1,10 +1,10 @@
 # Durable question presentation
 
-Status: Approved and implemented on 2026-09-14. [Implementation plan and verification](question-presentation-implementation-plan.md). The final contract is the migration-20 clean cutover: every persisted question is presentation-ready, chunking is explicit, and atomic questions are scoped to one frozen criterion.
+Status: Approved and implemented. The current schema requires every persisted question to be presentation-ready, with explicit chunking and atomic questions scoped to one frozen criterion.
 
 ## Observed problem
 
-Live teaching repeatedly supplied a solution when the learner requested task context, returned to oversized questions after a chunking request, and regenerated reconstruction prompts on restart. Updated skill instructions alone did not correct this. Migration 17 only permits subquestions before submission, while causal reconstruction happens after assessment. A reconstruction obligation therefore survives restart without its exact pending question. A later live test showed the follow-on failure: the agent saved a four-demand reconstruction prompt and labeled it `atomic`, and the kernel faithfully repeated it because `atomic` was only metadata.
+Live teaching repeatedly supplied a solution when the learner requested task context, returned to oversized questions after a chunking request, and regenerated reconstruction prompts on restart. Protocol instructions alone were insufficient: the kernel needed to persist the exact pending question and make atomic scope structural rather than trusting an `atomic` label.
 
 ## Decision
 
@@ -39,16 +39,10 @@ Question creation and replacement both take a complete presentation contract. `c
 
 Another long skill rule leaves regeneration uncontrolled. A fully controlled chat renderer could enforce exact output but is a larger product change. This design makes the existing agent path concrete and repeatable without claiming control over arbitrary external-agent prose. It does not semantically certify one reasoning demand, detect answer leaks, add a scheduler, persist transcripts, or require exercises/scratchpads.
 
-## Migration and verification
+## Verification boundary
 
-Migration 20 rebuilds `attempt_subquestions` into the final shape. It requires non-empty context on every persisted row, converts pre-scope `atomic` metadata to `default` rather than pretending it was criterion-scoped, enforces the default/atomic scope shape in SQL, and validates atomic criterion ownership on insertion. There is no runtime compatibility branch for partial or unscoped atomic questions. Exercise migration on temporary databases before opening canonical learner state.
+The current schema requires non-empty context on every persisted row, enforces the default/atomic scope shape in SQL, and validates atomic criterion ownership on insertion. There is no runtime compatibility branch for partial or unscoped atomic questions.
 
-Regression scenarios: required repair -> broad question -> atomic replacement -> repeated context read -> database reopen -> same small question and code; no teaching content in presentation; stale answer/replacement rejected; invalid replacement rolls back; completed reconstruction refuses a pending question while opt-out closes truthfully; answered question does not auto-generate another; response-mode behavior and migrated history remain intact.
+Important regression scenarios are: required repair -> broad question -> atomic replacement -> repeated context read -> database reopen -> same small question and code; no teaching content in presentation; stale answer/replacement rejected; invalid replacement rolls back; completed reconstruction refuses a pending question while opt-out closes truthfully; and an answered question does not auto-generate another.
 
-Automated tests establish persistence and rendering. A subsequent live agent evaluation is required to establish whether the agent actually presents the returned material without embellishing it.
-
-## Delivery verification
-
-All 48 tests across nine files and the TypeScript build passed. Strict checking of the affected test files passed. A temporary checkout of the actual committed version 17 code verified that its answered/pending records upgrade to version 18 with exact historical text and IDs intact.
-
-Both canonical profiles were backed up outside the repository, upgraded and checkpointed: frontend from schema 17 and backend-systems from schema 16 to schema 18. Comparing every pre-existing column and row with the backups found no changes across frontend's 33 tables and backend's 32 tables. Both passed SQLite integrity and foreign-key checks. The frontend learner changes that predated implementation were preserved. No pending question or learner response was invented during migration.
+Persistence/rendering checks can establish the kernel boundary. Live agent evaluation is still required to establish whether a particular conversational agent presents the returned material without embellishing it.

@@ -539,7 +539,7 @@ Examples:
 
 - Never infer mastery from years of experience, confidence, familiarity, resume content, or previous chat claims.
 - Never write readiness, transfer, durability, weakness, review-card, or evidence state directly.
-- Never use legacy `concepts.status`, `ef`, `interval`, `repetitions`, `next_review`, or `last_grade` as learner truth.
+- Treat concept rows as descriptive curriculum metadata only; learner truth comes from objective evidence/projections and FSRS review state.
 - Never reveal private solution/rubric material before the learner response when doing so would compromise assessment.
 - Never show a material hint before recording the hint observation.
 - Never silently switch learner profiles.

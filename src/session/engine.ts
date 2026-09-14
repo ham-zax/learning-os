@@ -34,7 +34,6 @@ export interface SessionConfig {
   topicId: string;
   mode: DeliveryContext;
   maxConcepts?: number; // default: based on daily_minutes
-  maxMinutes?: number; // default: from config
 }
 
 export interface SessionState {
@@ -195,18 +194,12 @@ export function startSession(
   const dailyMinutes = DEFAULT_DAILY_MINUTES;
   const maxConcepts =
     config.maxConcepts ?? defaultMaxConcepts(dailyMinutes, mode);
-  const maxMinutes = config.maxMinutes ?? dailyMinutes;
 
   // Select concepts before persisting so unsupported contexts cannot create sessions.
   const concepts = selectConcepts(db, topicId, mode, maxConcepts);
 
   // Create session record
   const session = createSession(db, { topicId, mode });
-
-  // Update session with selected concept IDs
-  updateSession(db, session.id, {
-    conceptsReviewed: concepts.map((c) => c.id),
-  });
 
   // Update topic's last_session timestamp
   updateTopic(db, topicId, {
