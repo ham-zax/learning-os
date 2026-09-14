@@ -269,3 +269,11 @@ Review corrections:
 Validation: `npm test` passed all 45 tests across eight files; `npm run build` passed; the two affected test files also passed a separate strict TypeScript check because the production `tsconfig.json` excludes tests. Review used current source directly where the graph reported stale metadata or excluded paths. Canonical learner databases were not opened or changed; migration behavior was exercised on temporary fixtures.
 
 The continuity implementation is ready within this scope. Evaluate representative learner conversations next before claiming reliable adaptive teaching across agents. Exercises and scratchpads remain optional.
+
+## 11. Live failure follow-up: question presentation
+
+Subsequent learner-provided exchanges showed that updated skills alone did not ensure self-contained, appropriately sized questions. The teacher supplied solutions in response to context requests and regenerated broad reconstruction prompts. Source inspection also found that migration 17's subquestion boundary rejected submitted attempts, leaving reconstruction without a saved pending question.
+
+The learner approved [durable question presentation](question-presentation-design.md). Migration 18 extends existing question records with response/reconstruction purpose, separate context, episode chunking and immutable replacement history. Continuation now provides a focused `presentation`; question replacement preserves context/chunking, answers remain sequence-bound, and missing preparation is explicit. The owning implementation is [kernel/questions.ts](../src/kernel/questions.ts); teacher instructions use its ready Markdown instead of regenerating the resumed question from history.
+
+Validation: all 48 tests across nine files passed, production build and strict checking of affected test files passed. An additional upgrade check created answered/pending questions with the actual committed version 17 implementation (`8699307`) in a temporary checkout, upgraded them with the current code, and verified exact historical text/IDs, unchanged sessions, explicit missing context, and valid SQLite integrity/foreign keys. These checks establish the persistence and rendering boundary. They do not establish that an external chat agent always emits the prepared Markdown unchanged; a live session with the new API remains the behavioral evaluation.

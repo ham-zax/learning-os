@@ -90,6 +90,9 @@ orient -> retrieve -> construct model -> predict/commit
 
 Key rules:
 
+- question delivery: use continuation's `presentation`; display `question.markdown` and stop. `needs_question` requires preparing a saved question with separate task context, including during reconstruction; `needs_context` requires replacing the pending question with its missing setup. Use `getSessionQuestionPresentation(sessionId)` after preparation. `answered` requires reviewing the learner response, not automatic bonus questions; `not_waiting` follows the existing lifecycle.
+- context/size complaints: redisplay context or use `replaceAttemptSubquestion(attemptId, { seq, promptText, contextText?, questionChunking? })`. Preserve original criteria and assistance semantics. Episode-local atomic chunking survives restart. A context request is not an answer or a request for the solution; collect reconstruction before repeating prior teaching.
+
 - split-question identity: `answerAttemptSubquestion(attemptId, { seq, responseText })` must name the pending question returned at opening or resumption. Preserve that identity across retries; learner opt-out may abandon the unsubmitted session without fabricating a response;
 
 - visible teaching: hidden reasoning/tool output never counts as learner-visible explanation or a `*_shown` exposure;

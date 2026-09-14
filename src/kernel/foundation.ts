@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
+import { getAttemptSubquestions } from "./questions.js";
+export { getAttemptSubquestions } from "./questions.js";
 import {
   AttemptSchema,
-  AttemptSubquestionSchema,
   CapabilitySchema,
   ChallengeAttemptDispositionRowSchema,
   ChallengeAuthoringContractRowSchema,
@@ -76,15 +77,8 @@ export interface SubmitAttemptInput {
   activeTimeSeconds?: number;
 }
 
-export interface OpenAttemptSubquestionInput {
-  promptText: string;
-}
-
-export interface AnswerAttemptSubquestionInput {
-  /** Sequence returned when the specific subquestion was opened. */
-  seq: number;
-  responseText: string;
-}
+export { openAttemptSubquestion, answerAttemptSubquestion } from "./questions.js";
+export type { OpenAttemptSubquestionInput, AnswerAttemptSubquestionInput } from "./questions.js";
 
 export interface RecordHintUseInput {
   level: number;
@@ -624,16 +618,6 @@ export function getAttempt(
   return row === undefined ? undefined : AttemptSchema.parse(row);
 }
 
-export function getAttemptSubquestions(
-  db: Database.Database,
-  attemptId: number,
-): AttemptSubquestion[] {
-  const rows = db
-    .prepare(`SELECT * FROM attempt_subquestions WHERE attempt_id = ? ORDER BY seq`)
-    .all(attemptId);
-  return AttemptSubquestionSchema.array().parse(rows);
-}
-
 export function getChallengeAttemptDisposition(
   db: Database.Database,
   attemptId: number,
@@ -707,104 +691,6 @@ export function openAttempt(
   })();
 }
 
-export function openAttemptSubquestion(
-  db: Database.Database,
-  attemptId: number,
-  input: OpenAttemptSubquestionInput,
-): AttemptSubquestion {
-  const promptText = requireNonEmpty(input.promptText, "Subquestion prompt");
-  return db.transaction(() => {
-    const attempt = getAttemptOrThrow(db, attemptId);
-    if (attempt.challenge_id === null || attempt.session_id === null) {
-      throw new Error(`Attempt is not an active session challenge: ${attemptId}`);
-    }
-    if (attempt.submitted_at !== null) {
-      throw new Error(`Cannot open a subquestion after attempt submission: ${attemptId}`);
-    }
-    const session = SessionSchema.parse(
-      db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(attempt.session_id),
-    );
-    if (
-      session.active_attempt_id !== attemptId ||
-      session.phase !== "awaiting_response" ||
-      session.pending_action !== "collect_response"
-    ) {
-      throw new Error(`Attempt is not the active response target: ${attemptId}`);
-    }
-    const pending = db
-      .prepare(`SELECT seq FROM attempt_subquestions WHERE attempt_id = ? AND response_text IS NULL`)
-      .get(attemptId) as { seq: number } | undefined;
-    if (pending) {
-      throw new Error(`Attempt ${attemptId} already has a pending subquestion`);
-    }
-
-    const openedAt = new Date().toISOString();
-    const info = db
-      .prepare(
-        `INSERT INTO attempt_subquestions (attempt_id, prompt_text, opened_at)
-         VALUES (?, ?, ?)`,
-      )
-      .run(attemptId, promptText, openedAt);
-    const row = db
-      .prepare(`SELECT * FROM attempt_subquestions WHERE seq = ?`)
-      .get(Number(info.lastInsertRowid));
-    return AttemptSubquestionSchema.parse(row);
-  })();
-}
-
-export function answerAttemptSubquestion(
-  db: Database.Database,
-  attemptId: number,
-  input: AnswerAttemptSubquestionInput,
-): AttemptSubquestion {
-  if (!Number.isSafeInteger(input.seq) || input.seq <= 0) {
-    throw new Error("Subquestion sequence must be a positive safe integer");
-  }
-  const responseText = requireNonEmpty(input.responseText, "Subquestion response");
-  return db.transaction(() => {
-    const attempt = getAttemptOrThrow(db, attemptId);
-    if (attempt.submitted_at !== null) {
-      throw new Error(`Cannot answer a subquestion after attempt submission: ${attemptId}`);
-    }
-    if (attempt.session_id === null) {
-      throw new Error(`Attempt is not attached to a session: ${attemptId}`);
-    }
-    const session = SessionSchema.parse(
-      db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(attempt.session_id),
-    );
-    if (
-      session.active_attempt_id !== attemptId ||
-      session.phase !== "awaiting_response" ||
-      session.pending_action !== "collect_response"
-    ) {
-      throw new Error(`Attempt is not the active response target: ${attemptId}`);
-    }
-    const pending = db
-      .prepare(
-        `SELECT * FROM attempt_subquestions
-         WHERE attempt_id = ? AND seq = ? AND response_text IS NULL`,
-      )
-      .get(attemptId, input.seq);
-    if (pending === undefined) {
-      throw new Error(`Subquestion ${input.seq} is not pending for attempt ${attemptId}`);
-    }
-    const subquestion = AttemptSubquestionSchema.parse(pending);
-    const answeredAt = new Date().toISOString();
-    const update = db
-      .prepare(
-        `UPDATE attempt_subquestions
-         SET response_text = ?, answered_at = ?
-         WHERE seq = ? AND response_text IS NULL`,
-      )
-      .run(responseText, answeredAt, subquestion.seq);
-    if (update.changes !== 1) {
-      throw new Error(`Attempt subquestion could not be answered: ${subquestion.seq}`);
-    }
-    const row = db.prepare(`SELECT * FROM attempt_subquestions WHERE seq = ?`).get(subquestion.seq);
-    return AttemptSubquestionSchema.parse(row);
-  })();
-}
-
 export function submitAttempt(
   db: Database.Database,
   attemptId: number,
@@ -820,7 +706,7 @@ export function submitAttempt(
       throw new Error(`Attempt is already submitted: ${attemptId}`);
     }
     const pendingSubquestion = db
-      .prepare(`SELECT seq FROM attempt_subquestions WHERE attempt_id = ? AND response_text IS NULL`)
+      .prepare(`SELECT seq FROM attempt_subquestions WHERE attempt_id = ? AND response_text IS NULL AND superseded_at IS NULL`)
       .get(attemptId) as { seq: number } | undefined;
     if (pendingSubquestion) {
       throw new Error(
@@ -1449,6 +1335,10 @@ export function resolveSessionReconstruction(
     const activeTimeSeconds = validateActiveTimeSeconds(input.activeTimeSeconds);
     persistActiveTime(db, session.active_attempt_id, activeTimeSeconds);
     if (input.outcome === "completed") {
+      const pending = db.prepare(`SELECT seq FROM attempt_subquestions
+        WHERE attempt_id = ? AND purpose = 'reconstruction'
+          AND response_text IS NULL AND superseded_at IS NULL`).get(attempt.id);
+      if (pending) throw new Error(`Attempt ${attempt.id} has an unanswered reconstruction question`);
       const responseText = requireNonEmpty(input.responseText, "Reconstruction response");
       const update = db
         .prepare(

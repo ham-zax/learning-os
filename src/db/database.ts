@@ -1387,6 +1387,73 @@ const migrations: Migration[] = [
       })();
     },
   },
+  {
+    version: 18,
+    up: (db) => {
+      db.transaction(() => {
+        // Both operations must target the active question's actual lifecycle.
+        const activeQuestion = `
+          SELECT 1 FROM attempts attempt
+          JOIN sessions session ON session.id = attempt.session_id
+          WHERE attempt.id = NEW.attempt_id AND attempt.challenge_id IS NOT NULL
+            AND session.active_attempt_id = attempt.id
+            AND (
+              (NEW.purpose = 'response' AND attempt.submitted_at IS NULL
+                AND session.phase = 'awaiting_response' AND session.pending_action = 'collect_response')
+              OR
+              (NEW.purpose = 'reconstruction' AND attempt.submitted_at IS NOT NULL
+                AND session.phase = 'feedback' AND session.pending_action = 'present_feedback'
+                AND session.reconstruction_status = 'required')
+            )`;
+        db.exec(`
+          ALTER TABLE attempt_subquestions ADD COLUMN purpose TEXT NOT NULL DEFAULT 'response'
+            CHECK (purpose IN ('response', 'reconstruction'));
+          ALTER TABLE attempt_subquestions ADD COLUMN context_text TEXT
+            CHECK (context_text IS NULL OR length(trim(context_text)) > 0);
+          ALTER TABLE attempt_subquestions ADD COLUMN question_chunking TEXT NOT NULL DEFAULT 'default'
+            CHECK (question_chunking IN ('default', 'atomic'));
+          ALTER TABLE attempt_subquestions ADD COLUMN superseded_at TEXT;
+
+          DROP INDEX idx_attempt_subquestions_one_pending;
+          CREATE UNIQUE INDEX idx_attempt_subquestions_one_pending ON attempt_subquestions(attempt_id)
+            WHERE response_text IS NULL AND superseded_at IS NULL;
+          DROP TRIGGER attempt_subquestions_require_active_attempt;
+          DROP TRIGGER attempt_subquestions_identity_immutable;
+          DROP TRIGGER attempt_subquestions_answer_once;
+          DROP TRIGGER attempt_subquestions_answer_before_submission;
+
+          CREATE TRIGGER attempt_subquestions_require_active_attempt
+          BEFORE INSERT ON attempt_subquestions
+          WHEN NOT EXISTS (${activeQuestion}) OR NEW.response_text IS NOT NULL
+            OR NEW.answered_at IS NOT NULL OR NEW.superseded_at IS NOT NULL
+          BEGIN SELECT RAISE(ABORT, 'subquestions require the active response or reconstruction target'); END;
+
+          CREATE TRIGGER attempt_subquestions_identity_immutable
+          BEFORE UPDATE OF seq, attempt_id, prompt_text, opened_at, purpose, context_text, question_chunking
+          ON attempt_subquestions
+          BEGIN SELECT RAISE(ABORT, 'attempt subquestion identity is immutable'); END;
+
+          CREATE TRIGGER attempt_subquestions_answer_once
+          BEFORE UPDATE OF response_text, answered_at ON attempt_subquestions
+          WHEN OLD.response_text IS NOT NULL OR OLD.answered_at IS NOT NULL
+            OR OLD.superseded_at IS NOT NULL OR NEW.superseded_at IS NOT NULL
+            OR NEW.response_text IS NULL OR NEW.answered_at IS NULL
+          BEGIN SELECT RAISE(ABORT, 'attempt subquestions may be answered exactly once'); END;
+
+          CREATE TRIGGER attempt_subquestions_update_active
+          BEFORE UPDATE OF response_text, answered_at, superseded_at ON attempt_subquestions
+          WHEN NOT EXISTS (${activeQuestion})
+          BEGIN SELECT RAISE(ABORT, 'subquestion is not the active response or reconstruction target'); END;
+
+          CREATE TRIGGER attempt_subquestions_supersede_once
+          BEFORE UPDATE OF superseded_at ON attempt_subquestions
+          WHEN OLD.superseded_at IS NOT NULL OR OLD.response_text IS NOT NULL
+            OR NEW.superseded_at IS NULL OR NEW.response_text IS NOT NULL
+          BEGIN SELECT RAISE(ABORT, 'only pending subquestions may be superseded'); END;
+        `);
+      })();
+    },
+  },
 ];
 
 // ─── Public API ──────────────────────────────────────────────────────────────

@@ -668,6 +668,10 @@ export const AttemptSubquestionSchema = z.object({
   response_text: z.string().nullable().default(null),
   opened_at: z.string(),
   answered_at: z.string().nullable().default(null),
+  purpose: z.enum(["response", "reconstruction"]).default("response"),
+  context_text: z.string().nullable().default(null),
+  question_chunking: z.enum(["default", "atomic"]).default("default"),
+  superseded_at: z.string().nullable().default(null),
 });
 export type AttemptSubquestion = z.infer<typeof AttemptSubquestionSchema>;
 

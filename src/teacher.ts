@@ -75,6 +75,8 @@ import {
 } from "./revision-notes.js";
 import { getStudyContinuation } from "./study/continuation.js";
 import type { StudyContinuationInput } from "./study/continuation.js";
+import { getSessionQuestionPresentation, replaceAttemptSubquestion } from "./kernel/questions.js";
+import type { ReplaceAttemptSubquestionInput } from "./kernel/questions.js";
 import { derivePedagogyDirective } from "./teacher-pedagogy.js";
 import type {
   RevisionNoteContextInput,
@@ -92,6 +94,9 @@ export function createTeacherKernel(db: Database.Database) {
   return {
     getStudyContinuation: (input: StudyContinuationInput) =>
       getStudyContinuation(db, input),
+    getSessionQuestionPresentation: (sessionId: number) => getSessionQuestionPresentation(db, sessionId),
+    replaceAttemptSubquestion: (attemptId: number, input: ReplaceAttemptSubquestionInput) =>
+      replaceAttemptSubquestion(db, attemptId, input),
     getTodayMission: (input: TodayMissionInput) => getTodayMission(db, input),
     resolveRequestedChallenge: (input: RequestedChallengeInput) =>
       resolveRequestedChallenge(db, input),

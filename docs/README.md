@@ -15,6 +15,9 @@ If you only want to use the product, start with `getting-started.md`. You do not
 
 ## Integrate an AI teacher
 
+- [Durable question presentation](question-presentation-design.md) — saved task context and question delivery across response collection, reconstruction and fresh-session handoff.
+- [Question presentation implementation record](question-presentation-implementation-plan.md) — completed migration, API, integration and verification steps.
+
 - [Teacher-agent protocol](teacher-agent-protocol.md) — normative rules for any compatible conversational agent so Learning OS retains ownership of learner state, sequencing, evidence, exposure, and next-action decisions.
 - [`learning-os-teacher` Skill](../skills/learning-os-teacher/SKILL.md) — portable agent instructions and progressively loaded pedagogy playbooks for reasoning/retrieval, debugging/repair, problem-solving/implementation, and performance/interview work.
 - [Teacher pedagogy design](teacher-pedagogy-design.md) — rationale behind the evidence-safe teaching repertoire and challenge-authoring guidance.

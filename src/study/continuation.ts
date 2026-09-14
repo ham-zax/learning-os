@@ -3,6 +3,8 @@ import { getGoalPreparation, getTopic } from "../db/database.js";
 import type { DeliveryContext } from "../db/types.js";
 import { listResumableSessions } from "../kernel/foundation.js";
 import type { ResumedSession } from "../kernel/foundation.js";
+import { getSessionQuestionPresentation } from "../kernel/questions.js";
+import type { QuestionPresentation } from "../kernel/questions.js";
 import { getTodayMission } from "../plan/today.js";
 import type { DailyMission, DailyMissionItem, OneEpisodeMission } from "../plan/today.js";
 
@@ -21,6 +23,7 @@ export type StudyContinuation =
   | {
       kind: "resume";
       session: ResumedSession;
+      presentation: QuestionPresentation;
       additionalResumableSessionIds: number[];
     }
   | {
@@ -56,6 +59,7 @@ export function getStudyContinuation(
     return {
       kind: "resume",
       session,
+      presentation: getSessionQuestionPresentation(db, session.session.id),
       additionalResumableSessionIds: resumable
         .filter((entry) => entry.session.id !== session.session.id)
         .map((entry) => entry.session.id),

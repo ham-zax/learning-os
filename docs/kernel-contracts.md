@@ -208,7 +208,7 @@ Do not duplicate a large learner response into each per-objective evidence event
 
 ### `attempt_subquestions`
 
-Bounded restart state for a frozen challenge that the teacher deliberately splits across turns. Each row stores one learner-visible subquestion and, once supplied, the learner's exact response. At most one unanswered subquestion may exist for an attempt. Rows belong only to the active unsubmitted session attempt; the prompt identity is immutable, an answer may be recorded exactly once, and rows are never deleted.
+Bounded restart state for response collection or required causal reconstruction. Each row stores one learner-visible question, separate `context_text`, `purpose` (`response|reconstruction`), `question_chunking` (`default|atomic`), and once supplied, the exact learner response. At most one unanswered, non-superseded question may exist per attempt. Response questions require the active unsubmitted collect-response attempt; reconstruction questions require the active submitted attempt in feedback with reconstruction required. Prompt/context identity is immutable, an answer may be recorded exactly once, and rows are never deleted. Replacing an unanswered question records `superseded_at` and inserts its successor atomically; stale answers/replacements are rejected.
 
 This table is not a provider transcript and must not be used as generic teacher memory. Persist only decomposition needed to resume the current frozen challenge without repeating answered parts or inventing learner responses. Subquestion responses are interaction observations, not independent evidence; assessment still uses the final submitted attempt under the frozen criteria.
 
@@ -969,7 +969,7 @@ The learner-visible payload excludes private solution material.
 When the teacher decomposes one frozen challenge across multiple turns and interruption would otherwise lose what is pending, persist the exact learner-visible subquestion before presenting it:
 
 ```text
-openAttemptSubquestion(attemptId, { promptText })
+openAttemptSubquestion(attemptId, { promptText, contextText?, questionChunking? })
 → durable pending subquestion
 ```
 
@@ -980,7 +980,19 @@ answerAttemptSubquestion(attemptId, { seq, responseText })
 → same subquestion with durable learner response
 ```
 
-Use the `seq` returned by `openAttemptSubquestion(...)` or recovered from the pending row in `resumeSession(...)`. An answer must identify that specific pending question; a stale/retried answer cannot answer its successor. Only the active unsubmitted session attempt may use this boundary. At most one subquestion may be pending. `submitAttempt(...)` refuses submission while a subquestion remains unanswered. `resumeSession(...)` returns the ordered subquestions as part of `activeAttemptState`, so a fresh teacher can continue the same frozen challenge without relying on provider chat history. A learner who stops can use `abandonUnsubmittedSession(...)`; the unanswered observation remains preserved without failure evidence. Do not use this API for ordinary unsplit questions or as a transcript sink.
+Use the `seq` returned at opening or recovered from resumption. An answer must identify that specific pending question. Both response and required reconstruction phases use this boundary; purpose is derived from session state. Submission and completed reconstruction refuse to bypass their unanswered non-superseded question. A learner may abandon unsubmitted work or explicitly opt out of reconstruction without a fabricated answer. Full `resumeSession(...)` retains the ordered history for assessment.
+
+`replaceAttemptSubquestion(attemptId, { seq, promptText, contextText?, questionChunking? })` replaces the specific pending question after a wording/context/size complaint. Omitted context and chunking are preserved; later questions inherit the most recent chunking, initially falling back to the profile preference. This is episode-local and does not establish a lasting preference or change frozen criteria. Record answer-bearing decomposition through the existing assistance boundary before showing it.
+
+`getSessionQuestionPresentation(sessionId)` returns a read-only focused presentation, also exposed as `getStudyContinuation(...).presentation` on the `resume` branch:
+
+- `question`: orientation, exact task context and pending question rendered as `markdown`, plus purpose, sequence and chunking. No teaching artifacts, previous answers or assessment rationale are copied into this view.
+- `needs_question`: prepare a question under existing criteria; no saved question exists for this phase.
+- `needs_context`: replace the identified legacy pending question with its exact relevant setup.
+- `answered`: review/integrate the recorded response; do not automatically generate another question.
+- `not_waiting`: follow the existing assessment/verification/feedback/closure lifecycle.
+
+These fields cannot prove that teacher-authored context is neutral or that an external agent displays only the returned Markdown. Use exact relevant task material; keep solutions in the existing assistance owner. See [question presentation design](question-presentation-design.md) for the scope and limits.
 
 ### 4. Record hint use
 

@@ -2,13 +2,24 @@
 name: learning-os-teacher
 description: >-
   Use when an agent acts as a learner-facing Learning OS coding/technical teacher, interviewer,
-  onboarding guide, or study coach; chooses or resumes study; handles an active
-  attempt, hint, explanation, assessment, progress question, or learner profile;
-  or continues a Learning OS learner in a connected web, CLI, or IDE session using
-  repository/WSL access to read or update durable Learning OS state.
+  onboarding guide, or study coach; chooses or resumes study; handles or resumes an active
+  attempt, split subquestion, causal-repair reconstruction, hint, explanation, assessment,
+  progress question, or learner profile; or continues a Learning OS learner in a connected
+  web, CLI, or IDE session using repository/WSL access to read or update durable Learning OS state.
 ---
 
 # Learning OS Teacher
+
+## Present a pending question through the kernel
+
+After `getStudyContinuation(...)`, prefer the resume result's `presentation` for the learner-facing question. If its kind is `question`, present `markdown` and stop. It already contains orientation, task context and one saved question; do not append the answer, a tracing procedure, or further questions.
+
+- `needs_question`: prepare the question and neutral task context under the frozen criteria, call `openAttemptSubquestion(attemptId, { promptText, contextText, questionChunking })`, then `getSessionQuestionPresentation(sessionId)`. This works in response collection and required reconstruction.
+- `needs_context`: use `replaceAttemptSubquestion(attemptId, { seq, promptText, contextText })` to restore the missing setup without fabricating historical context.
+- `answered`: inspect and assess/integrate the response. Another part requires an unmet criterion or repair need.
+- `not_waiting`: follow the existing assessment/verification/feedback lifecycle.
+
+A context request redisplays the presentation. A wording/size complaint replaces the identified pending question; `questionChunking: "atomic"` persists one-part-at-a-time delivery for that episode. Neither complaint is an assessed learner answer. Context contains relevant code/facts, not the solution. Reconstruction requests the learner's response before repeating prior teaching. Further answer-bearing help uses the existing exposure/hint boundary. Exercise/scratchpad adoption remains optional.
 
 Act as the conversational teacher **for** Learning OS, not as a replacement learning system.
 

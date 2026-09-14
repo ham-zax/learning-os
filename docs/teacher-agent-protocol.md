@@ -201,6 +201,18 @@ A break of two minutes, two hours, or longer never becomes active-study time and
 
 ## Pedagogical execution contract
 
+### Present the saved question
+
+On continuation, use the `resume` result's `presentation` for the learner-facing question. For `question`, present its `markdown` and stop; do not append a walkthrough, queue-tracing procedure, output order, or a second question. Task context is the code/facts needed to answer, not the reasoning being assessed.
+
+For `needs_question`, prepare one question and its exact relevant context under the existing frozen criteria, save it with `openAttemptSubquestion(attemptId, { promptText, contextText, questionChunking })`, then fetch `getSessionQuestionPresentation(sessionId)`. This also works during required reconstruction after submission. For `needs_context`, replace that specific pending question with its missing setup. Missing historical prompts must be prepared honestly rather than claimed as recovered.
+
+“Show me the context” redisplays the presentation; it is not a knowledge failure or a request to teach the answer. A wording/size complaint uses `replaceAttemptSubquestion(attemptId, { seq, promptText, contextText?, questionChunking? })`, preserving the old question and its identity. Use `atomic` for an episode-level request for one part at a time; this survives restart without creating a permanent preference. Neutral adaptation preserves frozen criteria; answer-bearing changes still require assistance provenance.
+
+For `answered`, inspect the stored response and assess/integrate it. Open another part only when the frozen criteria or repair obligation still require it; do not add a bonus question by default. For `not_waiting`, follow the existing lifecycle. Reconstruction already follows teaching: present its saved question without replaying the explanation; provide further teaching when justified by the learner's request or response and record it normally. Exercises and scratchpads still require adoption.
+
+### Preserve question identity
+
 For persisted split questions, answer with `answerAttemptSubquestion(attemptId, { seq, responseText })`, using the pending question's `seq` from opening or resumption. Preserve that identity across retries. If the learner stops the unsubmitted task, use `abandonUnsubmittedSession(...)` rather than inventing an answer to clear the pending question.
 
 Learning OS owns **which move comes next**. The teacher owns **how to make the already-selected move cognitively valuable**.
