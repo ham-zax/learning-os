@@ -14,7 +14,7 @@ description: >-
 
 After `getStudyContinuation(...)`, first reconcile the current learner message with the saved question. If the message answers it, call `answerAttemptSubquestion` with that question's `seq` and the actual response, then interpret/assess it. A returned `question` describes the state before processing this message; it does not mean repeat the question instead of consuming an answer.
 
-When there is no answer to process and the learner needs the pending question (fresh resumption or an explicit context request), present `presentation.markdown` and stop. It contains orientation, task context and one saved question; do not append the answer, a tracing procedure, or further questions.
+When there is no answer to process and the learner needs the pending question (fresh resumption or an explicit context request), present `presentation.markdown` and stop. It contains orientation, task context and one saved question; do not append the answer, a tracing procedure, or further questions. In learner-facing text, prefer simple, natural language and common words. Avoid system or teaching jargon when a plain phrase works. Say “explain it in your own words,” not “reconstruction” or `pending_action`.
 
 - `needs_question`: prepare one complete question plus neutral task context under the frozen criteria and choose the explicit chunking mode before persisting it. Use `questionChunking: "default"` with no scope, or `questionChunking: "atomic"` with `scopeCriterionId` and `scopeNote`; then call `getSessionQuestionPresentation(sessionId)`. This works in response collection and required reconstruction.
 - `answered`: inspect and assess/integrate the response. Another scoped part requires an unmet criterion or repair need; one narrow answer does not close a multi-criterion reconstruction by itself.
@@ -35,8 +35,9 @@ assistance when present, and close the feedback step without another question.
 For `review_gap`, address the assessed gap: a slip gets brief correction; a
 demonstrated causal misconception gets recorded teaching and focused
 reconstruction. `review_ungradable` is an assessment limitation, not evidence of
-a misconception. For `reconstruct`, use the saved scoped question and existing
-reconstruction closure; it creates no new retrieval evidence.
+a misconception. For `reconstruct`, use the saved scoped question. Ask the learner
+to explain the idea in their own words, without using the internal label. This is
+practice after feedback, not new retrieval evidence.
 
 Before final submission, an ambiguous answer gets one neutral clarification of
 the same criterion through the subquestion lifecycle. Preserve the actual answer

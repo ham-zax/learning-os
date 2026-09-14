@@ -105,7 +105,8 @@ describe("adaptive feedback through the teacher boundary", () => {
     });
     const evidence = db.prepare("SELECT * FROM evidence_events").all();
     const cards = db.prepare("SELECT * FROM review_cards").all();
-    expect(reopen()).toMatchObject({ kind: "resume", feedback: { nextAction: "reconstruct" },
+    expect(reopen()).toMatchObject({ kind: "resume", feedback: { nextAction: "reconstruct",
+      reason: "Use the saved question and ask the learner to explain the idea in their own words. This is practice, not a new test." },
       presentation: { kind: "question", seq: question.seq, questionChunking: "atomic" } });
     expect(() => kernel.completeSessionFeedback(sessionId)).toThrow(/reconstruction/);
     const responseText = "A is before end because the call runs synchronously until await.";

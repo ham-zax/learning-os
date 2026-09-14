@@ -66,7 +66,7 @@ export function getSessionFeedback(db: Database.Database, sessionId: number): Se
   const assessed = { attemptId: state.attempt.id, objectives };
   if (resumed.reconstructionRequired) {
     return { ...assessed, nextAction: "reconstruct", reason:
-      "The recorded explanation requires reconstruction. Use the saved question; this is assisted learning, not new retrieval evidence." };
+      "Use the saved question and ask the learner to explain the idea in their own words. This is practice, not a new test." };
   }
   if (objectives.length !== state.challenge.targets.length) {
     return { ...assessed, nextAction: "assess_response", reason:

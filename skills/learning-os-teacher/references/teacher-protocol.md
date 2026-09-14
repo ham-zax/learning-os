@@ -58,7 +58,10 @@ verification/assessment; for `complete_feedback`, give specific feedback and
 close without further questioning; for `review_gap`, distinguish a slip from a
 causal misconception before choosing repair; for `review_ungradable`, explain
 the assessment limitation; for `reconstruct`, use the saved question and assisted
-reconstruction closure. The view does not interpret free text. Before submission,
+reconstruction closure. These are internal labels. When speaking to the learner,
+prefer simple, natural language and common words. Avoid system or teaching jargon when a
+plain phrase works; say “explain it in your own words” rather than naming the
+internal state. The view does not interpret free text. Before submission,
 clarify an ambiguous answer neutrally using a new subquestion scoped to the same
 criterion, preserving both responses without invented failure or assistance.
 Feedback states what was demonstrated, the exact remaining gap, and why another
@@ -123,7 +126,7 @@ orient -> retrieve -> construct model -> predict/commit
 
 Key rules:
 
-- question delivery: use continuation's `presentation`; display `question.markdown` and stop. `needs_question` requires preparing a complete presentation-ready question with separate task context and explicit chunking, including during reconstruction. A `default` question carries no scope; an `atomic` question must carry `scopeCriterionId` for one frozen criterion plus `scopeNote` stating what a sufficient answer demonstrates. Check that the prompt addresses only that scope without the answer, output order, trace, hint, or explanation. Use `getSessionQuestionPresentation(sessionId)` after preparation. `answered` requires reviewing the learner response, not automatic bonus questions; a narrow answer does not close multi-criterion reconstruction alone; `not_waiting` follows the existing lifecycle.
+- question delivery: use continuation's `presentation`; display `question.markdown` and stop. `needs_question` requires preparing a complete presentation-ready question with separate task context and explicit chunking, including during reconstruction. A `default` question carries no scope; an `atomic` question must carry `scopeCriterionId` for one frozen criterion plus `scopeNote` stating what a sufficient answer demonstrates. Check that the prompt addresses only that scope without the answer, output order, trace, hint, or explanation. Use `getSessionQuestionPresentation(sessionId)` after preparation. `answered` requires reviewing the learner response, not automatic bonus questions; a narrow answer does not close multi-criterion reconstruction alone; `not_waiting` follows the existing lifecycle. Keep learner-facing wording simple and natural; do not show internal labels such as `reconstruction` or `pending_action`.
 - context/size complaints: redisplay the saved presentation or use `replaceAttemptSubquestion(...)` with a complete replacement: `seq`, exact `promptText`, exact `contextText`, explicit `questionChunking`, and atomic scope when applicable. Preserve original criteria and assistance semantics. Episode-local atomic chunking with scope survives restart. A context request is not an answer or a request for the solution; collect reconstruction before repeating prior teaching. A bare acknowledgment of an already-presented pending question waits briefly instead of redisplaying the full markdown; a fresh conversation presents it once.
 
 - split-question identity: `answerAttemptSubquestion(attemptId, { seq, responseText })` must name the pending question returned at opening or resumption. Preserve that identity across retries; learner opt-out may abandon the unsubmitted session without fabricating a response;

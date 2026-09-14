@@ -14,6 +14,12 @@ Reconstruction questions are legal only on the active submitted attempt during f
 
 Add `getSessionQuestionPresentation(sessionId)` and include its result on `getStudyContinuation(...)`'s resume branch. A ready presentation contains a fixed orientation, saved task context, current question, purpose, sequence, chunking, and rendered Markdown. It excludes previous answers, solutions, rubric rationale and teaching artifacts. Existing full resume state remains available for assessment and debugging.
 
+The `purpose` value is for the system, not the learner. Learner-facing Markdown
+uses simple, natural language and common words. For a follow-up after teaching, it says we
+looked at the idea earlier and asks the learner to explain it in their own words.
+If something is still unclear, the teacher can go over it again. Do not show terms
+such as `reconstruction`, `pending_action`, or `retrieval_valid` to the learner.
+
 Missing questions return `needs_question`; there is no persisted partial-question state. Once a question is inserted it already has exact task context, explicit chunking, and any required atomic scope. Once the latest question was answered, return `answered` so the teacher assesses/integrates the response instead of silently preparing a bonus drill. Non-question phases return `not_waiting`.
 
 ## Public operations

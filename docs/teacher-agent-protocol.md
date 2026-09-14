@@ -203,9 +203,9 @@ A break of two minutes, two hours, or longer never becomes active-study time and
 
 ### Present the saved question
 
-On continuation, first reconcile the current learner message with the saved question. If the message answers it, record the actual response with `answerAttemptSubquestion` and its saved `seq`, then interpret/assess it. A `question` presentation describes durable state before processing the incoming message; it does not instruct the teacher to repeat the question instead of consuming an answer.
+On continuation, first reconcile the current learner message with the saved question. If the message answers it, record the actual response with `answerAttemptSubquestion` and its saved `seq`, then interpret/assess it. A `question` presentation describes durable state before processing the incoming message; it does not instruct the teacher to repeat the question instead of consuming an answer. Terms such as `reconstruction`, `pending_action`, and `retrieval_valid` are for the teacher/kernel, not the learner. In learner-facing text, prefer simple, natural language and common words. Avoid system or teaching jargon when a plain phrase works.
 
-When no answer needs processing and the learner needs the pending question (fresh resumption or an explicit context request), present `presentation.markdown` and stop; do not append a walkthrough, queue-tracing procedure, output order, or a second question. Task context is the code/facts needed to answer, not the reasoning being assessed.
+When no answer needs processing and the learner needs the pending question (fresh resumption or an explicit context request), present `presentation.markdown` and stop; do not append a walkthrough, queue-tracing procedure, output order, or a second question. Task context is the code/facts needed to answer, not the reasoning being assessed. For this kind of follow-up question, the presentation already asks the learner to explain the idea in their own words. Do not call it a “reconstruction” when speaking to the learner.
 
 For `needs_question`, prepare one complete question and its exact relevant context under the existing frozen criteria, choose the explicit chunking mode, save it with `openAttemptSubquestion(...)`, then fetch `getSessionQuestionPresentation(sessionId)`. This also works during required reconstruction after submission. `default` questions carry `promptText`, `contextText`, and `questionChunking: "default"`; `atomic` questions additionally carry `scopeCriterionId` and `scopeNote`. Do not persist a question until its learner-visible context and final prompt are ready.
 
@@ -276,7 +276,7 @@ mastery. The view's `nextAction` gives the lifecycle step:
 | `complete_feedback` | Name the specific relationship demonstrated, acknowledge any assistance, then call `completeSessionFeedback`. Add no further question just to increase depth. Other unresolved work, if any, remains governed by continuation. |
 | `review_gap` | Identify the particular unmet relationship from the assessment and learner response. Correct a slip briefly. For a demonstrated causal misconception, record the exact focused teaching with `requireReconstruction: true` before showing it, then save the necessary reconstruction question. |
 | `review_ungradable` | Explain what prevents assessment. Do not treat missing or uninterpretable material as demonstrated misunderstanding. |
-| `reconstruct` | Use the saved reconstruction question. State which repaired relationship it checks and why a response is needed. Completion is assisted reconstruction, not fresh independent evidence. |
+| `reconstruct` | Use the saved question. Ask the learner to explain the idea in their own words and briefly say why you are asking. This is practice, not a new test. |
 | `none` | No feedback is pending. Use continuation for any requested new work. |
 
 The view does not classify free text, distinguish slips from misconceptions, or
