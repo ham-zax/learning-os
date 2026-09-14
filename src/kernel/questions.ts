@@ -113,6 +113,9 @@ function prepareSubquestion(
 } {
   const prompt = nonempty(input.promptText, "Subquestion prompt");
   const context = nonempty(input.contextText, "Task context");
+  if (input.questionChunking !== "default" && input.questionChunking !== "atomic") {
+    throw new Error("Subquestion chunking must be default or atomic");
+  }
   if (input.questionChunking === "default") {
     if (input.scopeCriterionId !== undefined || input.scopeNote !== undefined) {
       throw new Error("Default subquestions must not carry atomic scope metadata");

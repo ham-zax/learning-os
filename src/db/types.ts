@@ -591,7 +591,6 @@ export type ChallengeAuthoringContractRow = z.infer<typeof ChallengeAuthoringCon
 
 export const AttemptSchema = z.object({
   id: z.number().int(),
-  problem_id: z.string().nullable().default(null),
   challenge_id: z.string().nullable().default(null),
   challenge_version: z.number().int().positive().nullable().default(null),
   session_id: z.number().int().nullable().default(null),
@@ -599,8 +598,6 @@ export const AttemptSchema = z.object({
   artifact_ref_json: jsonRecord.nullable().default(null),
   verification_output_json: verificationOutputJson.nullable().default(null),
   reconstruction_response_text: z.string().nullable().default(null),
-  score: z.number().nullable().default(null),
-  feedback: z.string().nullable().default(null),
   time_spent_seconds: z.number().int().nullable().default(null),
   started_at: z.string(),
   submitted_at: z.string().nullable().default(null),

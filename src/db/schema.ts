@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 21;
+export const CURRENT_SCHEMA_VERSION = 22;
 
 export const CURRENT_SCHEMA_SQL = String.raw`
 CREATE TABLE topics (
@@ -166,14 +166,11 @@ CREATE TABLE challenge_criteria (
           );
 CREATE TABLE "attempts" (
             id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-            problem_id          TEXT REFERENCES problems(id) ON DELETE CASCADE,
             challenge_id        TEXT,
             challenge_version   INTEGER,
             session_id          INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
             response_text       TEXT,
             artifact_ref_json   TEXT,
-            score               REAL,
-            feedback            TEXT,
             time_spent_seconds  INTEGER,
             started_at          TEXT NOT NULL,
             submitted_at        TEXT,
@@ -437,8 +434,6 @@ CREATE INDEX idx_learning_objectives_capability
             ON learning_objectives(capability_id);
 CREATE INDEX idx_challenge_targets_objective
             ON challenge_targets(objective_id, challenge_id, version);
-CREATE INDEX idx_attempts_problem_id
-            ON attempts(problem_id);
 CREATE INDEX idx_attempts_challenge
             ON attempts(challenge_id, challenge_version);
 CREATE INDEX idx_attempts_session_id

@@ -7,7 +7,7 @@ import {
 import { createLearningObjective } from "../src/kernel/foundation.js";
 
 describe("current database baseline", () => {
-  it("seeds the five core capabilities on a fresh database", () => {
+  it("creates the current schema and seeds the five core capabilities", () => {
     const db = createDatabase(":memory:");
     try {
       expect(
@@ -33,6 +33,21 @@ describe("current database baseline", () => {
         concept_id: "concept",
         capability_id: "explain",
       });
+
+      const attemptColumns = db
+        .prepare("PRAGMA table_info(attempts)")
+        .all()
+        .map((row) => (row as { name: string }).name);
+      expect(attemptColumns).not.toEqual(
+        expect.arrayContaining(["problem_id", "score", "feedback"]),
+      );
+      expect(
+        db.prepare("PRAGMA index_list(attempts)").all(),
+      ).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "idx_attempts_problem_id" }),
+        ]),
+      );
     } finally {
       db.close();
     }

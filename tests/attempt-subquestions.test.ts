@@ -132,11 +132,11 @@ describe("durable attempt subquestions", () => {
   });
 
   it("rejects an unsupported historical schema instead of replaying migrations", () => {
-    db.pragma("user_version = 20");
+    db.pragma("user_version = 21");
     db.close();
 
     expect(() => createDatabase(dbPath)).toThrow(
-      "Unsupported learner database schema v20. Learning OS now requires schema v21",
+      "Unsupported learner database schema v21. Learning OS now requires schema v22",
     );
   });
 });

@@ -114,6 +114,16 @@ describe("question presentation", () => {
   });
 
   it("constrains atomic questions to one frozen criterion", () => {
+    const openFromUntypedClient = (input: Record<string, unknown>) =>
+      Reflect.apply(kernel.openAttemptSubquestion, kernel, [attemptId, input]);
+    expect(() => openFromUntypedClient({
+      contextText, promptText: "First?",
+      scopeCriterionId: "mechanism", scopeNote: "A sufficient answer names the trigger.",
+    })).toThrow("chunking must be default or atomic");
+    expect(() => openFromUntypedClient({
+      contextText, promptText: "First?", questionChunking: "typo",
+      scopeCriterionId: "mechanism", scopeNote: "A sufficient answer names the trigger.",
+    })).toThrow("chunking must be default or atomic");
     expect(() => kernel.openAttemptSubquestion(attemptId, {
       contextText, promptText: "First?", questionChunking: "atomic",
       scopeCriterionId: "missing-criterion", scopeNote: "A sufficient answer names the trigger.",
