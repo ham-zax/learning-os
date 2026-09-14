@@ -25,8 +25,6 @@ import {
   listCapabilities,
   listResumableSessions,
   openAttempt,
-  openAttemptSubquestion,
-  answerAttemptSubquestion,
   recordExposure,
   recordHintUse,
   registerChallenge,
@@ -35,10 +33,8 @@ import {
   submitAttempt,
 } from "./kernel/foundation.js";
 import type {
-  AnswerAttemptSubquestionInput,
   CompleteSessionFeedbackInput,
   LearningObjectiveInput,
-  OpenAttemptSubquestionInput,
   RecordExposureInput,
   RecordHintUseInput,
   ResolveSessionReconstructionInput,
@@ -75,8 +71,17 @@ import {
 } from "./revision-notes.js";
 import { getStudyContinuation } from "./study/continuation.js";
 import type { StudyContinuationInput } from "./study/continuation.js";
-import { getSessionQuestionPresentation, replaceAttemptSubquestion } from "./kernel/questions.js";
-import type { ReplaceAttemptSubquestionInput } from "./kernel/questions.js";
+import {
+  answerAttemptSubquestion,
+  getSessionQuestionPresentation,
+  openAttemptSubquestion,
+  replaceAttemptSubquestion,
+} from "./kernel/questions.js";
+import type {
+  AnswerAttemptSubquestionInput,
+  OpenAttemptSubquestionInput,
+  ReplaceAttemptSubquestionInput,
+} from "./kernel/questions.js";
 import { derivePedagogyDirective } from "./teacher-pedagogy.js";
 import type {
   RevisionNoteContextInput,

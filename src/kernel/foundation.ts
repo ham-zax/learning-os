@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { getAttemptSubquestions } from "./questions.js";
-export { getAttemptSubquestions } from "./questions.js";
 import {
   AttemptSchema,
   CapabilitySchema,
@@ -76,9 +75,6 @@ export interface SubmitAttemptInput {
   /** Reliable active learner time known so far; omit when unknown. */
   activeTimeSeconds?: number;
 }
-
-export { openAttemptSubquestion, answerAttemptSubquestion } from "./questions.js";
-export type { OpenAttemptSubquestionInput, AnswerAttemptSubquestionInput } from "./questions.js";
 
 export interface RecordHintUseInput {
   level: number;

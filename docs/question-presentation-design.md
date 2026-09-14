@@ -1,6 +1,6 @@
 # Durable question presentation
 
-Status: Approved and implemented on 2026-09-14. [Implementation plan and verification](question-presentation-implementation-plan.md). Scoped atomic questions added afterwards: an `atomic` question must target one frozen criterion with a demonstration note; see migration 19.
+Status: Approved and implemented on 2026-09-14. [Implementation plan and verification](question-presentation-implementation-plan.md). The final contract is the migration-20 clean cutover: every persisted question is presentation-ready, chunking is explicit, and atomic questions are scoped to one frozen criterion.
 
 ## Observed problem
 
@@ -14,18 +14,18 @@ Reconstruction questions are legal only on the active submitted attempt during f
 
 Add `getSessionQuestionPresentation(sessionId)` and include its result on `getStudyContinuation(...)`'s resume branch. A ready presentation contains a fixed orientation, saved task context, current question, purpose, sequence, chunking, and rendered Markdown. It excludes previous answers, solutions, rubric rationale and teaching artifacts. Existing full resume state remains available for assessment and debugging.
 
-Missing questions return `needs_question`; legacy rows without context return `needs_context` together with their saved prompt/chunking/scope metadata. If a migrated legacy `atomic` row has null scope, restoring its context also requires choosing one frozen criterion and a demonstration note so the replacement satisfies the v19 atomic-scope invariant. Neither case synthesizes history. Once the latest question was answered, return `answered` so the teacher assesses/integrates the response instead of silently preparing a bonus drill. Non-question phases return `not_waiting`.
+Missing questions return `needs_question`; there is no persisted partial-question state. Once a question is inserted it already has exact task context, explicit chunking, and any required atomic scope. Once the latest question was answered, return `answered` so the teacher assesses/integrates the response instead of silently preparing a bonus drill. Non-question phases return `not_waiting`.
 
 ## Public operations
 
 ```ts
-openAttemptSubquestion(attemptId, { promptText, contextText?, questionChunking?, scopeCriterionId?, scopeNote? })
-replaceAttemptSubquestion(attemptId, { seq, promptText, contextText?, questionChunking?, scopeCriterionId?, scopeNote? })
+openAttemptSubquestion(attemptId, { promptText, contextText, questionChunking, scopeCriterionId?, scopeNote? })
+replaceAttemptSubquestion(attemptId, { seq, promptText, contextText, questionChunking, scopeCriterionId?, scopeNote? })
 answerAttemptSubquestion(attemptId, { seq, responseText })
 getSessionQuestionPresentation(sessionId)
 ```
 
-Context omitted from a replacement is retained, as are chunking and scope. Chunking omitted from a replacement or next question retains the episode's most recent setting, falling back to the profile preference. A caller may explicitly update it when the learner changes their preference. New context must contain the exact relevant code/facts, without answer-bearing explanation. The kernel checks nonempty strings and validates atomic scope against the frozen challenge criteria, but cannot determine their pedagogical neutrality or count reasoning demands in free text.
+Question creation and replacement both take a complete presentation contract. `contextText` and `questionChunking` are required on every call; `default` carries no scope, while `atomic` requires `scopeCriterionId` and `scopeNote`. The caller obtains the desired chunking from the current pedagogy/preference decision before authoring the question instead of relying on persistence-layer inheritance. Context must contain the exact relevant code/facts without answer-bearing explanation. The kernel checks nonempty strings and validates atomic scope against the frozen challenge criteria, but cannot determine pedagogical neutrality or count reasoning demands in free text.
 
 ## Teacher workflow
 
@@ -41,7 +41,7 @@ Another long skill rule leaves regeneration uncontrolled. A fully controlled cha
 
 ## Migration and verification
 
-Migration 18 adds nullable context, purpose defaulting to response, chunking, and supersession to existing rows; rebuilds relevant guards/indexes without deleting history. Version 17 rows keep their exact text and IDs and report missing context honestly. Exercise migration on temporary databases before opening canonical learner state.
+Migration 20 rebuilds `attempt_subquestions` into the final shape. It requires non-empty context on every persisted row, converts pre-scope `atomic` metadata to `default` rather than pretending it was criterion-scoped, enforces the default/atomic scope shape in SQL, and validates atomic criterion ownership on insertion. There is no runtime compatibility branch for partial or unscoped atomic questions. Exercise migration on temporary databases before opening canonical learner state.
 
 Regression scenarios: required repair -> broad question -> atomic replacement -> repeated context read -> database reopen -> same small question and code; no teaching content in presentation; stale answer/replacement rejected; invalid replacement rolls back; completed reconstruction refuses a pending question while opt-out closes truthfully; answered question does not auto-generate another; response-mode behavior and migrated history remain intact.
 

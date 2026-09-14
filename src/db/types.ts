@@ -661,20 +661,30 @@ export const HintObservationSchema = z.object({
 });
 export type HintObservation = z.infer<typeof HintObservationSchema>;
 
-export const AttemptSubquestionSchema = z.object({
+const AttemptSubquestionBaseSchema = z.object({
   seq: z.number().int().positive(),
   attempt_id: z.number().int().positive(),
   prompt_text: z.string().min(1),
-  response_text: z.string().nullable().default(null),
+  response_text: z.string().nullable(),
   opened_at: z.string(),
-  answered_at: z.string().nullable().default(null),
-  purpose: z.enum(["response", "reconstruction"]).default("response"),
-  context_text: z.string().nullable().default(null),
-  question_chunking: z.enum(["default", "atomic"]).default("default"),
-  scope_criterion_id: z.string().nullable().default(null),
-  scope_note: z.string().nullable().default(null),
-  superseded_at: z.string().nullable().default(null),
+  answered_at: z.string().nullable(),
+  purpose: z.enum(["response", "reconstruction"]),
+  context_text: z.string().min(1),
+  superseded_at: z.string().nullable(),
 });
+
+export const AttemptSubquestionSchema = z.discriminatedUnion("question_chunking", [
+  AttemptSubquestionBaseSchema.extend({
+    question_chunking: z.literal("default"),
+    scope_criterion_id: z.null(),
+    scope_note: z.null(),
+  }),
+  AttemptSubquestionBaseSchema.extend({
+    question_chunking: z.literal("atomic"),
+    scope_criterion_id: z.string().min(1),
+    scope_note: z.string().min(1),
+  }),
+]);
 export type AttemptSubquestion = z.infer<typeof AttemptSubquestionSchema>;
 
 export const TeachingArtifactSchema = z.object({

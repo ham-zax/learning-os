@@ -1474,6 +1474,158 @@ const migrations: Migration[] = [
       })();
     },
   },
+  {
+    version: 20,
+    up: (db) => {
+      const incomplete = db.prepare(
+        "SELECT seq FROM attempt_subquestions WHERE context_text IS NULL ORDER BY seq LIMIT 1",
+      ).get() as { seq: number } | undefined;
+      if (incomplete) {
+        throw new Error(
+          `Cannot migrate incomplete attempt subquestion ${incomplete.seq}: task context is missing`,
+        );
+      }
+
+      const activeQuestion = `
+        SELECT 1 FROM attempts attempt
+        JOIN sessions session ON session.id = attempt.session_id
+        WHERE attempt.id = NEW.attempt_id AND attempt.challenge_id IS NOT NULL
+          AND session.active_attempt_id = attempt.id
+          AND (
+            (NEW.purpose = 'response' AND attempt.submitted_at IS NULL
+              AND session.phase = 'awaiting_response' AND session.pending_action = 'collect_response')
+            OR
+            (NEW.purpose = 'reconstruction' AND attempt.submitted_at IS NOT NULL
+              AND session.phase = 'feedback' AND session.pending_action = 'present_feedback'
+              AND session.reconstruction_status = 'required')
+          )`;
+
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE attempt_subquestions_v20 (
+            seq                INTEGER PRIMARY KEY AUTOINCREMENT,
+            attempt_id         INTEGER NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
+            prompt_text        TEXT NOT NULL CHECK (length(trim(prompt_text)) > 0),
+            response_text      TEXT CHECK (response_text IS NULL OR length(trim(response_text)) > 0),
+            opened_at          TEXT NOT NULL,
+            answered_at        TEXT,
+            purpose            TEXT NOT NULL CHECK (purpose IN ('response', 'reconstruction')),
+            context_text       TEXT NOT NULL CHECK (length(trim(context_text)) > 0),
+            question_chunking  TEXT NOT NULL CHECK (question_chunking IN ('default', 'atomic')),
+            scope_criterion_id TEXT,
+            scope_note         TEXT,
+            superseded_at      TEXT,
+            CHECK (
+              (response_text IS NULL AND answered_at IS NULL) OR
+              (response_text IS NOT NULL AND answered_at IS NOT NULL)
+            ),
+            CHECK (
+              (question_chunking = 'default' AND scope_criterion_id IS NULL AND scope_note IS NULL) OR
+              (question_chunking = 'atomic'
+                AND scope_criterion_id IS NOT NULL AND length(trim(scope_criterion_id)) > 0
+                AND scope_note IS NOT NULL AND length(trim(scope_note)) > 0)
+            )
+          );
+
+          WITH normalized AS (
+            SELECT
+              question.*,
+              CASE
+                WHEN question.question_chunking = 'atomic'
+                  AND question.scope_criterion_id IS NOT NULL
+                  AND question.scope_note IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1
+                    FROM attempts attempt
+                    JOIN challenge_criteria criterion
+                      ON criterion.challenge_id = attempt.challenge_id
+                     AND criterion.version = attempt.challenge_version
+                     AND criterion.criterion_id = question.scope_criterion_id
+                    WHERE attempt.id = question.attempt_id
+                  )
+                THEN 1
+                ELSE 0
+              END AS keep_atomic
+            FROM attempt_subquestions question
+          )
+          INSERT INTO attempt_subquestions_v20 (
+            seq, attempt_id, prompt_text, response_text, opened_at, answered_at, purpose,
+            context_text, question_chunking, scope_criterion_id, scope_note, superseded_at
+          )
+          SELECT
+            seq,
+            attempt_id,
+            prompt_text,
+            response_text,
+            opened_at,
+            answered_at,
+            purpose,
+            context_text,
+            CASE WHEN keep_atomic = 1 THEN 'atomic' ELSE 'default' END,
+            CASE WHEN keep_atomic = 1 THEN scope_criterion_id ELSE NULL END,
+            CASE WHEN keep_atomic = 1 THEN scope_note ELSE NULL END,
+            superseded_at
+          FROM normalized;
+
+          DROP TABLE attempt_subquestions;
+          ALTER TABLE attempt_subquestions_v20 RENAME TO attempt_subquestions;
+
+          CREATE INDEX idx_attempt_subquestions_attempt_seq
+            ON attempt_subquestions(attempt_id, seq);
+          CREATE UNIQUE INDEX idx_attempt_subquestions_one_pending
+            ON attempt_subquestions(attempt_id)
+            WHERE response_text IS NULL AND superseded_at IS NULL;
+
+          CREATE TRIGGER attempt_subquestions_require_active_attempt
+          BEFORE INSERT ON attempt_subquestions
+          WHEN NOT EXISTS (${activeQuestion}) OR NEW.response_text IS NOT NULL
+            OR NEW.answered_at IS NOT NULL OR NEW.superseded_at IS NOT NULL
+          BEGIN SELECT RAISE(ABORT, 'subquestions require the active response or reconstruction target'); END;
+
+          CREATE TRIGGER attempt_subquestions_atomic_scope_valid
+          BEFORE INSERT ON attempt_subquestions
+          WHEN NEW.question_chunking = 'atomic' AND NOT EXISTS (
+            SELECT 1
+            FROM attempts attempt
+            JOIN challenge_criteria criterion
+              ON criterion.challenge_id = attempt.challenge_id
+             AND criterion.version = attempt.challenge_version
+             AND criterion.criterion_id = NEW.scope_criterion_id
+            WHERE attempt.id = NEW.attempt_id
+          )
+          BEGIN SELECT RAISE(ABORT, 'atomic subquestion scope must belong to the frozen challenge'); END;
+
+          CREATE TRIGGER attempt_subquestions_identity_immutable
+          BEFORE UPDATE OF seq, attempt_id, prompt_text, opened_at, purpose, context_text, question_chunking,
+            scope_criterion_id, scope_note
+          ON attempt_subquestions
+          BEGIN SELECT RAISE(ABORT, 'attempt subquestion identity is immutable'); END;
+
+          CREATE TRIGGER attempt_subquestions_answer_once
+          BEFORE UPDATE OF response_text, answered_at ON attempt_subquestions
+          WHEN OLD.response_text IS NOT NULL OR OLD.answered_at IS NOT NULL
+            OR OLD.superseded_at IS NOT NULL OR NEW.superseded_at IS NOT NULL
+            OR NEW.response_text IS NULL OR NEW.answered_at IS NULL
+          BEGIN SELECT RAISE(ABORT, 'attempt subquestions may be answered exactly once'); END;
+
+          CREATE TRIGGER attempt_subquestions_update_active
+          BEFORE UPDATE OF response_text, answered_at, superseded_at ON attempt_subquestions
+          WHEN NOT EXISTS (${activeQuestion})
+          BEGIN SELECT RAISE(ABORT, 'subquestion is not the active response or reconstruction target'); END;
+
+          CREATE TRIGGER attempt_subquestions_supersede_once
+          BEFORE UPDATE OF superseded_at ON attempt_subquestions
+          WHEN OLD.superseded_at IS NOT NULL OR OLD.response_text IS NOT NULL
+            OR NEW.superseded_at IS NULL OR NEW.response_text IS NOT NULL
+          BEGIN SELECT RAISE(ABORT, 'only pending subquestions may be superseded'); END;
+
+          CREATE TRIGGER attempt_subquestions_no_delete
+          BEFORE DELETE ON attempt_subquestions
+          BEGIN SELECT RAISE(ABORT, 'attempt subquestions are durable interaction observations'); END;
+        `);
+      })();
+    },
+  },
 ];
 
 // ─── Public API ──────────────────────────────────────────────────────────────

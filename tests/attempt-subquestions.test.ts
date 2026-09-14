@@ -13,6 +13,7 @@ describe("durable attempt subquestions", () => {
   let kernel: ReturnType<typeof createTeacherKernel>;
   let sessionId: number;
   let attemptId: number;
+  const contextText = "Task context.";
 
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), "learning-os-subquestions-"));
@@ -31,9 +32,13 @@ describe("durable attempt subquestions", () => {
   it("resumes answered and pending questions with exact text and assistance after reopening", () => {
     const promptText = "  What triggers the transition?\n";
     const responseText = "  An input.\n";
-    const first = kernel.openAttemptSubquestion(attemptId, { promptText });
+    const first = kernel.openAttemptSubquestion(attemptId, {
+      contextText, promptText, questionChunking: "default",
+    });
     kernel.answerAttemptSubquestion(attemptId, { seq: first.seq, responseText });
-    const second = kernel.openAttemptSubquestion(attemptId, { promptText: "What changes?" });
+    const second = kernel.openAttemptSubquestion(attemptId, {
+      contextText, promptText: "What changes?", questionChunking: "default",
+    });
     kernel.recordExposure(sessionId, {
       attemptId,
       objectiveIds: [OBJECTIVE_ID],
@@ -63,14 +68,20 @@ describe("durable attempt subquestions", () => {
     kernel.answerAttemptSubquestion(attemptId, { seq: second.seq, responseText: "The state." });
     kernel.submitAttempt(attemptId, { responseText: "An input changes the state." });
     expect(kernel.resumeSession(sessionId).pendingAction).toBe("assess_response");
-    expect(() => kernel.openAttemptSubquestion(attemptId, { promptText: "Another?" }))
+    expect(() => kernel.openAttemptSubquestion(attemptId, {
+      contextText, promptText: "Another?", questionChunking: "default",
+    }))
       .toThrow("after attempt submission");
   });
 
   it("rejects a stale answer instead of applying it to the next pending question", () => {
-    const first = kernel.openAttemptSubquestion(attemptId, { promptText: "First part?" });
+    const first = kernel.openAttemptSubquestion(attemptId, {
+      contextText, promptText: "First part?", questionChunking: "default",
+    });
     kernel.answerAttemptSubquestion(attemptId, { seq: first.seq, responseText: "First answer" });
-    const second = kernel.openAttemptSubquestion(attemptId, { promptText: "Second part?" });
+    const second = kernel.openAttemptSubquestion(attemptId, {
+      contextText, promptText: "Second part?", questionChunking: "default",
+    });
 
     expect(() => kernel.answerAttemptSubquestion(attemptId, {
       seq: first.seq,
@@ -87,8 +98,12 @@ describe("durable attempt subquestions", () => {
   });
 
   it("blocks premature submission but allows the learner to abandon without answering", () => {
-    const pending = kernel.openAttemptSubquestion(attemptId, { promptText: "First part?" });
-    expect(() => kernel.openAttemptSubquestion(attemptId, { promptText: "Second part?" }))
+    const pending = kernel.openAttemptSubquestion(attemptId, {
+      contextText, promptText: "First part?", questionChunking: "default",
+    });
+    expect(() => kernel.openAttemptSubquestion(attemptId, {
+      contextText, promptText: "Second part?", questionChunking: "default",
+    }))
       .toThrow("already has a pending subquestion");
     expect(() => kernel.submitAttempt(attemptId, { responseText: "Partial" }))
       .toThrow("unanswered subquestion");
@@ -102,7 +117,9 @@ describe("durable attempt subquestions", () => {
   });
 
   it("keeps persisted prompt identity and recorded answers immutable", () => {
-    const question = kernel.openAttemptSubquestion(attemptId, { promptText: "First part?" });
+    const question = kernel.openAttemptSubquestion(attemptId, {
+      contextText, promptText: "First part?", questionChunking: "default",
+    });
     expect(() => db.prepare("UPDATE attempt_subquestions SET seq = seq + 100 WHERE seq = ?")
       .run(question.seq)).toThrow("identity is immutable");
     expect(() => db.prepare("UPDATE attempt_subquestions SET prompt_text = 'New prompt' WHERE seq = ?")
@@ -128,7 +145,7 @@ describe("durable attempt subquestions", () => {
     db.close();
     db = createDatabase(dbPath);
     kernel = createTeacherKernel(db);
-    expect(db.pragma("user_version", { simple: true })).toBe(19);
+    expect(db.pragma("user_version", { simple: true })).toBe(20);
     expect(db.prepare("SELECT * FROM attempts").all()).toEqual(
       attemptsBefore.map((attempt) => ({ ...attempt, reconstruction_response_text: null })),
     );
@@ -136,6 +153,8 @@ describe("durable attempt subquestions", () => {
     expect(kernel.resumeSession(sessionId).activeAttemptState?.subquestions).toEqual([]);
     expect(db.pragma("foreign_key_check")).toEqual([]);
     expect(db.pragma("integrity_check")).toEqual([{ integrity_check: "ok" }]);
-    kernel.openAttemptSubquestion(attemptId, { promptText: "Continue the interrupted task?" });
+    kernel.openAttemptSubquestion(attemptId, {
+      contextText, promptText: "Continue the interrupted task?", questionChunking: "default",
+    });
   });
 });

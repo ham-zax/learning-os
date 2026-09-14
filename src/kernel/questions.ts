@@ -1,43 +1,39 @@
 import type Database from "better-sqlite3";
-import { getInteractionPreferences } from "../db/database.js";
 import { AttemptSchema, AttemptSubquestionSchema, SessionSchema } from "../db/types.js";
 import type { AttemptSubquestion, Session } from "../db/types.js";
 
 type QuestionPurpose = AttemptSubquestion["purpose"];
 type QuestionChunking = AttemptSubquestion["question_chunking"];
 
-export interface OpenAttemptSubquestionInput {
+interface PreparedSubquestionInput {
   promptText: string;
-  /** Exact task setup only; omit for legacy callers that have not prepared it. */
-  contextText?: string;
-  questionChunking?: QuestionChunking;
-  /** One frozen criterion this question targets; required when questionChunking is atomic. */
-  scopeCriterionId?: string;
-  /** What a sufficient answer to this scoped question would demonstrate; required for atomic. */
-  scopeNote?: string;
+  contextText: string;
 }
+
+export type OpenAttemptSubquestionInput =
+  | (PreparedSubquestionInput & {
+      questionChunking: "default";
+      scopeCriterionId?: never;
+      scopeNote?: never;
+    })
+  | (PreparedSubquestionInput & {
+      questionChunking: "atomic";
+      /** One frozen criterion this question targets. */
+      scopeCriterionId: string;
+      /** What a sufficient answer to this scoped question would demonstrate. */
+      scopeNote: string;
+    });
 
 export interface AnswerAttemptSubquestionInput {
   seq: number;
   responseText: string;
 }
 
-export interface ReplaceAttemptSubquestionInput extends OpenAttemptSubquestionInput {
-  seq: number;
-}
+export type ReplaceAttemptSubquestionInput = OpenAttemptSubquestionInput & { seq: number };
 
 export type QuestionPresentation =
   | { kind: "not_waiting" }
   | { kind: "needs_question"; purpose: QuestionPurpose }
-  | {
-      kind: "needs_context";
-      purpose: QuestionPurpose;
-      seq: number;
-      questionChunking: QuestionChunking;
-      scopeCriterionId: string | null;
-      scopeNote: string | null;
-      promptText: string;
-    }
   | { kind: "answered"; purpose: QuestionPurpose; seq: number }
   | {
       kind: "question";
@@ -104,27 +100,53 @@ function frozenCriterionIds(db: Database.Database, attemptId: number): Set<strin
   return new Set(rows.map((entry) => entry.criterion_id));
 }
 
-function validatedScope(
+function prepareSubquestion(
   db: Database.Database,
   attemptId: number,
-  chunking: QuestionChunking,
-  scopeCriterionId: string | undefined,
-  scopeNote: string | undefined,
-): { scopeCriterionId: string | null; scopeNote: string | null } {
-  const criterion = scopeCriterionId === undefined ? null : nonempty(scopeCriterionId, "Subquestion scope criterion");
-  const note = scopeNote === undefined ? null : nonempty(scopeNote, "Subquestion scope note");
-  if (criterion !== null && !frozenCriterionIds(db, attemptId).has(criterion)) {
+  input: OpenAttemptSubquestionInput,
+): {
+  prompt: string;
+  context: string;
+  chunking: QuestionChunking;
+  scopeCriterionId: string | null;
+  scopeNote: string | null;
+} {
+  const prompt = nonempty(input.promptText, "Subquestion prompt");
+  const context = nonempty(input.contextText, "Task context");
+  if (input.questionChunking === "default") {
+    if (input.scopeCriterionId !== undefined || input.scopeNote !== undefined) {
+      throw new Error("Default subquestions must not carry atomic scope metadata");
+    }
+    return {
+      prompt, context, chunking: "default", scopeCriterionId: null, scopeNote: null,
+    };
+  }
+
+  const criterion = nonempty(input.scopeCriterionId, "Subquestion scope criterion");
+  const note = nonempty(input.scopeNote, "Subquestion scope note");
+  if (!frozenCriterionIds(db, attemptId).has(criterion)) {
     throw new Error(`Subquestion scope criterion is not part of the frozen challenge: ${criterion}`);
   }
-  if (chunking === "atomic") {
-    if (criterion === null) {
-      throw new Error("Atomic subquestions must target one frozen criterion via scopeCriterionId");
-    }
-    if (note === null) {
-      throw new Error("Atomic subquestions must state what a sufficient answer demonstrates via scopeNote");
-    }
-  }
-  return { scopeCriterionId: criterion, scopeNote: note };
+  return {
+    prompt, context, chunking: "atomic", scopeCriterionId: criterion, scopeNote: note,
+  };
+}
+
+function insertPreparedSubquestion(
+  db: Database.Database,
+  attemptId: number,
+  purpose: QuestionPurpose,
+  prepared: ReturnType<typeof prepareSubquestion>,
+): AttemptSubquestion {
+  const info = db.prepare(`INSERT INTO attempt_subquestions
+    (attempt_id, prompt_text, context_text, purpose, question_chunking, scope_criterion_id, scope_note, opened_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      attemptId, prepared.prompt, prepared.context, purpose, prepared.chunking,
+      prepared.scopeCriterionId, prepared.scopeNote, new Date().toISOString(),
+    );
+  return AttemptSubquestionSchema.parse(
+    db.prepare("SELECT * FROM attempt_subquestions WHERE seq = ?").get(Number(info.lastInsertRowid)),
+  );
 }
 
 export function getAttemptSubquestions(db: Database.Database, attemptId: number): AttemptSubquestion[] {
@@ -154,22 +176,11 @@ export function openAttemptSubquestion(
   attemptId: number,
   input: OpenAttemptSubquestionInput,
 ): AttemptSubquestion {
-  const prompt = nonempty(input.promptText, "Subquestion prompt");
-  const context = input.contextText === undefined ? null : nonempty(input.contextText, "Task context");
   return db.transaction(() => {
     const purpose = activePurpose(db, attemptId);
     if (pendingQuestion(db, attemptId)) throw new Error(`Attempt ${attemptId} already has a pending subquestion`);
-    const previous = db.prepare("SELECT * FROM attempt_subquestions WHERE attempt_id = ? ORDER BY seq DESC LIMIT 1")
-      .get(attemptId);
-    const chunking = input.questionChunking
-      ?? (previous ? AttemptSubquestionSchema.parse(previous).question_chunking : getInteractionPreferences(db).questionChunking);
-    const scope = validatedScope(db, attemptId, chunking, input.scopeCriterionId, input.scopeNote);
-    const info = db.prepare(`INSERT INTO attempt_subquestions
-      (attempt_id, prompt_text, context_text, purpose, question_chunking, scope_criterion_id, scope_note, opened_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(attemptId, prompt, context, purpose, chunking, scope.scopeCriterionId, scope.scopeNote, new Date().toISOString());
-    return AttemptSubquestionSchema.parse(
-      db.prepare("SELECT * FROM attempt_subquestions WHERE seq = ?").get(Number(info.lastInsertRowid)),
-    );
+    const prepared = prepareSubquestion(db, attemptId, input);
+    return insertPreparedSubquestion(db, attemptId, purpose, prepared);
   })();
 }
 
@@ -180,27 +191,10 @@ export function replaceAttemptSubquestion(
 ): AttemptSubquestion {
   return db.transaction(() => {
     const old = expectedPending(db, attemptId, input.seq);
+    const prepared = prepareSubquestion(db, attemptId, input);
     db.prepare("UPDATE attempt_subquestions SET superseded_at = ? WHERE seq = ?")
       .run(new Date().toISOString(), old.seq);
-    const chunking = input.questionChunking ?? old.question_chunking;
-    const scope = validatedScope(
-      db,
-      attemptId,
-      chunking,
-      input.scopeCriterionId ?? old.scope_criterion_id ?? undefined,
-      input.scopeNote ?? old.scope_note ?? undefined,
-    );
-    const prompt = nonempty(input.promptText, "Subquestion prompt");
-    const context = input.contextText === undefined ? old.context_text : nonempty(input.contextText, "Task context");
-    const purpose = activePurpose(db, attemptId);
-    const info = db.prepare(`INSERT INTO attempt_subquestions
-      (attempt_id, prompt_text, context_text, purpose, question_chunking, scope_criterion_id, scope_note, opened_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
-        attemptId, prompt, context, purpose, chunking, scope.scopeCriterionId, scope.scopeNote, new Date().toISOString(),
-      );
-    return AttemptSubquestionSchema.parse(
-      db.prepare("SELECT * FROM attempt_subquestions WHERE seq = ?").get(Number(info.lastInsertRowid)),
-    );
+    return insertPreparedSubquestion(db, attemptId, old.purpose, prepared);
   })();
 }
 
@@ -237,15 +231,6 @@ export function getSessionQuestionPresentation(db: Database.Database, sessionId:
     if (!latest) return { kind: "needs_question", purpose };
     const question = AttemptSubquestionSchema.parse(latest);
     if (question.response_text !== null) return { kind: "answered", purpose, seq: question.seq };
-    if (question.context_text === null) {
-      return {
-        kind: "needs_context", purpose, seq: question.seq,
-        questionChunking: question.question_chunking,
-        scopeCriterionId: question.scope_criterion_id,
-        scopeNote: question.scope_note,
-        promptText: question.prompt_text,
-      };
-    }
     const orientation = purpose === "reconstruction"
       ? "We paused at a short reconstruction after the explanation."
       : "Here is the question we paused on.";
