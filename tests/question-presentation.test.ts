@@ -51,10 +51,12 @@ describe("question presentation", () => {
     });
     const replacement = kernel.replaceAttemptSubquestion(attemptId, {
       seq: first.seq, promptText: 'Why does "end" appear before "B"?', questionChunking: "atomic",
+      scopeCriterionId: "mechanism", scopeNote: "A sufficient answer explains that the first await yields and queues its continuation.",
     });
     const before = kernel.getSessionQuestionPresentation(sessionId);
     expect(before).toMatchObject({ kind: "question", purpose: "reconstruction",
-      seq: replacement.seq, contextText, questionChunking: "atomic" });
+      seq: replacement.seq, contextText, questionChunking: "atomic",
+      scopeCriterionId: "mechanism" });
     expect(before).toMatchObject({
       markdown: `We paused at a short reconstruction after the explanation.\n\n${contextText}\n\nWhy does "end" appear before "B"?`,
     });
@@ -83,18 +85,54 @@ describe("question presentation", () => {
 
   it("reports missing preparation, inherits chunking and rolls back invalid replacements", () => {
     expect(kernel.getSessionQuestionPresentation(sessionId)).toMatchObject({ kind: "needs_question" });
-    const first = kernel.openAttemptSubquestion(attemptId, { promptText: "First?", questionChunking: "atomic" });
+    const first = kernel.openAttemptSubquestion(attemptId, {
+      promptText: "First?", questionChunking: "atomic",
+      scopeCriterionId: "mechanism", scopeNote: "A sufficient answer names the trigger for the transition.",
+    });
     expect(kernel.getSessionQuestionPresentation(sessionId)).toMatchObject({ kind: "needs_context", seq: first.seq });
     expect(() => kernel.replaceAttemptSubquestion(attemptId, { seq: first.seq, promptText: " " })).toThrow();
     const fixed = kernel.replaceAttemptSubquestion(attemptId, { seq: first.seq, promptText: "First?", contextText });
     expect(fixed.question_chunking).toBe("atomic");
+    expect(fixed.scope_criterion_id).toBe("mechanism");
     expect(() => kernel.replaceAttemptSubquestion(attemptId, { seq: first.seq, promptText: "Stale?" }))
       .toThrow("not pending");
     kernel.answerAttemptSubquestion(attemptId, { seq: fixed.seq, responseText: "Answer" });
-    const next = kernel.openAttemptSubquestion(attemptId, { contextText, promptText: "Necessary second part?" });
+    const next = kernel.openAttemptSubquestion(attemptId, {
+      contextText, promptText: "Necessary second part?",
+      scopeCriterionId: "mechanism", scopeNote: "A sufficient answer names what changes after the input.",
+    });
     expect(next.question_chunking).toBe("atomic");
     kernel.answerAttemptSubquestion(attemptId, { seq: next.seq, responseText: "Answer two" });
     kernel.submitAttempt(attemptId, { responseText: "Both parts" });
+  });
+
+  it("constrains atomic questions to one frozen criterion with a demonstration note", () => {
+    expect(() => kernel.openAttemptSubquestion(attemptId, {
+      promptText: "First?", questionChunking: "atomic",
+    })).toThrow("must target one frozen criterion");
+    expect(() => kernel.openAttemptSubquestion(attemptId, {
+      promptText: "First?", questionChunking: "atomic", scopeCriterionId: "mechanism",
+    })).toThrow("must state what a sufficient answer demonstrates");
+    expect(() => kernel.openAttemptSubquestion(attemptId, {
+      promptText: "First?", questionChunking: "atomic",
+      scopeCriterionId: "missing-criterion", scopeNote: "A sufficient answer names the trigger.",
+    })).toThrow("not part of the frozen challenge");
+    const scoped = kernel.openAttemptSubquestion(attemptId, {
+      promptText: "First?", questionChunking: "atomic",
+      scopeCriterionId: "mechanism", scopeNote: "A sufficient answer names the trigger.",
+    });
+    expect(scoped.scope_criterion_id).toBe("mechanism");
+    expect(kernel.getSessionQuestionPresentation(sessionId)).toMatchObject({
+      kind: "needs_context", seq: scoped.seq,
+    });
+    const withContext = kernel.replaceAttemptSubquestion(attemptId, {
+      seq: scoped.seq, promptText: "First?", contextText,
+    });
+    expect(withContext.scope_criterion_id).toBe("mechanism");
+    expect(kernel.getSessionQuestionPresentation(sessionId)).toMatchObject({
+      kind: "question", scopeCriterionId: "mechanism",
+      scopeNote: "A sufficient answer names the trigger.",
+    });
   });
 
   it("permits reconstruction opt-out with a pending question and retains it without an answer", () => {

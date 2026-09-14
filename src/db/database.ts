@@ -1454,6 +1454,26 @@ const migrations: Migration[] = [
       })();
     },
   },
+  {
+    version: 19,
+    up: (db) => {
+      db.transaction(() => {
+        db.exec(`
+          ALTER TABLE attempt_subquestions ADD COLUMN scope_criterion_id TEXT
+            CHECK (scope_criterion_id IS NULL OR length(trim(scope_criterion_id)) > 0);
+          ALTER TABLE attempt_subquestions ADD COLUMN scope_note TEXT
+            CHECK (scope_note IS NULL OR length(trim(scope_note)) > 0);
+
+          DROP TRIGGER attempt_subquestions_identity_immutable;
+          CREATE TRIGGER attempt_subquestions_identity_immutable
+          BEFORE UPDATE OF seq, attempt_id, prompt_text, opened_at, purpose, context_text, question_chunking,
+            scope_criterion_id, scope_note
+          ON attempt_subquestions
+          BEGIN SELECT RAISE(ABORT, 'attempt subquestion identity is immutable'); END;
+        `);
+      })();
+    },
+  },
 ];
 
 // ─── Public API ──────────────────────────────────────────────────────────────

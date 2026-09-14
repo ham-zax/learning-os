@@ -1,10 +1,10 @@
 # Durable question presentation
 
-Status: Approved and implemented on 2026-09-14. [Implementation plan and verification](question-presentation-implementation-plan.md).
+Status: Approved and implemented on 2026-09-14. [Implementation plan and verification](question-presentation-implementation-plan.md). Scoped atomic questions added afterwards: an `atomic` question must target one frozen criterion with a demonstration note; see migration 19.
 
 ## Observed problem
 
-Live teaching repeatedly supplied a solution when the learner requested task context, returned to oversized questions after a chunking request, and regenerated reconstruction prompts on restart. Updated skill instructions alone did not correct this. Migration 17 only permits subquestions before submission, while causal reconstruction happens after assessment. A reconstruction obligation therefore survives restart without its exact pending question.
+Live teaching repeatedly supplied a solution when the learner requested task context, returned to oversized questions after a chunking request, and regenerated reconstruction prompts on restart. Updated skill instructions alone did not correct this. Migration 17 only permits subquestions before submission, while causal reconstruction happens after assessment. A reconstruction obligation therefore survives restart without its exact pending question. A later live test showed the follow-on failure: the agent saved a four-demand reconstruction prompt and labeled it `atomic`, and the kernel faithfully repeated it because `atomic` was only metadata.
 
 ## Decision
 
@@ -14,18 +14,18 @@ Reconstruction questions are legal only on the active submitted attempt during f
 
 Add `getSessionQuestionPresentation(sessionId)` and include its result on `getStudyContinuation(...)`'s resume branch. A ready presentation contains a fixed orientation, saved task context, current question, purpose, sequence, chunking, and rendered Markdown. It excludes previous answers, solutions, rubric rationale and teaching artifacts. Existing full resume state remains available for assessment and debugging.
 
-Missing questions return `needs_question`; legacy rows without context return `needs_context`. Neither case synthesizes history. Once the latest question was answered, return `answered` so the teacher assesses/integrates the response instead of silently preparing a bonus drill. Non-question phases return `not_waiting`.
+Missing questions return `needs_question`; legacy rows without context return `needs_context` together with their saved prompt/chunking/scope metadata. If a migrated legacy `atomic` row has null scope, restoring its context also requires choosing one frozen criterion and a demonstration note so the replacement satisfies the v19 atomic-scope invariant. Neither case synthesizes history. Once the latest question was answered, return `answered` so the teacher assesses/integrates the response instead of silently preparing a bonus drill. Non-question phases return `not_waiting`.
 
 ## Public operations
 
 ```ts
-openAttemptSubquestion(attemptId, { promptText, contextText?, questionChunking? })
-replaceAttemptSubquestion(attemptId, { seq, promptText, contextText?, questionChunking? })
+openAttemptSubquestion(attemptId, { promptText, contextText?, questionChunking?, scopeCriterionId?, scopeNote? })
+replaceAttemptSubquestion(attemptId, { seq, promptText, contextText?, questionChunking?, scopeCriterionId?, scopeNote? })
 answerAttemptSubquestion(attemptId, { seq, responseText })
 getSessionQuestionPresentation(sessionId)
 ```
 
-Context omitted from a replacement is retained. Chunking omitted from a replacement or next question retains the episode's most recent setting, falling back to the profile preference. A caller may explicitly update it when the learner changes their preference. New context must contain the exact relevant code/facts, without answer-bearing explanation. The kernel checks nonempty strings but cannot determine their pedagogical neutrality.
+Context omitted from a replacement is retained, as are chunking and scope. Chunking omitted from a replacement or next question retains the episode's most recent setting, falling back to the profile preference. A caller may explicitly update it when the learner changes their preference. New context must contain the exact relevant code/facts, without answer-bearing explanation. The kernel checks nonempty strings and validates atomic scope against the frozen challenge criteria, but cannot determine their pedagogical neutrality or count reasoning demands in free text.
 
 ## Teacher workflow
 

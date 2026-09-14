@@ -208,7 +208,9 @@ Do not duplicate a large learner response into each per-objective evidence event
 
 ### `attempt_subquestions`
 
-Bounded restart state for response collection or required causal reconstruction. Each row stores one learner-visible question, separate `context_text`, `purpose` (`response|reconstruction`), `question_chunking` (`default|atomic`), and once supplied, the exact learner response. At most one unanswered, non-superseded question may exist per attempt. Response questions require the active unsubmitted collect-response attempt; reconstruction questions require the active submitted attempt in feedback with reconstruction required. Prompt/context identity is immutable, an answer may be recorded exactly once, and rows are never deleted. Replacing an unanswered question records `superseded_at` and inserts its successor atomically; stale answers/replacements are rejected.
+Bounded restart state for response collection or required causal reconstruction. Each row stores one learner-visible question, separate `context_text`, `purpose` (`response|reconstruction`), `question_chunking` (`default|atomic`), optional `scope_criterion_id`, optional `scope_note`, and once supplied, the exact learner response. At most one unanswered, non-superseded question may exist per attempt. Response questions require the active unsubmitted collect-response attempt; reconstruction questions require the active submitted attempt in feedback with reconstruction required. Prompt/context/scope identity is immutable, an answer may be recorded exactly once, and rows are never deleted. Replacing an unanswered question records `superseded_at` and inserts its successor atomically; stale answers/replacements are rejected.
+
+An `atomic` question must target exactly one frozen criterion from its attempt's challenge via `scope_criterion_id` and must state what a sufficient answer would demonstrate via `scope_note`. The kernel validates that the scoped criterion belongs to the frozen challenge, but it cannot verify that the prompt wording contains only one reasoning demand. The teacher must perform that wording check before presentation: the prompt should address only the scoped criterion, `context_text` should carry the exact code/facts needed without the solution, and the prompt must not contain the output order, queue trace, hint, or explanation. Legacy rows may have null scope; new atomic questions must not.
 
 This table is not a provider transcript and must not be used as generic teacher memory. Persist only decomposition needed to resume the current frozen challenge without repeating answered parts or inventing learner responses. Subquestion responses are interaction observations, not independent evidence; assessment still uses the final submitted attempt under the frozen criteria.
 
@@ -969,9 +971,11 @@ The learner-visible payload excludes private solution material.
 When the teacher decomposes one frozen challenge across multiple turns and interruption would otherwise lose what is pending, persist the exact learner-visible subquestion before presenting it:
 
 ```text
-openAttemptSubquestion(attemptId, { promptText, contextText?, questionChunking? })
+openAttemptSubquestion(attemptId, { promptText, contextText?, questionChunking?, scopeCriterionId?, scopeNote? })
 → durable pending subquestion
 ```
+
+An `atomic` question must include `scopeCriterionId` for exactly one frozen criterion plus `scopeNote` stating what a sufficient answer would demonstrate. The kernel rejects atomic questions without scope or with a criterion outside the frozen challenge; it cannot count reasoning demands in free text, so the teacher must check that the prompt addresses only the scoped criterion.
 
 After the learner answers that subquestion, persist the exact response before moving to the next split:
 
@@ -982,13 +986,13 @@ answerAttemptSubquestion(attemptId, { seq, responseText })
 
 Use the `seq` returned at opening or recovered from resumption. An answer must identify that specific pending question. Both response and required reconstruction phases use this boundary; purpose is derived from session state. Submission and completed reconstruction refuse to bypass their unanswered non-superseded question. A learner may abandon unsubmitted work or explicitly opt out of reconstruction without a fabricated answer. Full `resumeSession(...)` retains the ordered history for assessment.
 
-`replaceAttemptSubquestion(attemptId, { seq, promptText, contextText?, questionChunking? })` replaces the specific pending question after a wording/context/size complaint. Omitted context and chunking are preserved; later questions inherit the most recent chunking, initially falling back to the profile preference. This is episode-local and does not establish a lasting preference or change frozen criteria. Record answer-bearing decomposition through the existing assistance boundary before showing it.
+`replaceAttemptSubquestion(attemptId, { seq, promptText, contextText?, questionChunking?, scopeCriterionId?, scopeNote? })` replaces the specific pending question after a wording/context/size complaint. Omitted context, chunking, and scope are preserved; later questions inherit the most recent chunking, initially falling back to the profile preference. This is episode-local and does not establish a lasting preference or change frozen criteria. Record answer-bearing decomposition through the existing assistance boundary before showing it.
 
 `getSessionQuestionPresentation(sessionId)` returns a read-only focused presentation, also exposed as `getStudyContinuation(...).presentation` on the `resume` branch:
 
-- `question`: orientation, exact task context and pending question rendered as `markdown`, plus purpose, sequence and chunking. No teaching artifacts, previous answers or assessment rationale are copied into this view.
+- `question`: orientation, exact task context and pending question rendered as `markdown`, plus purpose, sequence, chunking, and scope (`scopeCriterionId`, `scopeNote`). No teaching artifacts, previous answers or assessment rationale are copied into this view. The markdown stays learner-facing; scope IDs remain teacher metadata.
 - `needs_question`: prepare a question under existing criteria; no saved question exists for this phase.
-- `needs_context`: replace the identified legacy pending question with its exact relevant setup.
+- `needs_context`: the saved `promptText`, chunking, and scope metadata are returned with the sequence so a fresh teacher can restore exact relevant setup. If a migrated legacy `atomic` row has null scope, choose one frozen criterion plus a `scopeNote` and replace it as a scoped atomic question; a context-only replacement is invalid under the v19 invariant.
 - `answered`: review/integrate the recorded response; do not automatically generate another question.
 - `not_waiting`: follow the existing assessment/verification/feedback/closure lifecycle.
 

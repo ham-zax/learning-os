@@ -128,7 +128,7 @@ describe("durable attempt subquestions", () => {
     db.close();
     db = createDatabase(dbPath);
     kernel = createTeacherKernel(db);
-    expect(db.pragma("user_version", { simple: true })).toBe(18);
+    expect(db.pragma("user_version", { simple: true })).toBe(19);
     expect(db.prepare("SELECT * FROM attempts").all()).toEqual(
       attemptsBefore.map((attempt) => ({ ...attempt, reconstruction_response_text: null })),
     );
