@@ -1,0 +1,466 @@
+{
+  "topic": "frontend-revision",
+  "topicId": "frontend-revision",
+  "topicName": "Frontend Revision: Recover, Reason, Build",
+  "version": "1.0.0",
+  "description": "Revision-first JavaScript and browser core, with independently selectable React, Angular and internals branches. Not a claim of exhaustive frontend expertise.",
+  "concepts": [
+    {
+      "id": "js-types",
+      "title": "JavaScript Types",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "js-types.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "js-coercion-equality",
+      "title": "Coercion and Equality",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "js-coercion-equality.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "js-scope",
+      "title": "Scope and Identifier Resolution",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "js-scope.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "js-hoisting",
+      "title": "Hoisting",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "js-hoisting.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "js-closures",
+      "title": "Closures",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "js-closures.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "js-this-binding",
+      "title": "this Binding",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "js-this-binding.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "js-prototypes",
+      "title": "Prototypes and Prototype Chain",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "js-prototypes.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "js-promises",
+      "title": "Promises and Chaining",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "js-promises.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "js-async-await",
+      "title": "async/await",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "js-async-await.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "js-event-loop",
+      "title": "Event Loop and Task Queues",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "js-event-loop.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "js-dom-events",
+      "title": "DOM Event Propagation",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "js-dom-events.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "js-event-delegation",
+      "title": "Event Delegation",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "js-event-delegation.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "js-same-origin-cors",
+      "title": "Same-Origin Policy and CORS",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "js-same-origin-cors.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "js-performance",
+      "title": "JavaScript and Browser Performance",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "js-performance.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "react-state-rendering",
+      "title": "React State, Identity, and Rendering",
+      "difficulty": 2,
+      "prerequisites": [
+        "react-fundamentals"
+      ],
+      "file": "react-state-rendering.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "react-fundamentals",
+      "title": "React Fundamentals",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "react-fundamentals.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "react-hooks-effects",
+      "title": "React Hooks, Closures, and Effects",
+      "difficulty": 2,
+      "prerequisites": [
+        "react-fundamentals",
+        "react-state-rendering"
+      ],
+      "file": "react-hooks-effects.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "react-state-architecture",
+      "title": "React State Architecture and Component Design",
+      "difficulty": 3,
+      "prerequisites": [
+        "react-state-rendering",
+        "react-component-apis"
+      ],
+      "file": "react-state-architecture.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "react-component-apis",
+      "title": "React Component APIs and Composition",
+      "difficulty": 2,
+      "prerequisites": [
+        "react-fundamentals",
+        "react-state-rendering"
+      ],
+      "file": "react-component-apis.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "react-async-ui",
+      "title": "React Async UI, Suspense, and Transitions",
+      "difficulty": 3,
+      "prerequisites": [
+        "react-hooks-effects"
+      ],
+      "file": "react-async-ui.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "react-server-rendering",
+      "title": "React Server Rendering, Hydration, and Server Components",
+      "difficulty": 3,
+      "prerequisites": [
+        "react-fundamentals"
+      ],
+      "file": "react-server-rendering.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "react-performance",
+      "title": "React Performance and React Compiler",
+      "difficulty": 3,
+      "prerequisites": [
+        "react-state-rendering",
+        "react-hooks-effects"
+      ],
+      "file": "react-performance.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "react-fiber-internals",
+      "title": "React Fiber, Reconciliation, Lanes, and Commit",
+      "difficulty": 4,
+      "prerequisites": [
+        "react-state-rendering"
+      ],
+      "file": "react-fiber-internals.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "angular-signals-reactivity",
+      "title": "Angular Signals and Reactive State",
+      "difficulty": 3,
+      "prerequisites": [
+        "angular-fundamentals"
+      ],
+      "file": "angular-signals-reactivity.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "angular-fundamentals",
+      "title": "Angular Fundamentals",
+      "difficulty": 1,
+      "prerequisites": [],
+      "file": "angular-fundamentals.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "angular-standalone-architecture",
+      "title": "Angular Standalone Architecture",
+      "difficulty": 2,
+      "prerequisites": [
+        "angular-fundamentals",
+        "angular-components-templates"
+      ],
+      "file": "angular-standalone-architecture.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "angular-components-templates",
+      "title": "Angular Components, Templates, and Control Flow",
+      "difficulty": 2,
+      "prerequisites": [
+        "angular-fundamentals"
+      ],
+      "file": "angular-components-templates.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "angular-dependency-injection",
+      "title": "Angular Dependency Injection and Provider Scope",
+      "difficulty": 3,
+      "prerequisites": [
+        "angular-fundamentals"
+      ],
+      "file": "angular-dependency-injection.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "angular-change-detection",
+      "title": "Angular Zoneless Change Detection",
+      "difficulty": 4,
+      "prerequisites": [
+        "angular-components-templates",
+        "angular-signals-reactivity"
+      ],
+      "file": "angular-change-detection.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "angular-rxjs-interoperability",
+      "title": "Angular RxJS and Signal Interoperability",
+      "difficulty": 3,
+      "prerequisites": [
+        "angular-fundamentals"
+      ],
+      "file": "angular-rxjs-interoperability.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "angular-data-fetching",
+      "title": "Angular HTTP, Resources, and Async Data",
+      "difficulty": 3,
+      "prerequisites": [
+        "angular-rxjs-interoperability"
+      ],
+      "file": "angular-data-fetching.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "angular-forms",
+      "title": "Angular Forms and Signal Forms",
+      "difficulty": 3,
+      "prerequisites": [
+        "angular-components-templates"
+      ],
+      "file": "angular-forms.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "angular-routing",
+      "title": "Angular Routing and Lazy Loading",
+      "difficulty": 3,
+      "prerequisites": [
+        "angular-standalone-architecture"
+      ],
+      "file": "angular-routing.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "angular-ssr-hydration",
+      "title": "Angular SSR and Hydration",
+      "difficulty": 3,
+      "prerequisites": [
+        "angular-standalone-architecture"
+      ],
+      "file": "angular-ssr-hydration.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "angular-testing-debugging",
+      "title": "Angular Testing and Debugging",
+      "difficulty": 3,
+      "prerequisites": [
+        "angular-components-templates"
+      ],
+      "file": "angular-testing-debugging.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "angular-rendering-performance",
+      "title": "Angular Rendering and Performance",
+      "difficulty": 4,
+      "prerequisites": [
+        "angular-change-detection"
+      ],
+      "file": "angular-rendering-performance.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "angular-architecture",
+      "title": "Angular Application Architecture and State Boundaries",
+      "difficulty": 4,
+      "prerequisites": [
+        "angular-standalone-architecture",
+        "angular-dependency-injection",
+        "angular-signals-reactivity"
+      ],
+      "file": "angular-architecture.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    }
+  ]
+}

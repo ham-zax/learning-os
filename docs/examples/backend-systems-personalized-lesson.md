@@ -1,6 +1,6 @@
 # Backend Systems Personalized Lesson Blueprint
 
-This is a **personalized, source-controlled learning example**, not the default Learning OS curriculum and not authoritative runtime learner state.
+This is a **historical personalized, source-controlled learning example**, not authoritative runtime learner state. The current reusable route is [Backend Systems](../../knowledge/backend-systems/INDEX.md), with seven conceptual phases and no prescribed seven-day timetable. Preserve historical focus labels and evidence rather than resetting them to match the new route.
 
 It captures one concrete way to use Learning OS for a seven-day Backend Systems interview sprint while preserving the product boundary:
 
@@ -12,7 +12,7 @@ Teacher pedagogy decides:
 how to make the selected interaction cognitively valuable
 ```
 
-The live learner database remains under local `data/` and is not committed. This document is intentionally portable so the learning setup, lesson shape, and pedagogical intent are available from any clone of the repository. A fresh teacher must still resolve the live profile through Learning OS before making sequencing, evidence, readiness, review, or next-action decisions.
+The live learner database remains under `data/profiles/`; current `AGENTS.md` governs checkpointing and versioning of canonical learner state. This document is intentionally portable so the learning setup, lesson shape, and pedagogical intent are available from any clone of the repository. A fresh teacher must still resolve the live profile through Learning OS before making sequencing, evidence, readiness, review, or next-action decisions.
 
 ## Personalized goal
 

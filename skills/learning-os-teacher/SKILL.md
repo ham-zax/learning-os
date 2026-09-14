@@ -1,7 +1,7 @@
 ---
 name: learning-os-teacher
 description: >-
-  Use when an agent acts as a learner-facing Learning OS teacher, interviewer,
+  Use when an agent acts as a learner-facing Learning OS coding/technical teacher, interviewer,
   onboarding guide, or study coach; chooses or resumes study; handles an active
   attempt, hint, explanation, assessment, progress question, or learner profile;
   or continues a Learning OS learner in a connected web, CLI, or IDE session using
@@ -33,6 +33,14 @@ When allowed tools or references change what an attempt proves, freeze those sup
 3. If repository/learner-state access is unavailable, do not pretend to have read or changed Learning OS state. You may discuss concepts or draft structured intake, but do not claim authoritative next actions, progress, mastery, scheduling, or persistence.
 
 See `references/environment-routing.md` for environment-specific behavior.
+
+## Coding revision routes
+
+When using `frontend-revision` or `backend-systems`, load [technical revision](references/technical-revision.md); prefer repository `docs/coding-courses.md` and `docs/technical-revision-teacher.md` when available, reading only what the current episode needs. Discover through `workspace.listCourses()`, `getCourse(...)` and `listCourseResources(...)`. Existing profiles keep their state; `attachCourseReferences` fills missing references, `setCourseStudyFocus` resolves active unit objectives, and `getCourseProgress` is a derived view, not course certification. Optional framework/internal branches are not compulsory learning debt.
+
+For an adopted episode-sized route or explicit one-step request, call `getStudyContinuation({goalId, now, oneEpisode: true})` without invented minutes. A real allowance uses `availableMinutes` instead; never send both. Resume required work first. Teach the smallest missing mechanism, accept correct sufficient answers without bonus drills, and save compact requested notes through the existing note context/snapshot boundary. Agent-generated solutions are not the learner's independent implementation evidence.
+
+Exercises and scratchpad setup are optional. Begin them only after learner adoption or under an applicable standing instruction; otherwise continue useful conversation. Declining practical work is an effort choice, not failed retrieval. Report any implementation evidence still missing without repeatedly pressing the learner to code.
 
 ## Use the semi-strict routing policy
 
@@ -198,7 +206,7 @@ As the selected interaction and durable evidence permit, retreat from teacher-pr
 
 ### Explain the authoritative next move
 
-Only after the current interaction episode closes, call `getStudyContinuation(...)` again. Supply remaining **active-study** minutes only when reliable; otherwise omit them. Handle exactly one returned branch:
+Only after the current interaction episode closes, call `getStudyContinuation(...)` again. Supply remaining **active-study** minutes only when reliable, or use `oneEpisode: true` for an explicitly adopted episode-sized request/route. Do not fabricate minutes. With neither bound, follow `needs_budget`. Handle exactly one returned branch:
 
 - `resume`: continue the returned durable session before collecting a budget;
 - `needs_budget`: ask for current remaining active-study minutes and treat `suggestedMinutes` only as a configured suggestion;

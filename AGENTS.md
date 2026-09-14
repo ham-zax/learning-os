@@ -31,7 +31,7 @@ learn | practice | review | interview | mock
 
 ## State ownership
 
-- Global reusable curriculum lives under `knowledge/`.
+- Global reusable curriculum lives under `knowledge/`. Coding routes are `knowledge/frontend-revision/` and `knowledge/backend-systems/`; read `docs/coding-courses.md` for discovery, exact scope, source references, practical work and profile attachment. Existing sibling source registries remain references; do not clone their corpora into learner databases.
 - Managed learner profiles live under `data/profiles/<profile-id>/tutor.db`.
 - `data/profiles/registry.json` stores profile metadata and the active profile only; registry writes are serialized across concurrent processes.
 - `data/tutor.db` is supported only as the preserved legacy compatibility profile.
@@ -130,7 +130,7 @@ The portable skill source is `skills/learning-os-teacher/`. Claude-compatible lo
 - Evidence corrections rebuild derived projections/cards; do not rewrite history.
 - Coding correctness requires real executable verification when the challenge requires it. LLM review alone is qualitative.
 - A fresh teacher must be able to resume from durable kernel state without previous chat history.
-- Learner-facing continuation must call `getStudyContinuation(...)` before selecting new work.
+- Learner-facing continuation must call `getStudyContinuation(...)` before selecting new work. An explicitly adopted one-episode route uses `oneEpisode: true` instead of a fictional minute allowance; actual budgets and elapsed-time FSRS semantics remain intact. Episode mode and `availableMinutes` are mutually exclusive.
 
 ## Commands
 
@@ -140,7 +140,7 @@ npm run tutor -- profile create "My Profile"
 npm run tutor -- profile list
 npm run tutor -- profile checkpoint [profile-id]
 npm run tutor -- onboard
-npm run tutor -- continue <goal-id> [--minutes <n>]
+npm run tutor -- continue <goal-id> [--minutes <n> | --one-episode]
 npm run tutor -- today <goal-id>
 npm run tutor -- <topic-id> --mode learn
 npm run tutor -- <topic-id> --mode practice

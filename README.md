@@ -357,7 +357,16 @@ Start with [Customizing Learning OS](docs/customization.md). It includes a minim
 
 ## Included curriculum
 
-The repository currently includes reusable material/catalogs for areas such as:
+Two agent-guided coding routes provide a structured path without compulsory textbook-style coverage:
+
+- [Frontend revision](knowledge/frontend-revision/INDEX.md): three JavaScript/browser core phases, separately selectable React and Angular branches, an optional internals branch, and small executable coding cases.
+- [Backend systems](knowledge/backend-systems/INDEX.md): seven conceptual phases spanning concurrency, transactions, pressure, state/cache, retries, authorization, diagnosis and consistency. These are phases, not a seven-day promise.
+
+Both preserve existing concept identities, link selected work to focused source material, and use the same evidence, reconstruction, revision-note and FSRS owners. A compact successful episode can end without a bonus lecture. The agent handles source lookup and setup; the learner owns the selected reasoning or code. See [course operations](docs/coding-courses.md) and [revision teaching](docs/technical-revision-teacher.md).
+
+For one useful step without a clock estimate, the agent can use `getStudyContinuation({goalId, now, oneEpisode: true})`. The learner's actual time limit still matters when supplied; no invented minutes or new scheduler are introduced.
+
+The repository also includes reusable material/catalogs for areas such as:
 
 - coding interviews;
 - system design;
@@ -376,7 +385,7 @@ These are examples and starter material, not a mandatory universal curriculum. A
 | `npm run tutor -- profile list` | List local learner profiles |
 | `npm run tutor -- profile use <id>` | Select a learner profile |
 | `npm run tutor -- profile checkpoint [id]` | Flush and verify canonical learner state before a Git commit |
-| `npm run tutor -- continue <goal-id> [--minutes <n>]` | Resume unfinished work or return one next action |
+| `npm run tutor -- continue <goal-id> [--minutes <n> | --one-episode]` | Resume unfinished work or return one next action |
 | `npm run tutor -- today <goal-id>` | Build today's bounded evidence-driven mission |
 | `npm run tutor -- goal <goal-id>` | Inspect/configure goal objective requirements |
 | `npm run tutor -- interview <concept-id>` | Start an interview drill scoped to one concept |

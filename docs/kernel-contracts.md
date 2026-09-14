@@ -785,6 +785,7 @@ getStudyContinuation({
   goalId,
   now,
   availableMinutes?,
+  oneEpisode?,
   retestEligibleWeaknessKeys?,
   mainDeliveryContext?,
   transferDeliveryContext?
@@ -796,8 +797,10 @@ It applies this order:
 
 1. validate the goal;
 2. if any resumable session requires learner reconstruction, return that repair episode first; otherwise return the newest resumable session, and identify any additional open session IDs;
-3. when no session is resumable and `availableMinutes` is absent, return `needs_budget` with confirmed `minutes_per_day` as a suggestion or `null`;
+3. when no session is resumable and neither `availableMinutes` nor `oneEpisode: true` is supplied, return `needs_budget` with confirmed `minutes_per_day` as a suggestion or `null`;
 4. otherwise call daily planning with `maxItems: 1` and return one `recommend` item or `no_action`.
+
+`oneEpisode: true` is mutually exclusive with `availableMinutes`. It requests one selected task plus its necessary feedback/repair without a fictional time allowance. The daily planner accepts `{ availableMinutes: null, maxItems: 1 }` for this route and returns `workLimit: "one_episode"` with null available/planned/unallocated minute totals. Per-item size estimates are not consumed time. Numeric-budget callers retain the existing `DailyMission` shape and time-fitting behavior. Invalid combined bounds are rejected before selection; no learner state is written.
 
 Resumable state always precedes budget collection. An attempt does not expire because a caller returns after minutes, hours, or longer. A configured daily budget is not evidence of how much active-study time remains. Callers supply current remaining active-study minutes after open work closes; wall time and planner estimates are never substituted.
 
@@ -904,14 +907,14 @@ Optional agent/model provenance may be recorded for audit, but it cannot alter e
 ### 0. Resolve resumption or one next action
 
 ```text
-getStudyContinuation({ goalId, now, availableMinutes? })
+getStudyContinuation({ goalId, now, availableMinutes?, oneEpisode? })
 → resume { session, additionalResumableSessionIds }
 → needs_budget { goalId, suggestedMinutes }
 → recommend { mission, item }
 → no_action { mission }
 ```
 
-Call this before composing low-level resume and planning operations. Omit `availableMinutes` when it is unknown: unfinished work still resumes, while new planning returns `needs_budget`. `suggestedMinutes` is confirmed preparation metadata only; ask for the learner's current remaining active-study time before planning.
+Call this before composing low-level resume and planning operations. Omit `availableMinutes` when it is unknown: unfinished work still resumes. For an explicit episode-sized request, use `oneEpisode: true`; otherwise new planning returns `needs_budget`. `suggestedMinutes` is confirmed preparation metadata only; ask for the learner's current remaining active-study time before planning.
 
 ### 1. Request daily mission / next bounded move
 
@@ -931,7 +934,7 @@ When `focusObjectiveIds` is omitted, `getTodayMission(...)` resolves the durable
 
 An active study focus owns the main forward-progress envelope: its objective set plus the prerequisite/foundation closure needed to unlock that set. Unrelated routine due retrieval may appear only as a bounded warm-up; on episode-by-episode `maxItems: 1` calls it must not consume the sole slot ahead of focused main work. Unrelated work may displace the focus only for a deliberately higher-authority exception such as a blocking misconception, recurring/retest weakness, an explicitly eligible weakness retest, or required transfer once transfer is actually selection-eligible. True prerequisites remain eligible through the focused prerequisite/foundation closure. Focus never changes evidence, readiness, transfer, durability, review cards, prerequisites, or goal-objective activation.
 
-Long `design` and `implementation` episodes require at least 10 remaining minutes before the planner will start them; if they do not fit, the planner may select a shorter eligible objective or leave the remaining budget intentionally unallocated. These are session-budget guards, not FSRS semantics.
+In numeric-budget mode, long `design` and `implementation` episodes require at least 10 remaining minutes before the planner will start them; if they do not fit, the planner may select a shorter eligible objective or leave the remaining budget intentionally unallocated. These are session-budget guards, not FSRS semantics.
 
 ### 2. Register/freeze a challenge
 

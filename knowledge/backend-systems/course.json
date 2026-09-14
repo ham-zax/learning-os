@@ -1,0 +1,182 @@
+{
+  "id": "backend-systems",
+  "title": "Backend Systems: Invariants, Failures, Recovery",
+  "version": "1.0.0",
+  "scope": "Seven conceptual phases for backend reasoning, practical concurrency work and interview transfer. No prescribed calendar duration.",
+  "entry": "INDEX.md",
+  "sourceMap": "SOURCES.md",
+  "defaultUnits": [
+    "b01",
+    "b02",
+    "b03",
+    "b04",
+    "b05",
+    "b06",
+    "b07"
+  ],
+  "sources": [
+    {
+      "id": "node-runtime",
+      "title": "Node.js: Event loop and worker pool",
+      "role": "Runtime ownership, blocking and bounded work",
+      "url": "https://nodejs.org/en/learn/asynchronous-work/dont-block-the-event-loop"
+    },
+    {
+      "id": "postgres-isolation",
+      "title": "PostgreSQL transaction isolation",
+      "role": "Actual database visibility and concurrency guarantees, not generic ACID slogans",
+      "url": "https://www.postgresql.org/docs/current/transaction-iso.html"
+    },
+    {
+      "id": "rabbitmq-acks",
+      "title": "RabbitMQ acknowledgements and confirms",
+      "role": "Distinguish publisher confirmation, delivery and consumer acknowledgement",
+      "url": "https://www.rabbitmq.com/docs/confirms"
+    },
+    {
+      "id": "owasp-authorization",
+      "title": "OWASP authorization guidance",
+      "role": "Server-side authorization, least privilege and per-request enforcement",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html"
+    },
+    {
+      "id": "redis-cache-tracking",
+      "title": "Redis client-side caching and invalidation",
+      "role": "A concrete cache-coherence mechanism to compare with the original cache-race case; not a universal cache-aside guarantee",
+      "url": "https://redis.io/docs/latest/develop/clients/client-side-caching/"
+    },
+    {
+      "id": "stripe-idempotency",
+      "title": "Stripe idempotent requests",
+      "role": "A concrete documented retry contract: operation identity, parameter comparison and retained results; distinguish it from general exactly-once claims",
+      "url": "https://docs.stripe.com/api/idempotent_requests"
+    },
+    {
+      "id": "owasp-websockets",
+      "title": "OWASP WebSocket security",
+      "role": "Long-lived authentication, per-message authorization and session/revocation boundaries",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/WebSocket_Security_Cheat_Sheet.html"
+    },
+    {
+      "id": "otel-traces",
+      "title": "OpenTelemetry traces",
+      "role": "Request-path spans and causal context for latency localization; instrumentation evidence rather than guessed bottlenecks",
+      "url": "https://opentelemetry.io/docs/concepts/signals/traces/"
+    },
+    {
+      "id": "postgres-replication",
+      "title": "PostgreSQL standby and replication behaviour",
+      "role": "Replication, replay visibility, acknowledgement and failover trade-offs in a concrete database",
+      "url": "https://www.postgresql.org/docs/current/warm-standby.html"
+    }
+  ],
+  "units": [
+    {
+      "id": "b01",
+      "title": "Runtime, concurrency and backpressure",
+      "lane": "core",
+      "objectiveIds": [
+        "runtime-request-execution-and-concurrency:predict",
+        "resource-saturation-and-backpressure:predict"
+      ],
+      "sourceIds": [
+        "node-runtime"
+      ],
+      "outcome": "Locate execution, waiting and capacity limits in a request path.",
+      "file": "units/b01.md"
+    },
+    {
+      "id": "b02",
+      "title": "Transactions and connection pressure",
+      "lane": "core",
+      "objectiveIds": [
+        "database-transactions-and-concurrent-correctness:predict",
+        "database-transactions-and-concurrent-correctness:implement",
+        "database-connection-and-resource-pressure:debug"
+      ],
+      "sourceIds": [
+        "postgres-isolation"
+      ],
+      "outcome": "Protect a business invariant under concurrency and separate pool wait from query execution.",
+      "file": "units/b02.md"
+    },
+    {
+      "id": "b03",
+      "title": "State ownership, cache visibility and replicas",
+      "lane": "core",
+      "objectiveIds": [
+        "state-ownership-and-cache-consistency:predict",
+        "state-ownership-and-cache-consistency:design"
+      ],
+      "sourceIds": [
+        "redis-cache-tracking",
+        "postgres-replication"
+      ],
+      "outcome": "State an explicit freshness contract and reason about stale cache publication.",
+      "file": "units/b03.md"
+    },
+    {
+      "id": "b04",
+      "title": "Queue delivery, retries and uncertain outcomes",
+      "lane": "core",
+      "objectiveIds": [
+        "queue-delivery-and-worker-failure:predict",
+        "retries-idempotency-and-uncertain-outcomes:predict",
+        "retries-idempotency-and-uncertain-outcomes:design"
+      ],
+      "sourceIds": [
+        "rabbitmq-acks",
+        "stripe-idempotency"
+      ],
+      "outcome": "Separate transport acknowledgement from business-effect duplication safety.",
+      "file": "units/b04.md"
+    },
+    {
+      "id": "b05",
+      "title": "Authorization and long-lived connections",
+      "lane": "core",
+      "objectiveIds": [
+        "authorization-and-tenant-isolation:design",
+        "long-lived-connection-authorization:design"
+      ],
+      "sourceIds": [
+        "owasp-authorization",
+        "owasp-websockets"
+      ],
+      "outcome": "Enforce resource access at the owner and handle permission changes over time.",
+      "file": "units/b05.md"
+    },
+    {
+      "id": "b06",
+      "title": "Production diagnosis and architecture boundaries",
+      "lane": "core",
+      "objectiveIds": [
+        "production-latency-localization:debug",
+        "architecture-boundaries-and-scaling:design"
+      ],
+      "sourceIds": [
+        "node-runtime",
+        "postgres-isolation",
+        "otel-traces"
+      ],
+      "outcome": "Choose one discriminating measurement and scale the demonstrated bottleneck.",
+      "file": "units/b06.md"
+    },
+    {
+      "id": "b07",
+      "title": "Replication, integration and interview transfer",
+      "lane": "core",
+      "objectiveIds": [
+        "replication-and-distributed-consistency:predict",
+        "replication-and-distributed-consistency:design"
+      ],
+      "sourceIds": [
+        "postgres-replication",
+        "postgres-isolation",
+        "rabbitmq-acks"
+      ],
+      "outcome": "Combine visibility, acknowledgement and recovery guarantees in an unfamiliar case.",
+      "file": "units/b07.md"
+    }
+  ]
+}

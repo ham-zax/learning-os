@@ -56,6 +56,14 @@ export interface TodayMissionInput {
   transferDeliveryContext?: DeliveryContext;
 }
 
+/** Explicitly bounded by work, not an invented learner time allowance. */
+export type OneEpisodeMissionInput = Omit<TodayMissionInput, "availableMinutes" | "maxItems"> & {
+  availableMinutes: null;
+  maxItems: 1;
+};
+
+type PlanningInput = TodayMissionInput | OneEpisodeMissionInput;
+
 export interface DailyMissionItem {
   kind: DailyMissionItemKind;
   objectiveId: string;
@@ -77,6 +85,13 @@ export interface DailyMission {
   items: DailyMissionItem[];
   blocked: BlockedSelectionCandidate[];
 }
+
+export type OneEpisodeMission = Omit<DailyMission, "availableMinutes" | "plannedMinutes" | "unallocatedMinutes"> & {
+  workLimit: "one_episode";
+  availableMinutes: null;
+  plannedMinutes: null;
+  unallocatedMinutes: null;
+};
 
 type GoalObjectiveState = {
   config: GoalObjective;
@@ -400,7 +415,7 @@ function deriveFocusPrerequisites(
 function selectIntent(
   db: Database.Database,
   states: readonly GoalObjectiveState[],
-  input: TodayMissionInput,
+  input: PlanningInput,
   now: string,
   deadlineAt: string | null,
   deliveryContext: DeliveryContext,
@@ -494,7 +509,7 @@ function addBlocked(
 function selectFittingIntent(
   db: Database.Database,
   states: readonly GoalObjectiveState[],
-  input: TodayMissionInput,
+  input: PlanningInput,
   now: string,
   deadlineAt: string | null,
   deliveryContext: DeliveryContext,
@@ -618,11 +633,16 @@ export function resolveRequestedChallenge(
   };
 }
 
+export function getTodayMission(db: Database.Database, input: TodayMissionInput): DailyMission;
+export function getTodayMission(db: Database.Database, input: OneEpisodeMissionInput): OneEpisodeMission;
+export function getTodayMission(db: Database.Database, input: PlanningInput): DailyMission | OneEpisodeMission;
 export function getTodayMission(
   db: Database.Database,
-  input: TodayMissionInput,
-): DailyMission {
-  if (!Number.isInteger(input.availableMinutes) || input.availableMinutes <= 0) {
+  input: PlanningInput,
+): DailyMission | OneEpisodeMission {
+  if (input.availableMinutes === null) {
+    if (input.maxItems !== 1) throw new Error("An episode-bounded mission must select exactly one item at most");
+  } else if (!Number.isInteger(input.availableMinutes) || input.availableMinutes <= 0) {
     throw new Error("availableMinutes must be a positive integer");
   }
   if (
@@ -685,7 +705,8 @@ export function getTodayMission(
   const items: DailyMissionItem[] = [];
   const blocked = new Map<string, BlockedSelectionCandidate>();
   const itemLimit = input.maxItems ?? Number.POSITIVE_INFINITY;
-  let remaining = input.availableMinutes;
+  // Infinity is an internal no-time-filter sentinel, never a learner budget or telemetry.
+  let remaining = input.availableMinutes ?? Number.POSITIVE_INFINITY;
 
   // Warm-up is intentionally bounded: routine due retrieval only, max 3 items / 5 minutes.
   // With an active focus, unrelated overdue debt stays in this bounded lane even when that
@@ -708,7 +729,9 @@ export function getTodayMission(
     warmupBudget > 0 &&
     remaining > 0
   ) {
-    const availableForRetrieval = Math.min(2, warmupBudget, remaining);
+    const availableForRetrieval = input.availableMinutes === null
+      ? remaining
+      : Math.min(2, warmupBudget, remaining);
     const result = selectFittingIntent(
       db,
       remainingDue,
@@ -790,7 +813,7 @@ export function getTodayMission(
   const transferPressure =
     !plannedInitialDiagnostics &&
     pendingDiagnosticStates.length === 0 &&
-    input.availableMinutes >= 30 &&
+    (input.availableMinutes === null || input.availableMinutes >= 30) &&
     (deadlineAt !== null ||
       input.transferDeliveryContext === "interview" ||
       input.transferDeliveryContext === "mock");
@@ -827,7 +850,7 @@ export function getTodayMission(
     forwardStates.length > 0 &&
     remaining >= 5 &&
     items.length < itemLimit &&
-    (input.availableMinutes >= 20 || items.length === 0)
+    (input.availableMinutes === null || input.availableMinutes >= 20 || items.length === 0)
   ) {
     let result = selectFittingIntent(
       db,
@@ -1018,18 +1041,21 @@ export function getTodayMission(
     }
   }
 
-  return {
-    missionId: missionId(input.goalId, now, input.availableMinutes),
+  const result = {
     goalId: input.goalId,
     goal: topic.goal,
     deadlineAt,
     generatedAt: now,
-    availableMinutes: input.availableMinutes,
-    plannedMinutes: input.availableMinutes - remaining,
-    unallocatedMinutes: remaining,
     items,
     blocked: [...blocked.values()].sort((left, right) =>
       left.objectiveId.localeCompare(right.objectiveId),
     ),
   };
+  if (input.availableMinutes === null) {
+    return { ...result, missionId: `episode_${input.goalId}_${now}`, workLimit: "one_episode",
+      availableMinutes: null, plannedMinutes: null, unallocatedMinutes: null };
+  }
+  return { ...result, missionId: missionId(input.goalId, now, input.availableMinutes),
+    availableMinutes: input.availableMinutes, plannedMinutes: input.availableMinutes - remaining,
+    unallocatedMinutes: remaining };
 }

@@ -2,6 +2,10 @@
 
 The repository's `docs/teacher-agent-protocol.md` is the canonical current protocol when available. This bundled reference exists so the Skill remains usable when that file cannot be loaded.
 
+Exercises, coding tasks and scratchpad setup are optional. Begin only after learner adoption or under an applicable standing instruction. Continue useful conversation when declined; declining is not competence evidence. If the goal requires implementation, explain the remaining evidence gap and allow deferral or an explicit scope revision. One-off choices remain episode-local; standing authorization covers routine work within its scope.
+
+For coding revision, progressively load [technical-revision.md](technical-revision.md). The adopted course may use `getStudyContinuation({goalId, now, oneEpisode: true})` without a fictional minute allowance. A real time limit uses `availableMinutes` instead; do not send both. New-work calls omitting both retain `needs_budget`. Course references and phase maps never change evidence or FSRS by themselves.
+
 ## Contents
 
 - Authority split

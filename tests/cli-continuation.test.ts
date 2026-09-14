@@ -47,6 +47,23 @@ describe("continue CLI", () => {
     });
   }
 
+  it("accepts one episode and rejects combining it with minutes", () => {
+    const fixture = createKernelFixture(databasePath);
+    fixture.db.close();
+
+    const result = runContinue("--one-episode", "--json");
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      kind: "recommend",
+      mission: { workLimit: "one_episode", availableMinutes: null, plannedMinutes: null },
+    });
+
+    const invalid = runContinue("--one-episode", "--minutes", "30", "--json");
+    expect(invalid.status).toBe(1);
+    expect(invalid.stdout).toBe("");
+    expect(invalid.stderr).toContain("Choose oneEpisode or availableMinutes");
+  });
+
   it("emits one JSON budget request when remaining time is unknown", () => {
     const fixture = createKernelFixture(databasePath);
     fixture.db.close();

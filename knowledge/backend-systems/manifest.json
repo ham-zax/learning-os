@@ -1,0 +1,155 @@
+{
+  "topic": "backend-systems",
+  "topicId": "backend-systems",
+  "topicName": "Backend Systems: Invariants, Failures, Recovery",
+  "version": "1.0.0",
+  "description": "Seven conceptual phases for backend reasoning, practical concurrency work and interview transfer. No prescribed calendar duration.",
+  "concepts": [
+    {
+      "id": "runtime-request-execution-and-concurrency",
+      "title": "Runtime request execution and concurrency",
+      "difficulty": 3,
+      "prerequisites": [],
+      "file": "runtime-request-execution-and-concurrency.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "resource-saturation-and-backpressure",
+      "title": "Resource saturation and backpressure",
+      "difficulty": 3,
+      "prerequisites": [
+        "runtime-request-execution-and-concurrency"
+      ],
+      "file": "resource-saturation-and-backpressure.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "database-transactions-and-concurrent-correctness",
+      "title": "Database transactions and concurrent correctness",
+      "difficulty": 3,
+      "prerequisites": [],
+      "file": "database-transactions-and-concurrent-correctness.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "database-connection-and-resource-pressure",
+      "title": "Database connection and resource pressure",
+      "difficulty": 3,
+      "prerequisites": [
+        "resource-saturation-and-backpressure"
+      ],
+      "file": "database-connection-and-resource-pressure.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "state-ownership-and-cache-consistency",
+      "title": "State ownership and cache consistency",
+      "difficulty": 3,
+      "prerequisites": [],
+      "file": "state-ownership-and-cache-consistency.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "queue-delivery-and-worker-failure",
+      "title": "Queue delivery and worker failure",
+      "difficulty": 3,
+      "prerequisites": [],
+      "file": "queue-delivery-and-worker-failure.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "retries-idempotency-and-uncertain-outcomes",
+      "title": "Retries, idempotency and uncertain outcomes",
+      "difficulty": 3,
+      "prerequisites": [
+        "queue-delivery-and-worker-failure"
+      ],
+      "file": "retries-idempotency-and-uncertain-outcomes.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "authorization-and-tenant-isolation",
+      "title": "Authorization and tenant isolation",
+      "difficulty": 3,
+      "prerequisites": [],
+      "file": "authorization-and-tenant-isolation.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "long-lived-connection-authorization",
+      "title": "Long-lived connection authorization",
+      "difficulty": 3,
+      "prerequisites": [
+        "authorization-and-tenant-isolation"
+      ],
+      "file": "long-lived-connection-authorization.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "production-latency-localization",
+      "title": "Production latency localization",
+      "difficulty": 3,
+      "prerequisites": [
+        "resource-saturation-and-backpressure",
+        "runtime-request-execution-and-concurrency"
+      ],
+      "file": "production-latency-localization.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "architecture-boundaries-and-scaling",
+      "title": "Architecture boundaries and scaling",
+      "difficulty": 3,
+      "prerequisites": [],
+      "file": "architecture-boundaries-and-scaling.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "replication-and-distributed-consistency",
+      "title": "Replication and distributed consistency",
+      "difficulty": 3,
+      "prerequisites": [
+        "retries-idempotency-and-uncertain-outcomes",
+        "state-ownership-and-cache-consistency"
+      ],
+      "file": "replication-and-distributed-consistency.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    }
+  ]
+}

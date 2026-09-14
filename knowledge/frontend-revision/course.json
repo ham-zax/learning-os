@@ -1,0 +1,236 @@
+{
+  "id": "frontend-revision",
+  "title": "Frontend Revision: Recover, Reason, Build",
+  "version": "1.0.0",
+  "scope": "Revision-first JavaScript and browser core, with independently selectable React, Angular and internals branches. Not a claim of exhaustive frontend expertise.",
+  "entry": "INDEX.md",
+  "sourceMap": "SOURCES.md",
+  "defaultUnits": [
+    "f01",
+    "f02",
+    "f03"
+  ],
+  "sources": [
+    {
+      "id": "javascript-registry",
+      "title": "Existing JavaScript source registry",
+      "role": "Source roles, pinned local snapshots and interview-priority signals; not a second curriculum",
+      "localPath": "../js/resources.json"
+    },
+    {
+      "id": "framework-registry",
+      "title": "Existing React and Angular source registry",
+      "role": "Official/local sources, version baselines and interview-bank restrictions",
+      "localPath": "../frontend-framework/resources.json"
+    },
+    {
+      "id": "mdn-javascript",
+      "title": "MDN JavaScript Guide",
+      "role": "Language semantics and focused reference lookup",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide"
+    },
+    {
+      "id": "mdn-execution",
+      "title": "MDN JavaScript execution model",
+      "role": "Execution contexts, jobs and host distinctions",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Execution_model"
+    },
+    {
+      "id": "mdn-web",
+      "title": "MDN web platform reference",
+      "role": "Browser events, fetch, CORS and platform behavior",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API"
+    },
+    {
+      "id": "wai-patterns",
+      "title": "WAI ARIA Authoring Practices",
+      "role": "Keyboard and focus interaction reference; prefer native elements where suitable",
+      "url": "https://www.w3.org/WAI/ARIA/apg/patterns/"
+    },
+    {
+      "id": "react-state",
+      "title": "React: Managing State",
+      "role": "Official state, identity and ownership reference",
+      "url": "https://react.dev/learn/managing-state",
+      "localPath": "../frontend-framework/sources/react/react-dev/src/content/learn/managing-state.md"
+    },
+    {
+      "id": "react-effects",
+      "title": "React: Synchronizing with Effects",
+      "role": "Official synchronization and cleanup model",
+      "url": "https://react.dev/learn/synchronizing-with-effects",
+      "localPath": "../frontend-framework/sources/react/react-dev/src/content/learn/synchronizing-with-effects.md"
+    },
+    {
+      "id": "react-reference",
+      "title": "React API reference",
+      "role": "Version-sensitive public APIs; confirm the exercise runtime before judging an answer",
+      "url": "https://react.dev/reference/react"
+    },
+    {
+      "id": "angular-signals",
+      "title": "Angular signals guide",
+      "role": "Official reactivity model; consult the source registry for the versioned local snapshot",
+      "url": "https://angular.dev/guide/signals",
+      "localPath": "../frontend-framework/sources/angular/angular-source/adev/src/content/introduction/essentials/signals.md"
+    },
+    {
+      "id": "angular-di",
+      "title": "Angular hierarchical injectors",
+      "role": "Provider ownership, instance lifetime and lookup",
+      "url": "https://angular.dev/guide/di/hierarchical-dependency-injection",
+      "localPath": "../frontend-framework/sources/angular/angular-source/adev/src/content/guide/di/hierarchical-dependency-injection.md"
+    },
+    {
+      "id": "angular-reference",
+      "title": "Angular guides and API reference",
+      "role": "Forms, routing, HTTP, rendering and testing; label version-specific APIs",
+      "url": "https://angular.dev/overview"
+    }
+  ],
+  "units": [
+    {
+      "id": "f01",
+      "title": "Recover the JavaScript execution model",
+      "lane": "core",
+      "objectiveIds": [
+        "js-types:predict",
+        "js-coercion-equality:predict",
+        "js-scope:explain",
+        "js-hoisting:explain",
+        "js-closures:explain",
+        "js-this-binding:predict",
+        "js-prototypes:explain",
+        "js-closures:implement"
+      ],
+      "sourceIds": [
+        "javascript-registry",
+        "mdn-javascript"
+      ],
+      "outcome": "Explain and predict binding, value and object-lifetime behavior without a trivia marathon.",
+      "file": "units/f01.md"
+    },
+    {
+      "id": "f02",
+      "title": "Async results, errors and execution order",
+      "lane": "core",
+      "objectiveIds": [
+        "js-promises:predict",
+        "js-async-await:predict",
+        "js-event-loop:explain",
+        "js-async-await:implement"
+      ],
+      "sourceIds": [
+        "javascript-registry",
+        "mdn-execution"
+      ],
+      "outcome": "Control async work and explain observable ordering, error propagation and stale-result behavior.",
+      "file": "units/f02.md"
+    },
+    {
+      "id": "f03",
+      "title": "Browser interactions and user-visible correctness",
+      "lane": "core",
+      "objectiveIds": [
+        "js-dom-events:explain",
+        "js-event-delegation:explain",
+        "js-same-origin-cors:explain",
+        "js-performance:explain"
+      ],
+      "sourceIds": [
+        "mdn-web",
+        "wai-patterns"
+      ],
+      "outcome": "Connect JavaScript to event ownership, network boundaries and an observable UI symptom.",
+      "file": "units/f03.md"
+    },
+    {
+      "id": "r01",
+      "title": "React state ownership and effect lifetimes",
+      "lane": "react",
+      "objectiveIds": [
+        "react-state-rendering:predict",
+        "react-hooks-effects:explain",
+        "react-state-architecture:design"
+      ],
+      "sourceIds": [
+        "framework-registry",
+        "react-state",
+        "react-effects"
+      ],
+      "outcome": "Reason about UI state, identity and synchronization rather than recite Hook definitions.",
+      "file": "units/r01.md"
+    },
+    {
+      "id": "r02",
+      "title": "React asynchronous UI, rendering boundaries and diagnosis",
+      "lane": "react",
+      "objectiveIds": [
+        "react-async-ui:explain",
+        "react-server-rendering:explain",
+        "react-performance:debug"
+      ],
+      "sourceIds": [
+        "framework-registry",
+        "react-reference",
+        "react-effects"
+      ],
+      "outcome": "Explain asynchronous and server/client behavior in the actual project environment.",
+      "file": "units/r02.md"
+    },
+    {
+      "id": "rx",
+      "title": "React internals when they answer a real question",
+      "lane": "extension",
+      "objectiveIds": [
+        "react-fiber-internals:predict"
+      ],
+      "sourceIds": [
+        "framework-registry",
+        "react-reference"
+      ],
+      "outcome": "Use a narrow internal model to explain an observed scheduling or identity behavior.",
+      "file": "units/rx.md"
+    },
+    {
+      "id": "a01",
+      "title": "Angular reactive state and dependency lifetimes",
+      "lane": "angular",
+      "objectiveIds": [
+        "angular-signals-reactivity:explain",
+        "angular-standalone-architecture:explain",
+        "angular-dependency-injection:explain",
+        "angular-change-detection:predict",
+        "angular-rxjs-interoperability:design"
+      ],
+      "sourceIds": [
+        "framework-registry",
+        "angular-signals",
+        "angular-di"
+      ],
+      "outcome": "Connect signal dependencies, injector ownership and async lifetime to the displayed UI.",
+      "file": "units/a01.md"
+    },
+    {
+      "id": "a02",
+      "title": "Angular features, navigation and diagnostic work",
+      "lane": "angular",
+      "objectiveIds": [
+        "angular-data-fetching:design",
+        "angular-forms:explain",
+        "angular-routing:explain",
+        "angular-ssr-hydration:design",
+        "angular-testing-debugging:debug",
+        "angular-rendering-performance:debug",
+        "angular-architecture:design"
+      ],
+      "sourceIds": [
+        "framework-registry",
+        "angular-reference",
+        "angular-di"
+      ],
+      "outcome": "Design a feature whose form, requests, routes and service lifetimes stay coherent.",
+      "file": "units/a02.md"
+    }
+  ]
+}

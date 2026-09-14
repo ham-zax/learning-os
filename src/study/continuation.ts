@@ -4,12 +4,14 @@ import type { DeliveryContext } from "../db/types.js";
 import { listResumableSessions } from "../kernel/foundation.js";
 import type { ResumedSession } from "../kernel/foundation.js";
 import { getTodayMission } from "../plan/today.js";
-import type { DailyMission, DailyMissionItem } from "../plan/today.js";
+import type { DailyMission, DailyMissionItem, OneEpisodeMission } from "../plan/today.js";
 
 export interface StudyContinuationInput {
   goalId: string;
   now: string;
   availableMinutes?: number;
+  /** Explicit one-episode request; mutually exclusive with availableMinutes. */
+  oneEpisode?: boolean;
   retestEligibleWeaknessKeys?: readonly string[];
   mainDeliveryContext?: DeliveryContext;
   transferDeliveryContext?: DeliveryContext;
@@ -28,12 +30,12 @@ export type StudyContinuation =
     }
   | {
       kind: "recommend";
-      mission: DailyMission;
+      mission: DailyMission | OneEpisodeMission;
       item: DailyMissionItem;
     }
   | {
       kind: "no_action";
-      mission: DailyMission;
+      mission: DailyMission | OneEpisodeMission;
     };
 
 export function getStudyContinuation(
@@ -44,6 +46,9 @@ export function getStudyContinuation(
     throw new Error(`Goal topic not found: ${input.goalId}`);
   }
 
+  if (input.oneEpisode && input.availableMinutes !== undefined) {
+    throw new Error("Choose oneEpisode or availableMinutes, not both");
+  }
   const resumable = listResumableSessions(db, input.goalId);
   const requiredReconstruction = resumable.find((entry) => entry.reconstructionRequired);
   const session = requiredReconstruction ?? resumable[0];
@@ -57,7 +62,7 @@ export function getStudyContinuation(
     };
   }
 
-  if (input.availableMinutes === undefined) {
+  if (input.availableMinutes === undefined && !input.oneEpisode) {
     return {
       kind: "needs_budget",
       goalId: input.goalId,
@@ -68,7 +73,7 @@ export function getStudyContinuation(
   const mission = getTodayMission(db, {
     goalId: input.goalId,
     now: input.now,
-    availableMinutes: input.availableMinutes,
+    availableMinutes: input.oneEpisode ? null : input.availableMinutes!,
     maxItems: 1,
     retestEligibleWeaknessKeys: input.retestEligibleWeaknessKeys,
     mainDeliveryContext: input.mainDeliveryContext,

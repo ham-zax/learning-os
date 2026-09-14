@@ -4,6 +4,9 @@ Learning OS is easiest to use through an AI agent that can access the repository
 
 ## Start learning
 
+- [Coding revision courses](coding-courses.md) — source-linked frontend/backend routes, selective practical work, one-episode continuation and existing-profile integration.
+- [Technical revision teaching](technical-revision-teacher.md) — small bidirectional engineering cases, focused repair and compact personal notes.
+
 - [Getting started](getting-started.md) — clone Learning OS, connect a filesystem-capable AI agent, onboard or resume a learner, and understand the CLI fallback.
 - [Customizing Learning OS](customization.md) — bring your own curriculum, local defaults, profiles, and agent integration.
 - [Backend Systems personalized lesson example](examples/backend-systems-personalized-lesson.md) — see how a source-controlled learning plan can coexist with live evidence-driven learner state.
@@ -26,6 +29,7 @@ Read these before changing how mastery, assessment, scheduling, or challenge sel
 
 ## Understand why the system is shaped this way
 
+- [Learning-experience review — 2026-09-14](learning-experience-review-2026-09-14.md) — verified conversation, continuity, and optional-exercise findings; proposed priorities, not an accepted implementation specification.
 - [Teacher pedagogy design](teacher-pedagogy-design.md) — rationale and detailed operator/challenge guidance behind the normative teacher-agent protocol. If wording conflicts, `teacher-agent-protocol.md` governs teacher behavior unless a higher-authority repository contract applies.
 - [Teacher pedagogy implementation plan](teacher-pedagogy-implementation-plan.md) — completed first-wave protocol/Skill rollout and fresh-teacher dogfood, with product extensions kept evidence-gated.
 - [Flexible learning runtime design](flexible-learning-runtime-design.md) — live-session pain points and V2 design for dynamic concept episodes, learner-visible teaching, speech-aware questioning, time/FSRS ownership, prerequisite repair, soft curriculum focus, and evidence-safe replanning.

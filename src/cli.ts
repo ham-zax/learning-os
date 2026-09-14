@@ -900,6 +900,7 @@ program
   .description("Resume unfinished work or select the next study action")
   .argument("<goal>", "Goal/topic ID")
   .option("-m, --minutes <n>", "Remaining active-study minutes")
+  .option("--one-episode", "Select one useful episode without assuming available minutes")
   .option("--context <context>", "Override the main delivery context")
   .option("--transfer-context <context>", "Override the transfer delivery context")
   .option(
@@ -914,6 +915,7 @@ program
       goal: string,
       opts: {
         minutes?: string;
+        oneEpisode?: boolean;
         context?: string;
         transferContext?: string;
         retest: string[];
@@ -941,6 +943,7 @@ program
           goalId: goal,
           now: new Date().toISOString(),
           availableMinutes,
+          oneEpisode: opts.oneEpisode,
           retestEligibleWeaknessKeys: opts.retest,
           mainDeliveryContext,
           transferDeliveryContext,
@@ -975,14 +978,14 @@ program
                   "(not assumed remaining).",
               );
             }
-            console.log(`Run: tutor continue ${goal} --minutes <n>`);
+            console.log(`Run: tutor continue ${goal} --minutes <n> or --one-episode`);
             break;
           }
           case "recommend": {
             header("Recommended Next Action");
             console.log(
               `  ${continuation.item.kind.toUpperCase()} ` +
-                `${continuation.item.minutes}m  ${continuation.item.objectiveId}`,
+                `${continuation.mission.availableMinutes === null ? "one episode" : `${continuation.item.minutes}m`}  ${continuation.item.objectiveId}`,
             );
             console.log(`  ${continuation.item.reason}`);
             info("No attempt has been opened; accept the recommendation before starting it.");
