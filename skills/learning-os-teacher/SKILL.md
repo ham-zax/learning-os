@@ -12,7 +12,9 @@ description: >-
 
 ## Present a pending question through the kernel
 
-After `getStudyContinuation(...)`, prefer the resume result's `presentation` for the learner-facing question. If its kind is `question`, present `markdown` and stop. It already contains orientation, task context and one saved question; do not append the answer, a tracing procedure, or further questions.
+After `getStudyContinuation(...)`, first reconcile the current learner message with the saved question. If the message answers it, call `answerAttemptSubquestion` with that question's `seq` and the actual response, then interpret/assess it. A returned `question` describes the state before processing this message; it does not mean repeat the question instead of consuming an answer.
+
+When there is no answer to process and the learner needs the pending question (fresh resumption or an explicit context request), present `presentation.markdown` and stop. It contains orientation, task context and one saved question; do not append the answer, a tracing procedure, or further questions.
 
 - `needs_question`: prepare one complete question plus neutral task context under the frozen criteria and choose the explicit chunking mode before persisting it. Use `questionChunking: "default"` with no scope, or `questionChunking: "atomic"` with `scopeCriterionId` and `scopeNote`; then call `getSessionQuestionPresentation(sessionId)`. This works in response collection and required reconstruction.
 - `answered`: inspect and assess/integrate the response. Another scoped part requires an unmet criterion or repair need; one narrow answer does not close a multi-criterion reconstruction by itself.
@@ -23,6 +25,37 @@ An `atomic` question must target one frozen criterion (`scopeCriterionId`) and s
 A context request redisplays the saved presentation. A wording/size complaint replaces the identified pending question with a complete smaller question: exact context, explicit chunking, and atomic scope when applicable. Neither complaint is an assessed learner answer. Context contains relevant code/facts, not the solution. Reconstruction requests the learner's response before repeating prior teaching. If the current pending question was already presented in this conversation and the learner sends a bare acknowledgment, do not redisplay the full markdown; wait briefly for the answer or an explicit request. Further answer-bearing help uses the existing exposure/hint boundary. Exercise/scratchpad adoption remains optional.
 
 Act as the conversational teacher **for** Learning OS, not as a replacement learning system.
+
+## Respond to the answer and the learner's effort choice
+
+After assessment, use continuation's `feedback` or `getSessionFeedback(sessionId)`.
+Its criterion statuses and rationale ground feedback in this answer. For
+`complete_feedback`, state the specific demonstrated relationship, acknowledge
+assistance when present, and close the feedback step without another question.
+For `review_gap`, address the assessed gap: a slip gets brief correction; a
+demonstrated causal misconception gets recorded teaching and focused
+reconstruction. `review_ungradable` is an assessment limitation, not evidence of
+a misconception. For `reconstruct`, use the saved scoped question and existing
+reconstruction closure; it creates no new retrieval evidence.
+
+Before final submission, an ambiguous answer gets one neutral clarification of
+the same criterion through the subquestion lifecycle. Preserve the actual answer
+and its clarification. A context/wording complaint is not an assessed answer.
+Read the complete workflow in the repository protocol's “Adapt feedback to the
+actual answer” section, or the portable reference when the repository doc is absent.
+
+Read continuation's `practicalWork`. Save an episode choice with
+`setSessionPracticalWork(sessionId, "conversation_only")`; save an explicitly
+lasting choice with `setInteractionPreferences({ practicalWork: "conversation_only" })`.
+Before a session exists, pass the temporary choice to continuation and carry it
+into `createSession(goalId, mode, practicalWork)`. `ask_first` is not consent;
+coding/scratchpad work begins when adopted. A bare “continue” does not reverse a
+decline. Deferred practical objectives stay unmet without becoming failures.
+
+For later work, follow the selector's novelty/changed-surface requirements and
+inspect its recent challenge references before authoring. Repair follow-ups use
+variants; transfer and delayed retrieval still use the existing goal selector
+and FSRS. Do not turn immediate reconstruction into a retention claim.
 
 Learning OS is agent-operated. The learner's normal interface is this conversation; the agent uses connected WSL/repository access to consult and invoke Learning OS, then returns the learner-facing response in chat. Do not require a dedicated Learning OS MCP server for this workflow, and do not make routine CLI operation the learner's responsibility unless the learner explicitly asks to use the CLI.
 

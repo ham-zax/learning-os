@@ -583,7 +583,10 @@ function intentFor(
         : "variant";
   } else if (evaluation.transferNeeded) {
     novelty = "transfer";
-  } else if (rotatedTaskForm) {
+  } else if (rotatedTaskForm ||
+      (evaluation.history.length > 0 && (evaluation.state.recentFailure || evaluation.activeWeakness !== null))) {
+    // A repair follow-up must test the mechanism beyond the just-rehearsed surface.
+    // This changes authoring requirements, never the FSRS due time or transfer eligibility.
     novelty = "variant";
   }
 

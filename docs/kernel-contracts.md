@@ -163,7 +163,7 @@ Do not persist raw resumes, job descriptions, chat transcripts, provider identif
 
 ### `interaction_preferences`
 
-A single optional profile-local row stores only explicit stable interaction preferences currently needed for fresh-teacher continuity: `input_mode` (`default` or `speech_to_text`) and `question_chunking` (`default` or `atomic`). The row records `source = learner_explicit` and `updated_at`. Absence of a row means default behavior. Preferences never change evidence, readiness, weaknesses, transfer, durability, review timing, or selection. System invariants such as repair-before-transition and active-time accounting are not preferences.
+A single optional profile-local row stores explicit stable interaction preferences: `input_mode` (`default` or `speech_to_text`), `question_chunking` (`default` or `atomic`), and `practical_work` (`ask_first` or `conversation_only`). The row records `source = learner_explicit` and `updated_at`. Absence of a row means default behavior. The nullable `sessions.practical_work` field overrides only the current episode; null inherits the profile. Preferences never change evidence, readiness, weaknesses, transfer, durability or review timing. Practical-work choice constrains planning eligibility without changing goal requirements. System invariants such as repair-before-transition and active-time accounting are not preferences.
 
 ### `objective_projections`
 
@@ -781,6 +781,7 @@ getStudyContinuation({
   now,
   availableMinutes?,
   oneEpisode?,
+  practicalWork?,
   retestEligibleWeaknessKeys?,
   mainDeliveryContext?,
   transferDeliveryContext?
@@ -902,16 +903,51 @@ Optional agent/model provenance may be recorded for audit, but it cannot alter e
 ### 0. Resolve resumption or one next action
 
 ```text
-getStudyContinuation({ goalId, now, availableMinutes?, oneEpisode? })
-→ resume { session, additionalResumableSessionIds }
-→ needs_budget { goalId, suggestedMinutes }
-→ recommend { mission, item }
-→ no_action { mission }
+getStudyContinuation({ goalId, now, availableMinutes?, oneEpisode?, practicalWork? })
+→ resume { session, presentation, feedback, practicalWork, additionalResumableSessionIds }
+→ needs_budget { goalId, suggestedMinutes, practicalWork }
+→ recommend { mission, item, practicalWork }
+→ no_action { mission, practicalWork }
 ```
 
 Call this before composing low-level resume and planning operations. Omit `availableMinutes` when it is unknown: unfinished work still resumes. For an explicit episode-sized request, use `oneEpisode: true`; otherwise new planning returns `needs_budget`. `suggestedMinutes` is confirmed preparation metadata only; ask for the learner's current remaining active-study time before planning.
 
 ### 1. Request daily mission / next bounded move
+
+`getSessionFeedback(sessionId)` returns a read-only, active-attempt view of
+effective assessment evidence and frozen criterion statuses. Its `nextAction`
+is `none`, `collect_response`, `run_verification`, `assess_response`,
+`complete_feedback`, `review_gap`, `review_ungradable`, or `reconstruct`.
+Required reconstruction takes priority over assessment success. An all-correct
+assessment permits completing current feedback; this does not assert whole-goal
+completion or whole-concept mastery. Corrections/invalidation use the existing
+effective-evidence owner. No additional feedback state is persisted.
+Partial invalidation preserves the surviving objectives in the feedback view
+while returning `assess_response`. Targets with assessment history use evidence
+receipts and `reviseEvidence`, not a second `recordAssessment` call for the attempt.
+
+`practicalWork` is `ask_first` (default) or `conversation_only`.
+`setInteractionPreferences` stores explicitly lasting profile choices;
+`setSessionPracticalWork(sessionId, value | null)` stores an episode override or
+restores inheritance. `getPracticalWorkPolicy(sessionId?)` resolves session,
+profile, then default. Schema v23 adds `interaction_preferences.practical_work`
+(non-null default `ask_first`) and `sessions.practical_work` (nullable inheritance).
+These are effort choices, never evidence or permission to change learner truth.
+
+With no resumable session, continuation accepts a read-only `practicalWork`
+planning override and labels its source `request`; otherwise it returns the
+active session's saved policy. Carry a temporary planning choice into
+`createSession(goalId, mode, practicalWork?)`. Daily planning uses the override or
+profile preference and reports `deferredPracticalObjectiveIds` for relevant
+implementation objectives under conversation-only mode. Goal requirements and
+FSRS dates remain unchanged. `openAttempt` rejects implementation or
+execution-required challenges in a conversation-only session. `ask_first` still
+requires the external teacher to honor explicit adoption/standing authorization.
+
+The selector requests a variant when prior attempt history and an unresolved
+failure/active weakness exist, even if the task form stays the same. Transfer
+eligibility, selection priority and FSRS timing are unchanged. Semantic fidelity
+of the authored changed surface remains the teacher's responsibility.
 
 ```text
 getTodayMission({

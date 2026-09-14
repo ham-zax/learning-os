@@ -215,6 +215,8 @@ export function createCodingVerificationRequest(
 
 /**
  * Start a coding drill session.
+ * Call only after the learner explicitly adopts coding work. This episode then
+ * overrides a standing conversational preference without changing the profile.
  *
  * Selection order:
  *   1. If `config.problemId` is provided, load that problem directly.
@@ -296,8 +298,12 @@ export function startCodingDrill(
     verificationRequired: true,
     verificationBasis: "deterministic_execution",
   });
-  const sessionId = createInterviewSessionForConcept(db, problem.conceptId);
-  const opened = openAttempt(db, prepared.challenge.id, prepared.challenge.version, sessionId);
+  const conceptId = problem.conceptId;
+  const { sessionId, opened } = db.transaction(() => {
+    const sessionId = createInterviewSessionForConcept(db, conceptId, "ask_first");
+    const opened = openAttempt(db, prepared.challenge.id, prepared.challenge.version, sessionId);
+    return { sessionId, opened };
+  })();
 
   return {
     problem,

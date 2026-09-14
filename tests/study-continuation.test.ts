@@ -112,6 +112,7 @@ describe("study continuation", () => {
         kind: "needs_budget",
         goalId: GOAL_ID,
         suggestedMinutes: 30,
+        practicalWork: { preference: "ask_first", source: "default" },
       });
     } finally {
       fixture.db.close();

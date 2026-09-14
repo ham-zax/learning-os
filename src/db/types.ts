@@ -127,6 +127,9 @@ export type InteractionInputMode = z.infer<typeof InteractionInputMode>;
 export const QuestionChunking = z.enum(["default", "atomic"]);
 export type QuestionChunking = z.infer<typeof QuestionChunking>;
 
+export const PracticalWorkPreference = z.enum(["ask_first", "conversation_only"]);
+export type PracticalWorkPreference = z.infer<typeof PracticalWorkPreference>;
+
 export const RevisionNoteScopeKind = z.enum([
   "profile",
   "goal",
@@ -480,6 +483,7 @@ export const SessionSchema = z.object({
   active_challenge_version: z.number().int().positive().nullable().default(null),
   active_attempt_id: z.number().int().positive().nullable().default(null),
   reconstruction_status: ReconstructionStatus.default("not_required"),
+  practical_work: PracticalWorkPreference.nullable().default(null),
 });
 export type Session = z.infer<typeof SessionSchema>;
 
@@ -489,6 +493,7 @@ export const InteractionPreferencesRowSchema = z.object({
   question_chunking: QuestionChunking,
   source: z.literal("learner_explicit"),
   updated_at: z.string(),
+  practical_work: PracticalWorkPreference,
 });
 export type InteractionPreferencesRow = z.infer<typeof InteractionPreferencesRowSchema>;
 

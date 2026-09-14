@@ -12,6 +12,7 @@ import {
   setGoalObjective,
   setGoalPreparation,
 } from "../db/database.js";
+import type { InteractionPreferences } from "../db/database.js";
 import type {
   GoalImportance,
   GoalTargetReadiness,
@@ -161,12 +162,7 @@ export interface DurablePreparationContext {
     resolvedObjectiveIds: string[];
     openedAt: string;
   } | null;
-  interactionPreferences: {
-    inputMode: "default" | "speech_to_text";
-    questionChunking: "default" | "atomic";
-    source: "default" | "learner_explicit";
-    updatedAt: string | null;
-  };
+  interactionPreferences: InteractionPreferences;
   confirmedAt: string;
   objectives: DurablePreparationObjective[];
   prerequisiteDiagnosticGaps: PrerequisiteDiagnosticGap[];

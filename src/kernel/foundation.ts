@@ -42,6 +42,7 @@ import {
   getActiveGoalStudyFocusEpisode,
   getGoalObjective,
   getGoalObjectives,
+  getPracticalWorkPolicy,
 } from "../db/database.js";
 import {
   ChallengeAuthoringContractSchema,
@@ -652,6 +653,13 @@ export function openAttempt(
     if (session.mode !== challenge.deliveryContext) {
       throw new Error(
         `Session delivery context ${session.mode} does not match challenge ${challenge.deliveryContext}`,
+      );
+    }
+
+    if (getPracticalWorkPolicy(db, sessionId).preference === "conversation_only" &&
+        (challenge.taskForm === "implementation" || challenge.verification.required)) {
+      throw new Error(
+        `Session ${sessionId} is conversation-only. Practical work requires the learner to explicitly change that choice before opening this attempt`,
       );
     }
 

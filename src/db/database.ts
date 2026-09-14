@@ -14,6 +14,7 @@ import {
   GoalPreparationSchema,
   InteractionInputMode,
   QuestionChunking,
+  PracticalWorkPreference,
   SessionSchema,
   StudyFocusEpisodeSchema,
 } from "./types.js";
@@ -98,6 +99,7 @@ export function createDatabase(dbPath: string): Database.Database {
 export interface InteractionPreferences {
   inputMode: InteractionInputMode;
   questionChunking: QuestionChunking;
+  practicalWork: PracticalWorkPreference;
   source: "default" | "learner_explicit";
   updatedAt: string | null;
 }
@@ -105,16 +107,18 @@ export interface InteractionPreferences {
 export interface SetInteractionPreferencesInput {
   inputMode?: InteractionInputMode;
   questionChunking?: QuestionChunking;
+  practicalWork?: PracticalWorkPreference;
 }
 
 export function getInteractionPreferences(db: Database.Database): InteractionPreferences {
   const row = db
-    .prepare(`SELECT input_mode, question_chunking, source, updated_at
+    .prepare(`SELECT input_mode, question_chunking, practical_work, source, updated_at
               FROM interaction_preferences WHERE singleton = 1`)
     .get() as
     | {
         input_mode: InteractionInputMode;
         question_chunking: QuestionChunking;
+        practical_work: PracticalWorkPreference;
         source: "learner_explicit";
         updated_at: string;
       }
@@ -123,6 +127,7 @@ export function getInteractionPreferences(db: Database.Database): InteractionPre
     return {
       inputMode: "default",
       questionChunking: "default",
+      practicalWork: "ask_first",
       source: "default",
       updatedAt: null,
     };
@@ -130,6 +135,7 @@ export function getInteractionPreferences(db: Database.Database): InteractionPre
   return {
     inputMode: row.input_mode,
     questionChunking: row.question_chunking,
+    practicalWork: row.practical_work,
     source: row.source,
     updatedAt: row.updated_at,
   };
@@ -139,7 +145,7 @@ export function setInteractionPreferences(
   db: Database.Database,
   input: SetInteractionPreferencesInput,
 ): InteractionPreferences {
-  if (input.inputMode === undefined && input.questionChunking === undefined) {
+  if (input.inputMode === undefined && input.questionChunking === undefined && input.practicalWork === undefined) {
     throw new Error("At least one interaction preference must be supplied");
   }
   const current = getInteractionPreferences(db);
@@ -149,17 +155,53 @@ export function setInteractionPreferences(
   const questionChunking = input.questionChunking === undefined
     ? current.questionChunking
     : QuestionChunking.parse(input.questionChunking);
+  const practicalWork = input.practicalWork === undefined
+    ? current.practicalWork
+    : PracticalWorkPreference.parse(input.practicalWork);
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO interaction_preferences (singleton, input_mode, question_chunking, source, updated_at)
-     VALUES (1, ?, ?, 'learner_explicit', ?)
+    `INSERT INTO interaction_preferences (singleton, input_mode, question_chunking, practical_work, source, updated_at)
+     VALUES (1, ?, ?, ?, 'learner_explicit', ?)
      ON CONFLICT(singleton) DO UPDATE SET
        input_mode = excluded.input_mode,
        question_chunking = excluded.question_chunking,
+       practical_work = excluded.practical_work,
        source = excluded.source,
        updated_at = excluded.updated_at`,
-  ).run(inputMode, questionChunking, now);
+  ).run(inputMode, questionChunking, practicalWork, now);
   return getInteractionPreferences(db);
+}
+
+export interface PracticalWorkPolicy {
+  preference: PracticalWorkPreference;
+  source: "session" | "profile" | "default";
+}
+
+export function getPracticalWorkPolicy(db: Database.Database, sessionId?: number): PracticalWorkPolicy {
+  if (sessionId !== undefined) {
+    const session = getSession(db, sessionId);
+    if (!session) throw new Error(`Session not found: ${sessionId}`);
+    if (session.practical_work !== null) {
+      return { preference: session.practical_work, source: "session" };
+    }
+  }
+  const preferences = getInteractionPreferences(db);
+  return {
+    preference: preferences.practicalWork,
+    source: preferences.source === "default" ? "default" : "profile",
+  };
+}
+
+/** Explicit episode choice; null restores the profile preference. Never learner evidence. */
+export function setSessionPracticalWork(
+  db: Database.Database,
+  sessionId: number,
+  preference: PracticalWorkPreference | null,
+): PracticalWorkPolicy {
+  const parsed = PracticalWorkPreference.nullable().parse(preference);
+  if (!getSession(db, sessionId)) throw new Error(`Session not found: ${sessionId}`);
+  db.prepare(`UPDATE sessions SET practical_work = ? WHERE id = ?`).run(parsed, sessionId);
+  return getPracticalWorkPolicy(db, sessionId);
 }
 
 // ─── CRUD: Topics ─────────────────────────────────────────────────────────
@@ -697,8 +739,10 @@ export function updateConcept(
 
 export function createSession(
   db: Database.Database,
-  input: { topicId: string; mode: DeliveryContext },
+  input: { topicId: string; mode: DeliveryContext; practicalWork?: PracticalWorkPreference },
 ): Session {
+  const practicalWork = input.practicalWork === undefined
+    ? null : PracticalWorkPreference.parse(input.practicalWork);
   const requiredRepair = db
     .prepare(
       `SELECT id
@@ -720,13 +764,14 @@ export function createSession(
   const now = new Date().toISOString();
   const info = db
     .prepare(
-      `INSERT INTO sessions (topic_id, mode, started_at)
-       VALUES (@topic_id, @mode, @started_at)`,
+      `INSERT INTO sessions (topic_id, mode, started_at, practical_work)
+       VALUES (@topic_id, @mode, @started_at, @practical_work)`,
     )
     .run({
       topic_id: input.topicId,
       mode: input.mode,
       started_at: now,
+      practical_work: practicalWork,
     });
   return getSession(db, Number(info.lastInsertRowid))!;
 }

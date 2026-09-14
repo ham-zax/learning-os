@@ -3,8 +3,10 @@ import {
   getActiveGoalStudyFocusEpisode,
   getGoalObjectives,
   getGoalPreparation,
+  getInteractionPreferences,
   getTopic,
 } from "../db/database.js";
+import { PracticalWorkPreference } from "../db/types.js";
 import type {
   DeliveryContext,
   GoalObjective,
@@ -42,6 +44,8 @@ export interface TodayMissionInput {
   /** Remaining active-study budget. Planned item minutes are reservation estimates, not consumed time. */
   availableMinutes: number;
   now: string;
+  /** Explicit choice for this planning call; defaults to the saved profile preference. */
+  practicalWork?: PracticalWorkPreference;
   /** Bound returned work for episode-by-episode orchestration. Pass 1 to request only the next move. */
   maxItems?: number;
   /** Optional per-call focus override. When omitted, durable goal study focus is used. */
@@ -83,6 +87,8 @@ export interface DailyMission {
   plannedMinutes: number;
   unallocatedMinutes: number;
   items: DailyMissionItem[];
+  /** Still-required practical work deferred by effort choice, never assessed as failure. */
+  deferredPracticalObjectiveIds: string[];
   blocked: BlockedSelectionCandidate[];
 }
 
@@ -690,9 +696,25 @@ export function getTodayMission(
     deadlineUrgency(deadlineAt, now),
   );
   const preferredObjectiveIds = focusPlan.preferredObjectiveIds;
-  const states = goalObjectives
+  const practicalWork = PracticalWorkPreference.parse(
+    input.practicalWork ?? getInteractionPreferences(db).practicalWork,
+  );
+  const implementationIds = new Set(
+    (db.prepare(`SELECT id FROM learning_objectives WHERE capability_id = 'implement'`).all() as
+      Array<{ id: string }>).map((row) => row.id),
+  );
+  const relevantStates = goalObjectives
     .map((config) => loadGoalObjectiveState(db, config))
     .filter((state) => isRelevant(state, now, eligibleRetestKeys));
+  const deferredPracticalObjectiveIds = practicalWork === "conversation_only"
+    ? [...new Set([
+        ...relevantStates.map((state) => state.config.objective_id),
+        ...focusPlan.extraCandidates.map((candidate) => candidate.objectiveId),
+      ].filter((id) => implementationIds.has(id)))].sort()
+    : [];
+  const deferred = new Set(deferredPracticalObjectiveIds);
+  const states = relevantStates.filter((state) => !deferred.has(state.config.objective_id));
+  focusPlan.extraCandidates = focusPlan.extraCandidates.filter((candidate) => !deferred.has(candidate.objectiveId));
   const stateByObjective = new Map(
     states.map((state) => [state.config.objective_id, state] as const),
   );
@@ -1047,6 +1069,7 @@ export function getTodayMission(
     deadlineAt,
     generatedAt: now,
     items,
+    deferredPracticalObjectiveIds,
     blocked: [...blocked.values()].sort((left, right) =>
       left.objectiveId.localeCompare(right.objectiveId),
     ),

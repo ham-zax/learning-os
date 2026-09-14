@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createTeacherKernel } from "../src/teacher.js";
 import {
   createProfile,
   openProfileDatabase,
@@ -12,6 +13,8 @@ import {
 import {
   createKernelFixture,
   GOAL_ID,
+  CONCEPT_ID,
+  OBJECTIVE_ID,
 } from "./helpers/kernel-fixture.js";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -76,7 +79,23 @@ describe("continue CLI", () => {
       kind: "needs_budget",
       goalId: GOAL_ID,
       suggestedMinutes: 30,
+      practicalWork: { preference: "ask_first", source: "default" },
     });
+  });
+
+  it("reports deferred practical work without suggesting the goal is complete", () => {
+    const fixture = createKernelFixture(databasePath);
+    const kernel = createTeacherKernel(fixture.db);
+    kernel.setGoalObjective({ goalId: GOAL_ID, objectiveId: OBJECTIVE_ID, isActive: false });
+    const objectiveId = `${CONCEPT_ID}:implement`;
+    kernel.createLearningObjective({ id: objectiveId, conceptId: CONCEPT_ID, capabilityId: "implement" });
+    kernel.setGoalObjective({ goalId: GOAL_ID, objectiveId });
+    kernel.setInteractionPreferences({ practicalWork: "conversation_only" });
+    fixture.db.close();
+    const result = runContinue("--one-episode");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("goal requirements remain open");
+    expect(result.stdout).toContain("conversation-only");
   });
 
   it("emits resumable work without requiring minutes", () => {

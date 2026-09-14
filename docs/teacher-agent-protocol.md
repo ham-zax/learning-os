@@ -203,7 +203,9 @@ A break of two minutes, two hours, or longer never becomes active-study time and
 
 ### Present the saved question
 
-On continuation, use the `resume` result's `presentation` for the learner-facing question. For `question`, present its `markdown` and stop; do not append a walkthrough, queue-tracing procedure, output order, or a second question. Task context is the code/facts needed to answer, not the reasoning being assessed.
+On continuation, first reconcile the current learner message with the saved question. If the message answers it, record the actual response with `answerAttemptSubquestion` and its saved `seq`, then interpret/assess it. A `question` presentation describes durable state before processing the incoming message; it does not instruct the teacher to repeat the question instead of consuming an answer.
+
+When no answer needs processing and the learner needs the pending question (fresh resumption or an explicit context request), present `presentation.markdown` and stop; do not append a walkthrough, queue-tracing procedure, output order, or a second question. Task context is the code/facts needed to answer, not the reasoning being assessed.
 
 For `needs_question`, prepare one complete question and its exact relevant context under the existing frozen criteria, choose the explicit chunking mode, save it with `openAttemptSubquestion(...)`, then fetch `getSessionQuestionPresentation(sessionId)`. This also works during required reconstruction after submission. `default` questions carry `promptText`, `contextText`, and `questionChunking: "default"`; `atomic` questions additionally carry `scopeCriterionId` and `scopeNote`. Do not persist a question until its learner-visible context and final prompt are ready.
 
@@ -211,7 +213,7 @@ An `atomic` question must name one frozen criterion in `scopeCriterionId` and st
 
 “Show me the context” redisplays the saved presentation; it is not a knowledge failure or a request to teach the answer. A wording/size complaint uses `replaceAttemptSubquestion(...)` with the identified `seq` plus a complete replacement question: exact `promptText`, `contextText`, explicit `questionChunking`, and atomic scope when applicable. Use `atomic` with explicit scope for an episode-level request for one part at a time; this survives restart without creating a permanent preference. Neutral adaptation preserves frozen criteria; answer-bearing changes still require assistance provenance.
 
-When a `question` presentation is already pending, distinguish a bare acknowledgment from an explicit request. If you already presented the current pending question in this conversation and the learner replies with a bare “continue” or acknowledgment without answering, do not redisplay the full markdown automatically; acknowledge briefly and wait for the answer, context request, or size complaint. In a fresh conversation, present the saved `markdown` once. Redisplay the full code and question only on an explicit context request such as “show me the code again.” Never treat an acknowledgment as a new question-generation event.
+When a `question` presentation is already pending, distinguish a bare acknowledgment from an explicit request. If you already presented the current pending question in this conversation and the learner replies with a bare “continue” or acknowledgment without answering, do not redisplay the full markdown automatically; acknowledge briefly and wait for the answer, context request, or size complaint. In a fresh conversation without an answer to process, present the saved `markdown` once. Redisplay the full code and question only on an explicit context request such as “show me the code again.” Never treat an acknowledgment as a new question-generation event.
 
 For `answered`, inspect the stored response and assess/integrate it. Open another scoped part only when the frozen criteria or repair obligation still require it; one correct narrow answer does not automatically complete a multi-criterion reconstruction. Do not add a bonus question by default. For `not_waiting`, follow the existing lifecycle. Reconstruction already follows teaching: present its saved question without replaying the explanation; provide further teaching when justified by the learner's request or response and record it normally. Exercises and scratchpads still require adoption.
 
@@ -258,6 +260,45 @@ Treat the directive as a **starting guardrail**, not a lesson recipe. Ask the sm
 When specialized guidance is needed, load one primary playbook for the current episode phase: reasoning/retrieval for concept construction, retrieval, discrimination, or transfer; debugging/repair for concrete failures and causal-model repair; problem-solving/implementation for ordinary implementation, design, codebase learning, or real-artifact project work; performance/interview for interview, mock, or fluency pressure. Transition only when the episode phase actually changes rather than chaining playbooks by default.
 
 Failure handling is stable protocol, not returned state: slips get brief correction; coherent causal/model errors get minimum repair plus one reconstruction; ambiguous impasse gets one cheap blocker check before reteaching; interview/mock remains assessment-first and defers answer-bearing coaching until debrief. Scaffold withdrawal, authentic surfaces, targeted weakness authoring, and repair depth are likewise derived from existing intent/evidence state. Use the frozen challenge's hint ladder and the existing hint/exposure lifecycle rather than a second pedagogy-owned hint system.
+
+### Adapt feedback to the actual answer
+
+Use the resume result's `feedback` or call `getSessionFeedback(sessionId)` after
+recording an assessment. This read-only view contains effective evidence IDs,
+frozen criterion descriptions and their met/unmet/unassessed status, the assessment
+rationale, and retrieval validity. It describes this attempt, not whole-concept
+mastery. The view's `nextAction` gives the lifecycle step:
+
+| Next action | Teacher response |
+| --- | --- |
+| `collect_response` | Interpret the learner's response. If its meaning is ambiguous, save it as the answer to its subquestion and open one neutral clarification of the same criterion. Preserve both responses before final submission. A context/wording complaint instead replaces or redisplays the pending question; it is not an answer. |
+| `run_verification` / `assess_response` | Finish that step before claiming a result. |
+| `complete_feedback` | Name the specific relationship demonstrated, acknowledge any assistance, then call `completeSessionFeedback`. Add no further question just to increase depth. Other unresolved work, if any, remains governed by continuation. |
+| `review_gap` | Identify the particular unmet relationship from the assessment and learner response. Correct a slip briefly. For a demonstrated causal misconception, record the exact focused teaching with `requireReconstruction: true` before showing it, then save the necessary reconstruction question. |
+| `review_ungradable` | Explain what prevents assessment. Do not treat missing or uninterpretable material as demonstrated misunderstanding. |
+| `reconstruct` | Use the saved reconstruction question. State which repaired relationship it checks and why a response is needed. Completion is assisted reconstruction, not fresh independent evidence. |
+| `none` | No feedback is pending. Use continuation for any requested new work. |
+
+The view does not classify free text, distinguish slips from misconceptions, or
+decide whether an atomic answer covers the full frozen rubric. Those judgments
+remain the teacher's responsibility. A neutral clarification does not itself
+create evidence or assistance. If its wording supplies target reasoning, record
+the corresponding assistance before showing it.
+
+Useful feedback has up to three parts: what the answer demonstrated, the exact
+gap if one remains, and the reason for any further question. For example: “You
+placed the synchronous prefix correctly. The relationship between the two
+independent request completions is still missing; that is what this next question
+checks.” Record answer-bearing corrective content before disclosure. Omit the gap
+and next-question parts when the answer is sufficient.
+
+After repair closes, return to selection. An unresolved failure/active weakness
+with prior attempts requests a variant; transfer still requires the existing goal
+and readiness conditions. Read the recent frozen prompts identified by
+`avoidRecentChallenges` before authoring a changed surface. A competing-search
+response scenario can check async reasoning in a different situation; renaming
+the same log labels is not transfer. FSRS decides when retrieval is due. Neither
+successful reconstruction nor early practice establishes durability.
 
 ### Canonical repertoire
 
@@ -518,7 +559,7 @@ In `interview`, give concise signal feedback after technical feedback. In `mock`
 
 ## Stable interaction preferences
 
-Persist only explicit profile-level preferences that materially improve fresh-teacher continuity. The current kernel stores `inputMode` and `questionChunking`; set them with `setInteractionPreferences(...)` when the learner explicitly establishes or changes them. `speech_to_text` plus `atomic` means interpret obvious transcription noise without polishing reasoning and deliver one substantive question at a time. Do not infer these preferences from one accidental message, and do not use them as competence evidence.
+Persist only explicit profile-level preferences that materially improve fresh-teacher continuity. The kernel stores `inputMode`, `questionChunking` and `practicalWork`; set them with `setInteractionPreferences(...)` when the learner explicitly establishes or changes a lasting preference. `speech_to_text` plus `atomic` means interpret obvious transcription noise without polishing reasoning and deliver one substantive question at a time. Do not infer these preferences from one accidental message, and do not use them as competence evidence.
 
 Repair-before-transition, concise high-signal refinement, and active-time semantics are system behavior, not learner preferences. Do not make them optional by storing them as preference flags.
 
@@ -527,6 +568,32 @@ Repair-before-transition, concise high-signal refinement, and active-time semant
 The teacher may follow an explicit learner request even when it is not the pedagogically preferred next step, as long as state remains truthful.
 
 Exercises, coding tasks and scratchpad setup are optional. Offer them when useful and begin only after the learner chooses them or gives an applicable standing instruction. Continue useful conversation when they decline; declining is an effort choice, not failed retrieval or evidence of low ability. If the goal requires implementation evidence, explain the remaining gap and allow deferral or an explicit scope revision. A one-off choice is episode-local unless the learner establishes a lasting preference. Respect standing authorization without asking again for routine work within that scope.
+
+Use `practicalWork: "conversation_only"` for an explicit conversational choice;
+`"ask_first"` is the default and is not consent to code. For an active episode,
+call `setSessionPracticalWork(sessionId, preference)`; null restores the profile
+preference. `getPracticalWorkPolicy(sessionId)` and continuation's `practicalWork`
+show the resolved scope. A generic “continue” does not reverse that choice.
+
+Before a session exists, pass a temporary choice to
+`getStudyContinuation({ ..., practicalWork })`, then carry it into
+`createSession(goalId, mode, practicalWork)`. The planning override is read-only
+and does not override an already-active session; change that session explicitly.
+Conversation-only missions list `deferredPracticalObjectiveIds` and leave their
+requirements/evidence/due dates intact. If all selected work is deferred, explain
+that there is no assessable conversational task in the current goal; ordinary
+help or an explicitly changed goal remains available. Do not re-offer the same
+declined exercise. If an unsubmitted practical attempt is already open, abandon
+it without grading and carry the choice into any conversational replacement.
+Execution-required challenges cannot open while the session is conversation-only.
+Selection returns an intent before a concrete challenge exists. For a
+conversation-only debugging intent, author an inspect-and-explain task whose
+frozen rubric can assess the reasoning without execution. Do not attach an
+execution requirement to that conversational task. If executable proof is
+essential, defer that practical task instead of weakening its verification
+contract or presenting it as an adopted exercise.
+If the learner later adopts practical work, change the session preference to
+`ask_first` (or create the adopted session with that override) before opening it.
 
 Examples:
 

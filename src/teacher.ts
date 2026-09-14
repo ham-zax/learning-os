@@ -4,15 +4,18 @@ import {
   createSession,
   getGoalObjectives,
   getInteractionPreferences,
+  getPracticalWorkPolicy,
   getStudyFocusEpisode,
   listGoalStudyFocusEpisodes,
   setInteractionPreferences,
+  setSessionPracticalWork,
   setGoalObjective,
   setGoalStudyFocus,
 } from "./db/database.js";
 import type {
   ChallengeSpecInput,
   DeliveryContext,
+  PracticalWorkPreference,
 } from "./db/types.js";
 import {
   abandonUnsubmittedSession,
@@ -45,6 +48,7 @@ import {
   reviseEvidence,
 } from "./kernel/evidence.js";
 import { getObjectiveEvidenceReceipt } from "./kernel/evidence-receipt.js";
+import { getSessionFeedback } from "./kernel/feedback.js";
 import type { ReviseEvidenceInput } from "./kernel/evidence.js";
 import type { AssessmentResultInput } from "./db/types.js";
 import { getTodayMission, resolveRequestedChallenge } from "./plan/today.js";
@@ -100,6 +104,10 @@ export function createTeacherKernel(db: Database.Database) {
     getStudyContinuation: (input: StudyContinuationInput) =>
       getStudyContinuation(db, input),
     getSessionQuestionPresentation: (sessionId: number) => getSessionQuestionPresentation(db, sessionId),
+    getSessionFeedback: (sessionId: number) => getSessionFeedback(db, sessionId),
+    getPracticalWorkPolicy: (sessionId?: number) => getPracticalWorkPolicy(db, sessionId),
+    setSessionPracticalWork: (sessionId: number, preference: PracticalWorkPreference | null) =>
+      setSessionPracticalWork(db, sessionId, preference),
     replaceAttemptSubquestion: (attemptId: number, input: ReplaceAttemptSubquestionInput) =>
       replaceAttemptSubquestion(db, attemptId, input),
     getTodayMission: (input: TodayMissionInput) => getTodayMission(db, input),
@@ -140,8 +148,8 @@ export function createTeacherKernel(db: Database.Database) {
     saveRevisionNote: (input: SaveRevisionNoteInput) => saveRevisionNote(db, input),
     getRevisionNote: (noteId: string) => getRevisionNote(db, noteId),
     listRevisionNotes: () => listRevisionNotes(db),
-    createSession: (topicId: string, mode: DeliveryContext) =>
-      createSession(db, { topicId, mode }),
+    createSession: (topicId: string, mode: DeliveryContext, practicalWork?: PracticalWorkPreference) =>
+      createSession(db, { topicId, mode, practicalWork }),
     getChallenge: (challengeId: string, version: number) =>
       getChallenge(db, challengeId, version),
     getChallengeAuthoringContract: (challengeId: string, version: number) =>

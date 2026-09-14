@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 22;
+export const CURRENT_SCHEMA_VERSION = 23;
 
 export const CURRENT_SCHEMA_SQL = String.raw`
 CREATE TABLE topics (
@@ -44,7 +44,8 @@ CREATE TABLE sessions (
               'assess_response',
               'present_feedback'
             )), active_challenge_id TEXT, active_challenge_version INTEGER, active_attempt_id INTEGER REFERENCES attempts(id) ON DELETE SET NULL, reconstruction_status TEXT NOT NULL DEFAULT 'not_required'
-            CHECK (reconstruction_status IN ('not_required', 'required', 'completed', 'opted_out')));
+            CHECK (reconstruction_status IN ('not_required', 'required', 'completed', 'opted_out')),
+    practical_work TEXT CHECK (practical_work IN ('ask_first', 'conversation_only')));
 CREATE TABLE synced_gaps (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     job_id    TEXT NOT NULL,
@@ -371,7 +372,9 @@ CREATE TABLE interaction_preferences (
             question_chunking  TEXT NOT NULL DEFAULT 'default'
               CHECK (question_chunking IN ('default', 'atomic')),
             source             TEXT NOT NULL CHECK (source = 'learner_explicit'),
-            updated_at         TEXT NOT NULL
+            updated_at         TEXT NOT NULL,
+            practical_work TEXT NOT NULL DEFAULT 'ask_first'
+              CHECK (practical_work IN ('ask_first', 'conversation_only'))
           );
 CREATE TABLE challenge_attempt_dispositions (
             attempt_id       INTEGER PRIMARY KEY REFERENCES attempts(id) ON DELETE RESTRICT,

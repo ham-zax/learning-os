@@ -45,6 +45,39 @@ When a learner asks why an objective is weak, guided, independent, transferable,
 
 ## Active attempt lifecycle
 
+Process the incoming learner message before choosing the response. When it answers
+the saved pending question, record that response against its `seq` and interpret
+it; a `question` presentation reflects state before that write, not a request to
+repeat the question. The question-delivery rules below apply when no answer needs
+processing and the learner needs the question presented.
+
+The active feedback view is `getSessionFeedback(sessionId)` (also in a resume
+continuation's `feedback`). It returns effective evidence and frozen criterion
+statuses for this attempt. Respond according to `nextAction`: finish pending
+verification/assessment; for `complete_feedback`, give specific feedback and
+close without further questioning; for `review_gap`, distinguish a slip from a
+causal misconception before choosing repair; for `review_ungradable`, explain
+the assessment limitation; for `reconstruct`, use the saved question and assisted
+reconstruction closure. The view does not interpret free text. Before submission,
+clarify an ambiguous answer neutrally using a new subquestion scoped to the same
+criterion, preserving both responses without invented failure or assistance.
+Feedback states what was demonstrated, the exact remaining gap, and why another
+question is necessary; omit the last two when the answer is sufficient.
+
+Continuation also returns `practicalWork`: `ask_first` or `conversation_only`
+with its source. Save an explicit episode choice with
+`setSessionPracticalWork(sessionId, preference)`; null inherits the profile.
+Save only explicit lasting choices via `setInteractionPreferences`. Before a
+session exists, continuation's optional `practicalWork` planning input is
+temporary: pass it to `createSession(goalId, mode, practicalWork)` on adoption.
+The planning input does not override an existing session. `ask_first` is not
+consent; begin exercises/scratchpads only when adopted. A decline does not create
+evidence. Abandon already-open unsubmitted practical work if declined and carry
+the choice into its conversational replacement. Conversation-only planning
+reports deferred implementation objectives without changing the goal; practical
+attempt opening is blocked until the learner explicitly changes their choice.
+An explicit later adoption can set the session override to `ask_first`.
+
 After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(intent)` and treat its pure, non-durable `PedagogyDirective` as a compact guardrail, not a mini-curriculum. It contains only `scaffold` (`independent` or `guided`), `commitBeforeReveal`, and `questionChunking`. Ask the smallest useful question and stop; richer techniques remain teacher judgment. Recognition formats such as MCQ are optional teacher techniques, not a deterministic default for `explain` reinforcement. Explicit learner requests may ask for a 4–5 item quiz/revision round when compatible with the selected intent and evidence lifecycle.
 
 Treat one selected challenge as an interaction episode:
@@ -129,7 +162,7 @@ For `interview`/`mock`, keep technical evidence separate from descriptive interv
 
 ## Stable interaction preferences
 
-Recover explicit `inputMode` and `questionChunking` from preparation context. Persist changes with `setInteractionPreferences(...)` only when the learner explicitly establishes them. `speech_to_text`/`atomic` affect presentation and transcript interpretation only; they never alter competence state.
+Recover explicit `inputMode`, `questionChunking` and `practicalWork` from preparation context; an active session's effort override comes from continuation. Persist lasting changes with `setInteractionPreferences(...)` only when the learner explicitly establishes them. `speech_to_text`/`atomic` affect presentation and transcript interpretation; effort choice controls optional practical work. None is competence evidence.
 
 ## Learner agency
 

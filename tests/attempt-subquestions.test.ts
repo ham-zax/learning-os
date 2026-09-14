@@ -136,7 +136,7 @@ describe("durable attempt subquestions", () => {
     db.close();
 
     expect(() => createDatabase(dbPath)).toThrow(
-      "Unsupported learner database schema v21. Learning OS now requires schema v22",
+      "Unsupported learner database schema v21. Learning OS now requires schema v23",
     );
   });
 });

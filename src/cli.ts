@@ -978,7 +978,9 @@ program
             break;
           }
           case "no_action": {
-            if (continuation.mission.blocked.length > 0) {
+            if (continuation.mission.deferredPracticalObjectiveIds.length > 0) {
+              info("Practical objectives are deferred by your conversation-only choice; their goal requirements remain open.");
+            } else if (continuation.mission.blocked.length > 0) {
               warn("No action is available because goal work is prerequisite-blocked.");
             } else {
               success("No goal work is currently actionable.");
@@ -1341,6 +1343,8 @@ program
             warn(
               "\n  No active goal objectives. Configure one with `tutor goal <topic> <objective>`.",
             );
+          } else if (mission.deferredPracticalObjectiveIds.length > 0) {
+            info("\n  Practical objectives are deferred by your conversation-only choice; their goal requirements remain open.");
           } else if (mission.blocked.length > 0) {
             warn("\n  No eligible mission item; active objectives are prerequisite-blocked.");
           } else {
