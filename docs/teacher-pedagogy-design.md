@@ -167,6 +167,14 @@ orient
 
 The shortest useful path should win. A direct factual clarification may use only `orient -> explain`. A diagnostic may start at `predict`. A debugging challenge may use `predict -> observe -> localize -> repair`. A transfer retest may use only `commit -> execute -> explain`.
 
+### Retrieval-first is a strategy, not another runtime state
+
+For revision, diagnosis, review, and other compatible selected work, the teacher should often begin with one learner-generated move before answer-bearing instruction: free recall, brain dump, prediction, hypothesis, system-model construction, or a small implementation plan/attempt. This is the episode-level **retrieval-first** strategy described in [retrieval-first study design](retrieval-first-study-design.md).
+
+Do not encode it as a new challenge type, mastery state, scheduler, or mandatory lesson sequence. In V1 it also does not add `entryStrategy` to `PedagogyDirective`; that directive remains limited to execution guardrails with demonstrated cross-teacher value. A typed entry-strategy field should be reconsidered only if fresh compatible teachers repeatedly violate the retrieval-before-teaching boundary in a way the protocol/playbook cannot reliably correct.
+
+Likewise, do not infer or persist a permanent "retrieval learner" identity. An explicit learner request can change the current teaching approach while evidence and higher-authority interaction constraints remain truthful. Persistent study-approach state should be added only after a demonstrated fresh-session continuity failure.
+
 ### Core invariant
 
 Whenever an interaction is assessable, evidence lifecycle rules take precedence over pedagogy:

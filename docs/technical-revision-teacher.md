@@ -10,6 +10,14 @@ Orient with one sentence: what the current task helps the learner do. Then use t
 
 Do not audit the learner's entire frontend knowledge before helping them with an async bug. Course discovery and the initial source inventory are agent work; the learner should see only the material needed for the current episode.
 
+## Use retrieval before explanation when it gives a useful signal
+
+Coding revision is a strong fit for retrieval-first study because prior exposure is common but its usable shape is uncertain. When the selected work permits it, start with one small generation move before teaching: ask for the current model, a prediction, a hypothesis, an ownership/invariant sketch, or the first implementation move. That opening response completes only the criteria it actually demonstrates; a plan does not replace required implementation, and a hypothesis does not replace required debugging repair or verification. Do not turn this into a compulsory quiz round.
+
+Treat the result precisely. "I don't remember" is retrieval absence, not proof that the learner holds a particular wrong model. A partial answer calls for the missing relationship. A coherent false causal model can support focused error repair. A correct sufficient answer should usually close without replaying the reference material.
+
+A neutral outline can orient recall, but source structure is not automatically harmless. If a heading, summary, diagram, example or note supplies the target mechanism, it is teaching exposure. See [retrieval-first study design](retrieval-first-study-design.md) for the full boundary.
+
 ## Three teaching depths, not three new stored levels
 
 **Revision:** When an independent answer is correct and sufficient for its frozen criteria, give the consequential confirmation/correction and close. Do not add a lecture, reconstruction, bonus quiz and reflection automatically.
@@ -72,7 +80,7 @@ For backend, use the existing runtime, pressure, transactions, state/cache, queu
 
 When notes are requested or covered by a standing request, build them through `getRevisionNoteContext({ scope })` and persist with `saveRevisionNote({ context, markdown })`. Use the returned context unchanged. Creating a note is not new evidence and does not advance FSRS.
 
-Prefer one compact note after a meaningful episode or phase, not one file for every conversational turn. A useful note contains only supported material:
+Prefer one compact note after a meaningful episode or phase, not one file for every conversational turn. A retrieval-first "gap note" is still just a normal revision note; do not create another notebook store. A useful note contains only supported material:
 
 - The mechanism or decision rule that mattered.
 - The learner's actual uncertainty/error and the corrected distinction, when recorded.

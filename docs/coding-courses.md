@@ -2,6 +2,8 @@
 
 Learning OS teaches programming and technical reasoning through a replaceable agent. These routes connect existing objectives to source material and practical work; they do not introduce another learning engine. For conversational execution, read [the technical revision playbook](technical-revision-teacher.md) and the canonical [teacher protocol](teacher-agent-protocol.md).
 
+The packs are **revision-first** at the course level: they assume prior exposure may exist and avoid unnecessary beginner coverage. Inside an individual compatible episode, the teacher may use the separate **retrieval-first** strategy: ask for one small answer-hidden model/prediction/hypothesis before teaching, inspect the exact demonstrated gap, then teach only what is missing. This reuses the normal challenge/evidence/exposure/reconstruction/FSRS lifecycle; see [retrieval-first study design](retrieval-first-study-design.md). Do not interpret the `revision-first` content tag as a new scheduler or automatic learner preference.
+
 ## Discover before selecting a learner
 
 Use `createTeacherWorkspace()` with an explicit `knowledgeRoot` when not running from the repository root.

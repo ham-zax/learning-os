@@ -83,6 +83,8 @@ An explicit later adoption can set the session override to `ask_first`.
 
 After Learning OS selects a `ChallengeIntent`, call `getPedagogyRecommendation(intent)` and treat its pure, non-durable `PedagogyDirective` as a compact guardrail, not a mini-curriculum. It contains only `scaffold` (`independent` or `guided`), `commitBeforeReveal`, and `questionChunking`. Ask the smallest useful question and stop; richer techniques remain teacher judgment. Recognition formats such as MCQ are optional teacher techniques, not a deterministic default for `explain` reinforcement. Explicit learner requests may ask for a 4–5 item quiz/revision round when compatible with the selected intent and evidence lifecycle.
 
+For compatible selected work, retrieval-first means one compact learner-generated move before answer-bearing instruction when an unprimed signal is useful. Use recall/brain dump, prediction, hypothesis, system-model construction, or a smallest implementation move according to the existing intent. These are opening moves: a plan or hypothesis satisfies only the frozen criteria it actually demonstrates, so production/repair/verification work remains open when the selected task requires it. Retrieval-first is not another selector, challenge type, scheduler, or directive field. Distinguish "I don't know"/retrieval absence from a demonstrated wrong model; do not invent a misconception or error category. Neutral structure may orient, but any preview that supplies target reasoning is normal hint/exposure material. An explicit request for teaching first, required reconstruction, missing prerequisites, and interview/mock boundaries still take precedence.
+
 Treat one selected challenge as an interaction episode:
 
 ```text

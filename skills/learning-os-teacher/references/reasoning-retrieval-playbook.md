@@ -7,6 +7,7 @@ Use this reference only when the current Learning OS-selected episode needs spec
 - Invocation rule
 - Fast routing
 - Cognitive-direction rotation
+- Retrieval-first study
 - Retrieval and brain dump
 - Pattern noticing and guided discovery
 - Confusion-pair discrimination
@@ -49,6 +50,32 @@ When repeated interactions are becoming one-dimensional, vary the cognitive dire
 - **Reflection:** explain which clue/invariant separated the alternatives or where prior reasoning failed.
 
 Use this as a variety heuristic only. Do not automatically run all three directions in one episode.
+
+## Retrieval-first study
+
+Use retrieval-first as an episode strategy when the selected work benefits from seeing the learner's current model before instruction:
+
+```text
+orient
+-> generate before instruction
+-> inspect the learner model
+-> teach only the missing relationship
+-> reconstruct when needed
+-> stop
+```
+
+"Generate" depends on the selected capability: recall/brain dump for explanation, committed outcome for prediction, hypothesis/discriminating observation for debugging, ownership/invariant/flow construction for design, or the smallest plan/attempt for implementation. These are opening moves: a correct plan or hypothesis satisfies only the frozen criteria it actually demonstrates. Keep implementation/debugging episodes open until any selected production, repair, and verification criteria are satisfied. Use one compact move, not a compulsory pretest battery.
+
+Keep cold outcomes distinct:
+
+- retrieval absence ("I don't remember") does not demonstrate a specific misconception;
+- a partial model supports targeted teaching of the missing relationship;
+- a coherent wrong model can justify precise causal repair when the response actually demonstrates it;
+- a correct sufficient model closes normally without unnecessary teaching.
+
+Orientation is semantic. Neutral topic/section headings may frame recall. A heading, summary, diagram, example, or takeaway that gives away the target rule/mechanism is answer-bearing and must use the normal hint/exposure boundary. Calling it a preview does not make it neutral.
+
+Do not force retrieval-first when prerequisites are missing, required reconstruction is pending, the learner explicitly chooses teaching exposure, or interview/mock rules require a different assessment boundary. Learning OS still chooses any later variant, transfer, retest, or delayed review.
 
 ## Retrieval and brain dump
 
