@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Latest search result exercise</title>
+<main>
+  <h1>Latest search result exercise</h1>
+  <p>Start old, then new. Resolve new first and old second. Predict each visible state before pressing a resolve button.</p>
+  <div>
+    <button id="start-old" type="button">Start old search</button>
+    <button id="start-new" type="button">Start new search</button>
+    <button id="resolve-old" type="button" disabled>Resolve old</button>
+    <button id="resolve-new" type="button" disabled>Resolve new</button>
+  </div>
+  <p role="status" aria-live="polite">Visible result: <output id="visible">none</output></p>
+  <ol id="history" aria-label="Completed requests"></ol>
+</main>
+<script>
+  const pending = new Map();
+  const visible = document.querySelector("#visible");
+  const historyList = document.querySelector("#history");
+
+  function load(name) {
+    return new Promise((resolve) => pending.set(name, resolve));
+  }
+
+  async function showSearch(name) {
+    visible.textContent = `loading ${name}`;
+    const result = await load(name);
+    // Deliberately faulty: an older completion can replace the latest result.
+    visible.textContent = result;
+    const item = document.createElement("li");
+    item.textContent = `${name} completed`;
+    historyList.append(item);
+  }
+
+  for (const name of ["old", "new"]) {
+    const start = document.querySelector(`#start-${name}`);
+    const resolve = document.querySelector(`#resolve-${name}`);
+    start.addEventListener("click", () => {
+      start.disabled = true;
+      resolve.disabled = false;
+      void showSearch(name);
+    });
+    resolve.addEventListener("click", () => {
+      resolve.disabled = true;
+      pending.get(name)?.(`${name} result`);
+    });
+  }
+</script>
+</html>

@@ -1,0 +1,100 @@
+{
+  "objective": {
+    "conceptId": "js-async-await",
+    "capabilityId": "predict",
+    "taskForm": "runtime_trace"
+  },
+  "environment": "This is Node.js ESM code with no external packages. Predict before running it; we can run it after your answer.",
+  "cases": [
+    {
+      "id": "async-prefix-baseline",
+      "novelty": "same",
+      "surface": "single async call with an outer synchronous log",
+      "source": "baseline.mjs",
+      "question": "Predict the exact output order. Which part of task runs during the call, and which part waits? Give the reason for that boundary.",
+      "criteria": [
+        {
+          "id": "output_order",
+          "required": true,
+          "description": "Predicts inside-start, outside, inside-end in that order."
+        },
+        {
+          "id": "suspension_boundary",
+          "required": true,
+          "description": "Explains that task runs synchronously to its first await and the continuation runs later."
+        }
+      ],
+      "expectedOutput": ["inside-start", "outside", "inside-end"],
+      "wrongModels": [
+        {
+          "claim": "Calling an async function queues its whole body.",
+          "predictedOutput": ["outside", "inside-start", "inside-end"]
+        },
+        {
+          "claim": "Await blocks the caller until the async body finishes.",
+          "predictedOutput": ["inside-start", "inside-end", "outside"]
+        }
+      ]
+    },
+    {
+      "id": "nested-call-variant",
+      "novelty": "variant",
+      "surface": "nested async calls with separate suspension points",
+      "source": "nested-variant.mjs",
+      "question": "Predict the exact output order. Identify where inner and outer each suspend, and why top-end can print before either continuation finishes.",
+      "criteria": [
+        {
+          "id": "output_order",
+          "required": true,
+          "description": "Predicts outer-start, inner-start, outer-middle, top-end, inner-end, outer-end in that order."
+        },
+        {
+          "id": "suspension_boundary",
+          "required": true,
+          "description": "Explains that both calls begin synchronously, inner suspends at its await, and outer suspends when awaiting inner's promise."
+        }
+      ],
+      "expectedOutput": ["outer-start", "inner-start", "outer-middle", "top-end", "inner-end", "outer-end"],
+      "wrongModels": [
+        {
+          "claim": "Calling outer queues its entire body behind top-level code.",
+          "predictedOutput": ["top-end", "outer-start", "inner-start", "outer-middle", "inner-end", "outer-end"]
+        },
+        {
+          "claim": "Awaiting the inner promise blocks the top-level caller.",
+          "predictedOutput": ["outer-start", "inner-start", "outer-middle", "inner-end", "outer-end", "top-end"]
+        }
+      ]
+    },
+    {
+      "id": "validation-transfer",
+      "novelty": "transfer",
+      "surface": "independent form validations publishing to one displayed state",
+      "source": "validation-transfer.mjs",
+      "question": "The user changed a field from old to new. Predict the two logged updates and the final displayed value. Explain what the awaits do and do not order here.",
+      "criteria": [
+        {
+          "id": "output_order",
+          "required": true,
+          "description": "Predicts new: new-valid, old: old-invalid, final: old-invalid in that order."
+        },
+        {
+          "id": "suspension_boundary",
+          "required": true,
+          "description": "Explains that each validate call resumes after its own load settles; await does not grant the newer field exclusive permission to publish."
+        }
+      ],
+      "expectedOutput": ["new: new-valid", "old: old-invalid", "final: old-invalid"],
+      "wrongModels": [
+        {
+          "claim": "Await keeps the latest user choice visible automatically.",
+          "predictedFinal": "new-valid"
+        },
+        {
+          "claim": "Requests must finish in start order.",
+          "predictedFirstUpdate": "old: old-invalid"
+        }
+      ]
+    }
+  ]
+}

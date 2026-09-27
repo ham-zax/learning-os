@@ -28,6 +28,8 @@ Use `js-async-await:predict` for a trace or an explicitly adopted `js-async-awai
 
 Supplying the loader/driver can be scaffolding; supplying the result-version strategy is target reasoning and must be recorded as help. Copying an agent implementation is guided practice. This model does not certify React effect cleanup or browser accessibility; those need their own opportunities.
 
+For a real browser DOM version, open [browser-latest-result.html](labs/browser-latest-result.html) in a disposable browser page. Start old, start new, resolve new, then resolve old. The supplied page makes completion order deterministic without a network service and exposes the stale overwrite. After a committed prediction, the learner can repair `showSearch` so only the latest started request publishes. Reload the page between completion-order checks; verify both orders and keyboard activation. This is browser DOM behavior, not proof of React or Angular lifecycle behavior.
+
 ## Browser and framework work
 
 Use a tiny disposable page or an explicitly authorized project. Preserve native semantics, keyboard operation and focus for interactive controls. Freeze runtime/version and expected behavior. Use the existing React/Angular sources for the selected framework mechanism; do not require a full new application or dependencies for a language-level task.

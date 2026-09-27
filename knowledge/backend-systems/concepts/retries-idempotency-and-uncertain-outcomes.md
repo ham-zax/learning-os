@@ -25,3 +25,6 @@ Select the capability through Learning OS before turning the prompt into an atte
 
 ## Course route
 [Queue delivery, retries and uncertain outcomes](../units/b04.md)
+
+## Calibrated teacher examples
+[Retry and idempotency predictions](../challenges/retries-idempotency-predict/README.md) cover the selected `predict` capability in an in-memory model.

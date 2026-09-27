@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
+    "eval:teacher": "tsx src/evaluation/cli.ts",
     "typecheck": "node --max-old-space-size=4096 node_modules/.bin/tsc --noEmit --incremental",
     "tutor": "tsx src/cli.ts",
     "prepublishOnly": "npm run build"

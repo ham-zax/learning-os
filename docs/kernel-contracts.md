@@ -1006,6 +1006,8 @@ answerAttemptSubquestion(attemptId, { seq, responseText })
 → same subquestion with durable learner response
 ```
 
+For a complete response that also finishes the attempt, `submitAttempt(attemptId, { questionSeq: seq, responseText })` answers that pending response question and submits the attempt atomically with the same text. Keep `answerAttemptSubquestion(...)` for intermediate split answers and required reconstruction.
+
 Use the `seq` returned at opening or recovered from resumption. An answer must identify that specific pending question. Both response and required reconstruction phases use this boundary; purpose is derived from session state. Submission and completed reconstruction refuse to bypass their unanswered non-superseded question. A learner may abandon unsubmitted work or explicitly opt out of reconstruction without a fabricated answer. Full `resumeSession(...)` retains the ordered history for assessment.
 
 `replaceAttemptSubquestion(attemptId, { seq, promptText, contextText, questionChunking, scopeCriterionId?, scopeNote? })` replaces the specific pending question after a wording/context/size complaint. Replacement input is complete: context and chunking are always explicit; `default` carries no scope and `atomic` carries both scope fields. This is episode-local and does not establish a lasting preference or change frozen criteria. Record answer-bearing decomposition through the existing assistance boundary before showing it.
@@ -1057,8 +1059,10 @@ Old exposure rows may have no teaching artifact. Treat them as proof that an exp
 ### 6. Submit learner work
 
 ```text
-submitAttempt(attemptId, { responseText?, artifactRef?, activeTimeSeconds? })
+submitAttempt(attemptId, { responseText?, artifactRef?, questionSeq?, activeTimeSeconds? })
 ```
+
+When `questionSeq` is supplied, `responseText` is required. The sequence must identify the currently pending response question. The kernel records the answer and attempt submission in one transaction; a stale sequence or failed submission leaves both unchanged.
 
 `activeTimeSeconds` is optional and records only reliable active effort known at submission time. Omit it when unknown; do not calculate it from `submitted_at - started_at`. A later feedback/reconstruction closure may replace it with a more complete reliable episode total.
 

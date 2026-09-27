@@ -45,9 +45,12 @@ When a learner asks why an objective is weak, guided, independent, transferable,
 
 ## Active attempt lifecycle
 
-Process the incoming learner message before choosing the response. When it answers
-the saved pending question, record that response against its `seq` and interpret
-it; a `question` presentation reflects state before that write, not a request to
+Process the incoming learner message before choosing the response. When it completes
+an unsubmitted attempt with a saved pending question, call
+`submitAttempt(attemptId, { questionSeq: seq, responseText })` once to record the same
+answer in the question and attempt, then interpret it. Intermediate split answers
+use `answerAttemptSubquestion(...)`; reconstruction follows its existing resolution
+flow. A `question` presentation reflects state before that write, not a request to
 repeat the question. The question-delivery rules below apply when no answer needs
 processing and the learner needs the question presented.
 
@@ -131,7 +134,7 @@ Key rules:
 - question delivery: use continuation's `presentation`; display `question.markdown` and stop. `needs_question` requires preparing a complete presentation-ready question with separate task context and explicit chunking, including during reconstruction. A `default` question carries no scope; an `atomic` question must carry `scopeCriterionId` for one frozen criterion plus `scopeNote` stating what a sufficient answer demonstrates. Check that the prompt addresses only that scope without the answer, output order, trace, hint, or explanation. Use `getSessionQuestionPresentation(sessionId)` after preparation. `answered` requires reviewing the learner response, not automatic bonus questions; a narrow answer does not close multi-criterion reconstruction alone; `not_waiting` follows the existing lifecycle. Keep learner-facing wording simple and natural; do not show internal labels such as `reconstruction` or `pending_action`.
 - context/size complaints: redisplay the saved presentation or use `replaceAttemptSubquestion(...)` with a complete replacement: `seq`, exact `promptText`, exact `contextText`, explicit `questionChunking`, and atomic scope when applicable. Preserve original criteria and assistance semantics. Episode-local atomic chunking with scope survives restart. A context request is not an answer or a request for the solution; collect reconstruction before repeating prior teaching. A bare acknowledgment of an already-presented pending question waits briefly instead of redisplaying the full markdown; a fresh conversation presents it once.
 
-- split-question identity: `answerAttemptSubquestion(attemptId, { seq, responseText })` must name the pending question returned at opening or resumption. Preserve that identity across retries; learner opt-out may abandon the unsubmitted session without fabricating a response;
+- split-question identity: `submitAttempt(attemptId, { questionSeq: seq, responseText })` answers and submits a complete pending response in one call; `answerAttemptSubquestion(attemptId, { seq, responseText })` handles intermediate split answers. Both must name the pending question returned at opening or resumption. Preserve that identity across retries; learner opt-out may abandon the unsubmitted session without fabricating a response;
 
 - visible teaching: hidden reasoning/tool output never counts as learner-visible explanation or a `*_shown` exposure;
 - exposure-delivery coupling: prepare the exact answer-bearing material, pass it to `recordExposure(...)` so the immutable teaching artifact and exposure are persisted together immediately before learner-visible emission, and do no unrelated tool/state work between those steps;

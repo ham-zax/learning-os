@@ -25,3 +25,6 @@ Select the capability through Learning OS before turning the prompt into an atte
 
 ## Course route
 [Async results, errors and execution order](../units/f02.md)
+
+## Calibrated teacher examples
+[Prediction examples and verification](../challenges/js-async-await-predict/README.md) cover the selected `predict` capability only.

@@ -97,6 +97,48 @@ describe("durable attempt subquestions", () => {
     ]);
   });
 
+  it("answers and submits one pending question atomically with identical response text", () => {
+    const question = kernel.openAttemptSubquestion(attemptId, {
+      contextText, promptText: "What changes?", questionChunking: "default",
+    });
+    const responseText = "  The state changes.\nSecond line.  ";
+
+    const submitted = kernel.submitAttempt(attemptId, {
+      questionSeq: question.seq, responseText,
+    });
+
+    expect(submitted.response_text).toBe(responseText);
+    expect(kernel.resumeSession(sessionId).activeAttemptState?.subquestions[0]?.response_text)
+      .toBe(responseText);
+    expect(kernel.resumeSession(sessionId).pendingAction).toBe("assess_response");
+  });
+
+  it("leaves the question and attempt untouched when combined submission fails", () => {
+    const question = kernel.openAttemptSubquestion(attemptId, {
+      contextText, promptText: "What changes?", questionChunking: "default",
+    });
+
+    expect(() => kernel.submitAttempt(attemptId, {
+      questionSeq: question.seq + 1, responseText: "An answer",
+    })).toThrow("is not pending");
+    expect(() => kernel.submitAttempt(attemptId, {
+      questionSeq: question.seq, responseText: "An answer", activeTimeSeconds: -1,
+    })).toThrow("activeTimeSeconds must be a non-negative integer");
+    expect(() => kernel.submitAttempt(attemptId, {
+      questionSeq: question.seq, artifactRef: { kind: "text" },
+    })).toThrow("questionSeq requires responseText");
+    db.exec(`CREATE TEMP TRIGGER reject_submission BEFORE UPDATE OF submitted_at ON attempts
+      WHEN NEW.submitted_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'submission rejected'); END;`);
+    expect(() => kernel.submitAttempt(attemptId, {
+      questionSeq: question.seq, responseText: "An answer",
+    })).toThrow("submission rejected");
+
+    const resumed = kernel.resumeSession(sessionId);
+    expect(resumed.activeAttemptState?.subquestions[0]?.response_text).toBeNull();
+    expect(resumed.activeAttemptState?.attempt.submitted_at).toBeNull();
+    expect(resumed.pendingAction).toBe("collect_response");
+  });
+
   it("blocks premature submission but allows the learner to abandon without answering", () => {
     const pending = kernel.openAttemptSubquestion(attemptId, {
       contextText, promptText: "First part?", questionChunking: "default",

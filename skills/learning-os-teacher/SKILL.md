@@ -12,7 +12,7 @@ description: >-
 
 ## Present a pending question through the kernel
 
-After `getStudyContinuation(...)`, first reconcile the current learner message with the saved question. If the message answers it, call `answerAttemptSubquestion` with that question's `seq` and the actual response, then interpret/assess it. A returned `question` describes the state before processing this message; it does not mean repeat the question instead of consuming an answer.
+After `getStudyContinuation(...)`, first reconcile the current learner message with the saved question. If it completes an unsubmitted attempt, call `submitAttempt(attemptId, { questionSeq: seq, responseText })` with the saved pending `seq` and actual answer, then verify/assess it. Use `answerAttemptSubquestion(...)` for an intermediate split answer and the existing reconstruction resolution flow after submission. A returned `question` describes the state before processing this message; it does not mean repeat the question instead of consuming an answer.
 
 When there is no answer to process and the learner needs the pending question (fresh resumption or an explicit context request), present `presentation.markdown` and stop. It contains orientation, task context and one saved question; do not append the answer, a tracing procedure, or further questions. In learner-facing text, prefer simple, natural language and common words. Avoid system or teaching jargon when a plain phrase works. Say “explain it in your own words,” not “reconstruction” or `pending_action`.
 
@@ -172,7 +172,7 @@ orient -> retrieve -> construct model -> predict/commit
 
 Treat the selected challenge as one interaction episode. Inside that episode, enforce these turn boundaries:
 
-For persisted split questions, pass the pending question's `seq` with its exact `responseText` to `answerAttemptSubquestion(...)`; recover it from opening or resumption and preserve it across retries. A learner who stops can abandon the unsubmitted session without a fabricated answer.
+For a complete pending response, pass the pending question's `seq` and the learner's verbatim answer span once to `submitAttempt(attemptId, { questionSeq: seq, responseText })`. The kernel records the identical text in the question and attempt atomically. Preserve spaces and line breaks; put your interpretation in the assessment rationale. Use `answerAttemptSubquestion(...)` for intermediate split answers. Recover the saved `seq` from opening or resumption and preserve it across retries. A learner who stops can abandon the unsubmitted session without a fabricated answer. Teacher evaluation and exact-format checks are offline diagnostics, not extra steps in each learner turn.
 
 - **Visible teaching only:** hidden reasoning/tool output is not teaching and never satisfies an exposure event.
 - **Exposure immediately before emission:** prepare the exact answer-bearing material, pass it to `recordExposure(...)` so the immutable teaching artifact and exposure are persisted together as the final state operation, then show it immediately. Do not record `*_shown` for material that remains hidden or is not emitted.
@@ -346,6 +346,8 @@ Learning OS chooses objective/task intent
 → call `getStudyContinuation(...)` for the next decision
 → present it and wait for learner acceptance before opening its attempt
 ```
+
+For a selected `predict` / `runtime_trace` intent on async/await, concurrent transactions, or retry/idempotency, check the curated packs through `findCalibratedPredictionCase(knowledgeRoot, intent, kernel.getChallenge)` in `src/knowledge/challenge-calibration.ts`. It returns a matching case only when its code surface is absent from `intent.avoidRecentChallenges`. Use a returned case when it also fits the selected weakness and time constraints; build it with `buildCalibratedPredictionChallenge(...)`, then follow the freeze, answer, execute, and assess sequence above. Keep `calibration.expectedOutput` and `wrongModels` teacher-only; the frozen public prompt contains the code and question. Otherwise author a fresh challenge for the selected intent.
 
 For preparation-goal flows, `kernel.createSession(...)` takes the durable goal/topic ID, not `ChallengeIntent.conceptId`: use the exact selected intent from Learning OS with `kernel.registerChallenge(challenge, intent)`, then `kernel.createSession(intent.goalId, intent.deliveryContext)` and `kernel.openAttempt(...)`. The selected intent is the single goal-authority source for this execution path. Registration and attempt opening revalidate that authority, and opening also rejects a session for a different goal. If authority is stale, request a fresh Learning OS decision. The concept ID names the learning target, not the session topic.
 

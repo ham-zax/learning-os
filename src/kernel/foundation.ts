@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
-import { getAttemptSubquestions } from "./questions.js";
+import { answerAttemptSubquestion, getAttemptSubquestions } from "./questions.js";
 import {
   AttemptSchema,
   CapabilitySchema,
@@ -73,6 +73,8 @@ export interface OpenedAttempt {
 export interface SubmitAttemptInput {
   responseText?: string;
   artifactRef?: Record<string, unknown>;
+  /** Answer this pending response question and submit with the same text in one transaction. */
+  questionSeq?: number;
   /** Reliable active learner time known so far; omit when unknown. */
   activeTimeSeconds?: number;
 }
@@ -703,11 +705,21 @@ export function submitAttempt(
   if (input.responseText === undefined && input.artifactRef === undefined) {
     throw new Error("Attempt submission requires response text or an artifact reference");
   }
+  if (input.questionSeq !== undefined && input.responseText === undefined) {
+    throw new Error("questionSeq requires responseText");
+  }
 
   return db.transaction(() => {
     const attempt = getAttemptOrThrow(db, attemptId);
     if (attempt.submitted_at !== null) {
       throw new Error(`Attempt is already submitted: ${attemptId}`);
+    }
+    const activeTimeSeconds = validateActiveTimeSeconds(input.activeTimeSeconds);
+    if (input.questionSeq !== undefined) {
+      answerAttemptSubquestion(db, attemptId, {
+        seq: input.questionSeq,
+        responseText: input.responseText!,
+      });
     }
     const pendingSubquestion = db
       .prepare(`SELECT seq FROM attempt_subquestions WHERE attempt_id = ? AND response_text IS NULL AND superseded_at IS NULL`)
@@ -718,7 +730,6 @@ export function submitAttempt(
       );
     }
 
-    const activeTimeSeconds = validateActiveTimeSeconds(input.activeTimeSeconds);
     const submittedAt = new Date().toISOString();
     const update = db
       .prepare(

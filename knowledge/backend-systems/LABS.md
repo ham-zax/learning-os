@@ -14,6 +14,8 @@ This checks an in-memory concurrency model. A single-process synchronous decisio
 
 A suitable SQL contract can start with `inventory(sku PRIMARY KEY, stock INTEGER CHECK (stock >= 0))` and a conditional decrement that reports whether it affected a row. Concurrent execution and transaction boundaries must match the actual task. Do not grant SQL implementation evidence from a Node-only simulation.
 
+For an actual two-connection PostgreSQL trace, use [the disposable last-seat exercise](labs/postgres-last-seat/README.md). It declares `READ COMMITTED`, has both clients observe the initial seat, then holds A's guarded update open while B waits. Check each `UPDATE ... RETURNING` result and the final row. Its supplied SQL supports prediction/diagnosis; learner-owned implementation still needs a separately frozen task.
+
 ## Duplicate command: an overlapping retry
 
 File: `labs/duplicate-command.mjs`. Command: `node knowledge/backend-systems/labs/duplicate-command.mjs`.

@@ -25,3 +25,6 @@ Select the capability through Learning OS before turning the prompt into an atte
 
 ## Course route
 [Transactions and connection pressure](../units/b02.md)
+
+## Calibrated teacher examples
+[Concurrent-correctness predictions](../challenges/database-transactions-predict/README.md) cover the selected `predict` capability in an in-memory model.

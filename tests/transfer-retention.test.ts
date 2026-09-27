@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTeacherKernel } from "../src/teacher.js";
 import type { ChallengeIntent } from "../src/selection/types.js";
 import { getObjectiveReviewCard } from "../src/scheduler/index.js";
+import { summarizeDogfoodMetrics } from "../src/evaluation/dogfood-metrics.js";
 import { createKernelFixture, GOAL_ID, OBJECTIVE_ID } from "./helpers/kernel-fixture.js";
 
 describe("repair followed by selected transfer and scheduled retention", () => {
@@ -102,6 +103,10 @@ describe("repair followed by selected transfer and scheduled retention", () => {
       expect(retained.delay_seconds).toBeGreaterThanOrEqual(8 * 86400);
       expect(kernel.getObjectiveEvidenceReceipt(OBJECTIVE_ID).projection.durability_state).toBe("demonstrated");
       kernel.completeSessionFeedback(review.sessionId);
+      expect(summarizeDogfoodMetrics(db, { goalId: GOAL_ID })).toMatchObject({
+        validCorrectTransfers: 1,
+        delayedValidRetrievals: { correct: 1 },
+      });
     } finally {
       db.close();
     }

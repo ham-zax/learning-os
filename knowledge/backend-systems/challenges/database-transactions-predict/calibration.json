@@ -1,0 +1,88 @@
+{
+  "objective": {
+    "conceptId": "database-transactions-and-concurrent-correctness",
+    "capabilityId": "predict",
+    "taskForm": "runtime_trace"
+  },
+  "environment": "This is a deterministic in-memory Node.js ESM model of two callers, not PostgreSQL isolation. Both calls reach await after their initial check before either resumes; A then resumes before B. Predict before running it; we can run it after your answer.",
+  "cases": [
+    {
+      "id": "last-seat-baseline",
+      "novelty": "same",
+      "surface": "two callers decrement the final seat after a shared check",
+      "source": "baseline.mjs",
+      "question": "Predict every printed line and both return values. Does the one-seat business rule hold? Identify the observation and update that can interleave.",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts two accepted results and a final seat count of -1."
+        },
+        {
+          "id": "invariant_boundary",
+          "required": true,
+          "description": "Explains that both callers pass the availability check before either decrement and that two successful reservations violate the one-seat rule."
+        }
+      ],
+      "expectedOutput": ["A:accepted", "B:accepted", "decisions:[true,true]", "seats:-1"],
+      "wrongModels": [
+        {
+          "claim": "Individual writes are atomic, so the earlier availability check and later decrement behave as one safe decision.",
+          "predictedOutput": ["A:accepted", "decisions:[true,false]", "seats:0"]
+        }
+      ]
+    },
+    {
+      "id": "stale-write-variant",
+      "novelty": "variant",
+      "surface": "two successful reservations overwrite stock from the same stale read",
+      "source": "stale-write-variant.mjs",
+      "question": "Predict every printed line and both return values. Can the final seat count by itself prove only one client reserved the seat? Explain the read/write interleaving.",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts two accepted results even though the final seat count is 0."
+        },
+        {
+          "id": "invariant_boundary",
+          "required": true,
+          "description": "Explains that both callers read the same initial count and write back the same derived value, so final state hides the duplicate success."
+        }
+      ],
+      "expectedOutput": ["A:accepted", "B:accepted", "decisions:[true,true]", "seats:0"],
+      "wrongModels": [
+        {
+          "claim": "A nonnegative final stock proves only one reservation succeeded.",
+          "predictedOutput": ["A:accepted", "decisions:[true,false]", "seats:0"]
+        }
+      ]
+    },
+    {
+      "id": "username-transfer",
+      "novelty": "transfer",
+      "surface": "two clients claim one username while a Set hides duplicate writes",
+      "source": "username-transfer.mjs",
+      "question": "Predict every printed line and both return values. Can the final Set by itself prove only one client received a successful claim? Explain which boundary matters.",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts two successful claims while the final Set contains only alex."
+        },
+        {
+          "id": "invariant_boundary",
+          "required": true,
+          "description": "Explains that both clients observe absence before either add; unique final storage does not by itself guarantee one successful decision."
+        }
+      ],
+      "expectedOutput": ["A:claimed", "B:claimed", "decisions:[true,true]", "claimed:[\"alex\"]"],
+      "wrongModels": [
+        {
+          "claim": "Set uniqueness means the second client must be rejected.",
+          "predictedOutput": ["A:claimed", "decisions:[true,false]", "claimed:[\"alex\"]"]
+        }
+      ]
+    }
+  ]
+}

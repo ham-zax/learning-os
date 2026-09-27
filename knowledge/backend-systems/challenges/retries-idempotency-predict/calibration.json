@@ -1,0 +1,88 @@
+{
+  "objective": {
+    "conceptId": "retries-idempotency-and-uncertain-outcomes",
+    "capabilityId": "predict",
+    "taskForm": "runtime_trace"
+  },
+  "environment": "This is a deterministic in-memory Node.js ESM model of retries or redelivery, with no durable store or real broker. In the overlapping case, both calls reach await after the completed lookup before either resumes. Predict before running it; we can run it after your answer.",
+  "cases": [
+    {
+      "id": "new-key-baseline",
+      "novelty": "same",
+      "surface": "a lost response followed by a retry with a new operation ID",
+      "source": "new-key-baseline.mjs",
+      "question": "The first operation's response was lost, so the caller retried the same intended payment. Predict every printed line and the number of effects. Explain what identity the completed Map uses.",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts retry:10 and total:10, representing two effects despite the lost first response."
+        },
+        {
+          "id": "identity_boundary",
+          "required": true,
+          "description": "Explains that the retry uses a different operation ID, so a completed-result lookup by ID cannot recognize the same intended payment."
+        }
+      ],
+      "expectedOutput": ["retry:10", "total:10"],
+      "wrongModels": [
+        {
+          "claim": "The same amount and intended payment make the retry idempotent even with a new key.",
+          "predictedOutput": ["retry:5", "total:5"]
+        }
+      ]
+    },
+    {
+      "id": "overlap-variant",
+      "novelty": "variant",
+      "surface": "two overlapping calls share an ID but check only completed results",
+      "source": "overlap-variant.mjs",
+      "question": "Predict every printed line. Do both calls perform an effect? Explain what happens between the completed lookup and the effect.",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts results:[5,10] and total:10, representing two effects."
+        },
+        {
+          "id": "identity_boundary",
+          "required": true,
+          "description": "Explains that both calls miss the completed Map before either effect is recorded, so a stable ID alone does not serialize overlapping work."
+        }
+      ],
+      "expectedOutput": ["results:[5,10]", "total:10"],
+      "wrongModels": [
+        {
+          "claim": "The same ID automatically lets the second overlapping call reuse the first result.",
+          "predictedOutput": ["results:[5,5]", "total:5"]
+        }
+      ]
+    },
+    {
+      "id": "worker-restart-transfer",
+      "novelty": "transfer",
+      "surface": "a worker applies an effect, stops before acknowledgement, and a new worker handles redelivery",
+      "source": "worker-restart-transfer.mjs",
+      "question": "The second worker call models redelivery after the first worker stopped before acknowledgement. Predict every printed line and the number of effects. Explain what survives the restart and what does not.",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts replay:10 and effects:10, representing two effects."
+        },
+        {
+          "id": "identity_boundary",
+          "required": true,
+          "description": "Explains that the external effect counter survives while the new worker's local completed Map is empty, so the same delivery ID does not prevent replaying the effect."
+        }
+      ],
+      "expectedOutput": ["replay:10", "effects:10"],
+      "wrongModels": [
+        {
+          "claim": "A stable delivery ID in a process-local completed Map prevents duplicate effects after a worker restart.",
+          "predictedOutput": ["replay:5", "effects:5"]
+        }
+      ]
+    }
+  ]
+}
