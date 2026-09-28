@@ -27,6 +27,15 @@ interface PackLocation {
 }
 
 /** Lists every calibrated prediction pack under the knowledge root. */
+function isDraftPack(file: string): boolean {
+  try {
+    return (JSON.parse(readFileSync(file, "utf8")) as { draft?: unknown }).draft === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Lists every published (non-draft) calibrated prediction pack under the knowledge root. */
 export function listCalibratedPredictionPacks(knowledgeRoot: string): PackLocation[] {
   const packs: PackLocation[] = [];
   for (const course of readdirSync(knowledgeRoot, { withFileTypes: true })) {
@@ -34,7 +43,8 @@ export function listCalibratedPredictionPacks(knowledgeRoot: string): PackLocati
     const challenges = join(knowledgeRoot, course.name, "challenges");
     if (!existsSync(challenges)) continue;
     for (const pack of readdirSync(challenges, { withFileTypes: true })) {
-      if (!pack.isDirectory() || !existsSync(join(challenges, pack.name, "calibration.json"))) continue;
+      const file = join(challenges, pack.name, "calibration.json");
+      if (!pack.isDirectory() || !existsSync(file) || isDraftPack(file)) continue;
       packs.push({ id: pack.name, course: course.name, directory: `challenges/${pack.name}` });
     }
   }
@@ -142,7 +152,7 @@ export function findCalibratedPredictionCase(
   });
   for (const config of listCalibratedPredictionPacks(knowledgeRoot)) {
     const pack = loadCalibratedPredictionPack(knowledgeRoot, config.id);
-    if (pack.draft || pack.objective.conceptId !== intent.conceptId) continue;
+    if (pack.objective.conceptId !== intent.conceptId) continue;
     const item = pack.cases.find((candidate) => candidate.novelty === intent.novelty);
     if (!item) continue;
     const source = codingCourseFile(join(knowledgeRoot, config.course),

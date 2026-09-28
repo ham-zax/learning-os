@@ -11,7 +11,7 @@
       "novelty": "same",
       "surface": "cache-aside read whose slow fill overlaps an update that writes then invalidates",
       "source": "stale-fill-baseline.mjs",
-      "question": "Predict the four lines of output. The writer updates the database and then deletes the cache entry. Why can a later read still be wrong, and which copy is authoritative?",
+      "question": "Predict the four lines of output. The writer updates the database and then deletes the cache entry. What does each read return, and which copy is authoritative?",
       "criteria": [
         {
           "id": "observable_outcome",
@@ -41,7 +41,7 @@
       "novelty": "variant",
       "surface": "stock update that deletes the cache before a slow database write",
       "source": "delete-first-variant.mjs",
-      "question": "This version deletes the cache entry before writing the database. Predict the three lines of output, and explain whether moving the delete first fixes the stale value.",
+      "question": "This version deletes the cache entry before writing the database. Predict the three lines of output, and explain what each read observes and why.",
       "criteria": [
         {
           "id": "observable_outcome",

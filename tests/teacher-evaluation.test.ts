@@ -182,7 +182,7 @@ describe("teacher evaluation scenarios", () => {
         assessmentBasis: "deterministic_execution",
         verificationOutput: { outcome: "passed", basis: "Node ESM execution after response",
           summary: output.join(", "), details: { stdout: output } },
-        objectiveResults: [{ objectiveId: prepared.objectiveId, result: "partially_correct",
+        objectiveResults: [{ objectiveId: prepared.objectiveId, result: "incorrect",
           criteriaMet: [], criteriaUnmet: ["observable_outcome", "identity_boundary"],
           rationale: "The output is right, but a new ID misses the completed-result Map and applies another effect." }] });
       kernel.recordExposure(prepared.sessionId, { attemptId: prepared.attemptId,

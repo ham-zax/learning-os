@@ -4,7 +4,7 @@
     "capabilityId": "predict",
     "taskForm": "runtime_trace"
   },
-  "environment": "This is a deterministic in-memory Node.js ESM model of two callers, not PostgreSQL isolation. Both calls reach await after their initial check before either resumes; A then resumes before B. Predict before running it; we can run it after your answer.",
+  "environment": "This is a deterministic in-memory Node.js ESM model of two callers, not PostgreSQL isolation. Predict before running it; we can run it after your answer.",
   "cases": [
     {
       "id": "last-seat-baseline",

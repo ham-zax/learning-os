@@ -44,7 +44,8 @@ describe("kernel JSON CLI", () => {
   });
 
   it("reports unknown methods and invalid JSON as a JSON error with a failing exit code", () => {
-    for (const result of [run("noSuchMethod"), run("getSessionFeedback", "not json")]) {
+    const missingValue = spawnSync(tsxBin, [cliPath, "listPreparationContexts", "--profile"], { cwd: root, encoding: "utf8" });
+    for (const result of [run("noSuchMethod"), run("getSessionFeedback", "not json"), missingValue]) {
       expect(result.status).toBe(1);
       expect(JSON.parse(result.stderr)).toHaveProperty("error");
     }

@@ -34,9 +34,12 @@ function parseArgs(argv: string[]) {
   const rest: string[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]!;
-    if (arg === "--profile") profileId = argv[++index];
-    else if (arg === "--db") dbPath = argv[++index];
-    else rest.push(arg);
+    if (arg === "--profile" || arg === "--db") {
+      const value = argv[++index];
+      if (!value || value.startsWith("--")) throw new Error(`${arg} needs a value`);
+      if (arg === "--profile") profileId = value;
+      else dbPath = value;
+    } else rest.push(arg);
   }
   const [method, ...jsonArgs] = rest;
   return { profileId, dbPath, method, jsonArgs };

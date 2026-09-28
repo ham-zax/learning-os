@@ -4,7 +4,7 @@
     "capabilityId": "predict",
     "taskForm": "runtime_trace"
   },
-  "environment": "This is a deterministic in-memory Node.js ESM model of retries or redelivery, with no durable store or real broker. In the overlapping case, both calls reach await after the completed lookup before either resumes. Predict before running it; we can run it after your answer.",
+  "environment": "This is a deterministic in-memory Node.js ESM model of retries or redelivery, with no durable store or real broker. Predict before running it; we can run it after your answer.",
   "cases": [
     {
       "id": "new-key-baseline",

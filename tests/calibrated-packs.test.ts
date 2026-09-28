@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -22,7 +24,6 @@ describe("discovered calibrated prediction packs", () => {
 
   it.each(packs)("$id answer keys match real execution and wrong models differ", (location) => {
     const pack = loadCalibratedPredictionPack(knowledgeRoot, location.id);
-    if (pack.draft) return;
     expect(new Set(pack.cases.map((item) => item.surface)).size).toBe(pack.cases.length);
     for (const item of pack.cases) {
       const source = join(knowledgeRoot, location.course, location.directory, item.source);
@@ -34,6 +35,19 @@ describe("discovered calibrated prediction packs", () => {
         if (wrong.predictedFinal) expect(wrong.predictedFinal).not.toBe(actual.at(-1)?.split(": ").at(-1));
         if (wrong.predictedFirstUpdate) expect(wrong.predictedFirstUpdate).not.toBe(actual[0]);
       }
+    }
+  });
+
+  it("skips an incomplete draft without breaking published packs", () => {
+    const root = mkdtempSync(join(tmpdir(), "learning-os-packs-"));
+    try {
+      cpSync(knowledgeRoot, root, { recursive: true });
+      const draft = join(root, "frontend-revision", "challenges", "broken-draft");
+      cpSync(join(root, "frontend-revision", "challenges", "js-promises-predict"), draft, { recursive: true });
+      writeFileSync(join(draft, "calibration.json"), JSON.stringify({ draft: true, cases: [] }));
+      expect(listCalibratedPredictionPacks(root).map((pack) => pack.id)).not.toContain("broken-draft");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

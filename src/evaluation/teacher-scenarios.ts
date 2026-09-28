@@ -339,7 +339,7 @@ export function inspectTeacherScenario(dbPath: string, prepared: PreparedTeacher
         const expectedMet = transaction && !wrongTransaction ? ["observable_outcome", boundaryCriterion] : [];
         const expectedUnmet = transaction && !wrongTransaction ? [] : ["observable_outcome", boundaryCriterion];
         const correctAssessment = evidence.length === 1 &&
-          evidence[0]?.result === (wrongTransaction ? "incorrect" : transaction ? "correct" : "partially_correct") &&
+          evidence[0]?.result === (transaction && !wrongTransaction ? "correct" : "incorrect") &&
           JSON.stringify([...(criteria?.met ?? [])].sort()) === JSON.stringify([...expectedMet].sort()) &&
           JSON.stringify([...(criteria?.unmet ?? [])].sort()) === JSON.stringify([...expectedUnmet].sort());
         return [
@@ -391,7 +391,10 @@ export function inspectTeacherScenario(dbPath: string, prepared: PreparedTeacher
         ];
       case "resumed_answer":
         return [
-          { label: "saved question answered with learner's exact response", passed: initial?.response_text === teacherScenarios.find((item) => item.id === prepared.id)?.learnerMessage },
+          { label: "saved question answered with learner's exact response", passed: (() => {
+            const expected = teacherScenarios.find((item) => item.id === prepared.id)?.learnerMessage;
+            return initial?.response_text === expected && attempt?.response_text === expected;
+          })() },
           { label: "answer assessed correctly once", passed: evidenceCount === 1 &&
             (db.prepare("SELECT result FROM evidence_events LIMIT 1").get() as { result: string } | undefined)?.result === "correct" },
           { label: "feedback episode closed", passed: session.phase === "complete" },
