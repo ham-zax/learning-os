@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { EvidenceResult } from "../db/types.js";
-import { loadCalibratedPredictionPack } from "../knowledge/challenge-calibration.js";
+import { loadCalibratedPredictionPack, resolveCalibratedPredictionPack } from "../knowledge/challenge-calibration.js";
 import type { CalibratedPredictionPackId } from "../knowledge/challenge-calibration.js";
 import { codingCourseFile } from "../knowledge/courses.js";
 
@@ -77,10 +77,8 @@ function calibratedAssessorCase(
   const pack = loadCalibratedPredictionPack(knowledgeRoot, packId);
   const item = pack.cases.find((candidate) => candidate.id === calibrationCaseId);
   if (!item) throw new Error(`Missing calibrated assessor case: ${packId}/${calibrationCaseId}`);
-  const course = packId === "async-predict" ? "frontend-revision" : "backend-systems";
-  const directory = packId === "transaction-predict" ? "database-transactions-predict"
-    : packId === "idempotency-predict" ? "retries-idempotency-predict" : "js-async-await-predict";
-  const source = codingCourseFile(join(knowledgeRoot, course), `challenges/${directory}/${item.source}`);
+  const { course, directory } = resolveCalibratedPredictionPack(knowledgeRoot, packId);
+  const source = codingCourseFile(join(knowledgeRoot, course), `${directory}/${item.source}`);
   const code = readFileSync(source, "utf8").trimEnd();
   return {
     id, response, expected, reason,

@@ -20,6 +20,9 @@ Identify the authoritative state, cached copies and the freshness contract. Inva
 ## Teacher use
 Select the capability through Learning OS before turning the prompt into an attempt. Freeze the consequential criterion and allowed tools; use one question at a time. A correct explanation does not certify implementation. A provided model is exposure; a repair remains guided until a later qualifying independent attempt. Stop when the selected criterion is sufficiently demonstrated, not after a quota of examples.
 
+## Calibrated teacher examples
+[Prediction examples and verification](../challenges/state-ownership-and-cache-consistency-predict/README.md) cover the selected `predict` capability only.
+
 ## Sources
 [Redis cache tracking and invalidation](https://redis.io/docs/latest/develop/clients/client-side-caching/) provides one concrete coherence mechanism. [PostgreSQL replication](https://www.postgresql.org/docs/current/warm-standby.html) provides the distinct replica-visibility reference. Neither implies that every application cache-aside race is solved; state the exercise's authority and freshness contract. The course scenario is original.
 

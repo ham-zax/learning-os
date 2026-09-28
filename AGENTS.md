@@ -48,6 +48,8 @@ Concept rows are descriptive curriculum metadata only. Learner progress belongs 
 | `src/profile/` | Learner profile registry and isolated DB resolution |
 | `src/onboarding/` | Structured intake, information needs, adaptive proposal, confirmed application |
 | `src/teacher.ts` | Provider-neutral teacher kernel bound to one learner DB |
+| `src/kernel-cli.ts` | JSON shell surface over the teacher kernel (`npm run -s kernel`) |
+| `src/knowledge/challenge-calibration.ts` | Discovers and builds calibrated prediction packs from `knowledge/<course>/challenges/` |
 | `src/kernel/foundation.ts` | Objectives, frozen challenges, attempts, hints/exposures, resume |
 | `src/kernel/evidence.ts` | Assessment, append-only evidence, projections, correction |
 | `src/selection/` | Deterministic challenge-intent selection |
@@ -143,6 +145,8 @@ npm run tutor -- interview <concept-id> --type coding
 npm run tutor -- interview <concept-id> --type system-design
 npm run tutor -- due
 npm run tutor -- stats
+npm run -s kernel -- <method> '<json-arg>'   # teacher-kernel JSON surface for shell-connected agents
+npm run pack:new -- <course> <concept-id>    # scaffold a calibrated prediction pack
 npm run typecheck
 npm run build
 ```

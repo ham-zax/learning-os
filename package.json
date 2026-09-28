@@ -13,7 +13,9 @@
     "eval:teacher": "tsx src/evaluation/cli.ts",
     "typecheck": "node --max-old-space-size=4096 node_modules/.bin/tsc --noEmit --incremental",
     "tutor": "tsx src/cli.ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "pack:new": "tsx src/knowledge/new-pack.ts",
+    "kernel": "tsx src/kernel-cli.ts"
   },
   "keywords": [
     "agent-native-learning",

@@ -1,0 +1,100 @@
+{
+  "objective": {
+    "conceptId": "js-promises",
+    "capabilityId": "predict",
+    "taskForm": "runtime_trace"
+  },
+  "environment": "This is Node.js ESM code with no external packages. Predict before running it; we can run it after your answer.",
+  "cases": [
+    {
+      "id": "missing-return-baseline",
+      "novelty": "same",
+      "surface": "then callback that starts a save without returning it",
+      "source": "baseline.mjs",
+      "question": "Predict the exact output order. What does the second then receive, and what decides when it runs?",
+      "criteria": [
+        {
+          "id": "output_order",
+          "required": true,
+          "description": "Predicts next got undefined, then saved draft, in that order."
+        },
+        {
+          "id": "settlement_link",
+          "required": true,
+          "description": "Explains that the first callback returns undefined, so the chained promise fulfills immediately with undefined and does not wait for the unreturned save."
+        }
+      ],
+      "expectedOutput": ["next got undefined", "saved draft"],
+      "wrongModels": [
+        {
+          "claim": "A then chain waits for any promise created inside the callback.",
+          "predictedOutput": ["saved draft", "next got draft"]
+        },
+        {
+          "claim": "The chain waits for the save but passes nothing along because there is no return.",
+          "predictedOutput": ["saved draft", "next got undefined"]
+        }
+      ]
+    },
+    {
+      "id": "returned-step-variant",
+      "novelty": "variant",
+      "surface": "then callback that returns the next timed step",
+      "source": "variant.mjs",
+      "question": "Predict the exact output order. When does step b start, and what value reaches the last then? Give the reason.",
+      "criteria": [
+        {
+          "id": "output_order",
+          "required": true,
+          "description": "Predicts sync end, done a, done b, chain got b in that order."
+        },
+        {
+          "id": "settlement_link",
+          "required": true,
+          "description": "Explains that step b starts only when a's callback runs, and returning its promise makes the chain adopt b's settlement and value."
+        }
+      ],
+      "expectedOutput": ["sync end", "done a", "done b", "chain got b"],
+      "wrongModels": [
+        {
+          "claim": "Every step in a then chain starts at once when the chain is built.",
+          "predictedOutput": ["sync end", "done b", "done a", "chain got b"]
+        },
+        {
+          "claim": "Returning a promise from then passes the outer value through unchanged.",
+          "predictedOutput": ["sync end", "done a", "done b", "chain got a"]
+        }
+      ]
+    },
+    {
+      "id": "foreach-upload-transfer",
+      "novelty": "transfer",
+      "surface": "async forEach callbacks inside a save routine that shows a success banner",
+      "source": "transfer.mjs",
+      "question": "A user saves two files. Predict the exact output order. Is the success banner safe to show at that moment? Explain what the awaits do and do not wait for.",
+      "criteria": [
+        {
+          "id": "output_order",
+          "required": true,
+          "description": "Predicts all saved, show success banner, uploaded b, uploaded a in that order."
+        },
+        {
+          "id": "settlement_link",
+          "required": true,
+          "description": "Explains that forEach ignores the promises its async callbacks return, so saveAll fulfills before either upload finishes and the banner is shown too early."
+        }
+      ],
+      "expectedOutput": ["all saved", "show success banner", "uploaded b", "uploaded a"],
+      "wrongModels": [
+        {
+          "claim": "forEach awaits each async callback in turn.",
+          "predictedOutput": ["uploaded a", "uploaded b", "all saved", "show success banner"]
+        },
+        {
+          "claim": "The uploads run in parallel and saveAll waits for all of them.",
+          "predictedOutput": ["uploaded b", "uploaded a", "all saved", "show success banner"]
+        }
+      ]
+    }
+  ]
+}

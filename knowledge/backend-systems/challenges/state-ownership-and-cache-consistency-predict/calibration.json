@@ -1,0 +1,100 @@
+{
+  "objective": {
+    "conceptId": "state-ownership-and-cache-consistency",
+    "capabilityId": "predict",
+    "taskForm": "runtime_trace"
+  },
+  "environment": "This is a deterministic in-memory Node.js ESM model of a database map and a cache-aside cache, not Redis or a real database. Timers fix the interleaving. Predict before running it; we can run it after your answer.",
+  "cases": [
+    {
+      "id": "stale-fill-baseline",
+      "novelty": "same",
+      "surface": "cache-aside read whose slow fill overlaps an update that writes then invalidates",
+      "source": "stale-fill-baseline.mjs",
+      "question": "Predict the four lines of output. The writer updates the database and then deletes the cache entry. Why can a later read still be wrong, and which copy is authoritative?",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts updated to 12, first read: 10, later read: 10, db: 12 in that order."
+        },
+        {
+          "id": "ordering_boundary",
+          "required": true,
+          "description": "Explains that the reader read 10 before the update, the invalidation ran before the reader's late fill, and the fill then republished the stale 10 into the cache while the database holds 12."
+        }
+      ],
+      "expectedOutput": ["updated to 12", "first read: 10", "later read: 10", "db: 12"],
+      "wrongModels": [
+        {
+          "claim": "Deleting the cache entry after the database write guarantees later reads are fresh.",
+          "predictedOutput": ["updated to 12", "first read: 10", "later read: 12", "db: 12"]
+        },
+        {
+          "claim": "The first read sees the new value because the update finishes first.",
+          "predictedOutput": ["updated to 12", "first read: 12", "later read: 12", "db: 12"]
+        }
+      ]
+    },
+    {
+      "id": "delete-first-variant",
+      "novelty": "variant",
+      "surface": "stock update that deletes the cache before a slow database write",
+      "source": "delete-first-variant.mjs",
+      "question": "This version deletes the cache entry before writing the database. Predict the three lines of output, and explain whether moving the delete first fixes the stale value.",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts stock set to 0, read during update: 5, read after update: 5 in that order."
+        },
+        {
+          "id": "ordering_boundary",
+          "required": true,
+          "description": "Explains that the read misses after the delete, reads the old database value 5 before the slow write lands, and refills the cache with 5, so deleting first only moves the race window."
+        }
+      ],
+      "expectedOutput": ["stock set to 0", "read during update: 5", "read after update: 5"],
+      "wrongModels": [
+        {
+          "claim": "Deleting the cache before the write prevents any stale refill.",
+          "predictedOutput": ["stock set to 0", "read during update: 5", "read after update: 0"]
+        },
+        {
+          "claim": "A read after a cache delete always goes to the database and sees the new value.",
+          "predictedOutput": ["stock set to 0", "read during update: 0", "read after update: 0"]
+        }
+      ]
+    },
+    {
+      "id": "ttl-profile-transfer",
+      "novelty": "transfer",
+      "surface": "profile name cache with a TTL and no invalidation on save",
+      "source": "ttl-profile-transfer.mjs",
+      "question": "A user renames themselves at t=10 and reloads their profile. Predict the four lines of output. Does the TTL give the user read-your-write, and until when can they see the old name?",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts t=0 Sam (db), t=10 Sam (cache), t=29 Sam (cache), t=30 Sasha (db) in that order."
+        },
+        {
+          "id": "ordering_boundary",
+          "required": true,
+          "description": "Explains that the save changes only the database, the entry cached at t=0 stays valid until t=30, so a TTL bounds staleness but does not give read-your-write."
+        }
+      ],
+      "expectedOutput": ["t=0 Sam (db)", "t=10 Sam (cache)", "t=29 Sam (cache)", "t=30 Sasha (db)"],
+      "wrongModels": [
+        {
+          "claim": "A TTL cache gives the writer read-your-write after a save.",
+          "predictedOutput": ["t=0 Sam (db)", "t=10 Sasha (db)", "t=29 Sasha (cache)", "t=30 Sasha (db)"]
+        },
+        {
+          "claim": "The TTL restarts on every cache hit, so the old name never expires while it is being read.",
+          "predictedOutput": ["t=0 Sam (db)", "t=10 Sam (cache)", "t=29 Sam (cache)", "t=30 Sam (cache)"]
+        }
+      ]
+    }
+  ]
+}

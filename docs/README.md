@@ -15,9 +15,8 @@ Learning OS is easiest to use through an AI agent that can access the repository
 - [Teacher-agent protocol](teacher-agent-protocol.md) — normative conversational behavior and learner-state boundaries.
 - [`learning-os-teacher` Skill](../skills/learning-os-teacher/SKILL.md) — portable agent instructions and progressively loaded pedagogy playbooks.
 - [Durable question presentation](question-presentation-design.md) — persisted task context/question delivery across response collection, reconstruction, and fresh-session handoff.
-- [Teacher pedagogy design](teacher-pedagogy-design.md) — rationale behind the evidence-safe teaching repertoire and challenge-authoring guidance.
 - [Retrieval-first study design](retrieval-first-study-design.md) — formalizes generate-before-instruction, gap-focused repair, orientation/exposure boundaries, and the decision to reuse existing kernel state before adding new runtime machinery.
-- [Flexible learning runtime design](flexible-learning-runtime-design.md) — runtime design for adaptive episodes, time/FSRS ownership, prerequisite repair, and evidence-safe replanning.
+- [Archived design docs](archive/) — rationale for implemented waves; history, not current instructions.
 
 ## Understand the learning model
 

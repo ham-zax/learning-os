@@ -329,7 +329,7 @@ V1 does not add:
 V1 is implemented by aligning:
 
 - `docs/teacher-agent-protocol.md`;
-- `docs/teacher-pedagogy-design.md`;
+- `docs/archive/teacher-pedagogy-design.md`;
 - `docs/technical-revision-teacher.md`;
 - `docs/coding-courses.md`;
 - `skills/learning-os-teacher/SKILL.md`;

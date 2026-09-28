@@ -20,6 +20,9 @@ A promise represents eventual settlement. Each then returns a new promise whose 
 ## Teacher use
 Select the capability through Learning OS before turning the prompt into an attempt. Freeze the consequential criterion and allowed tools; use one question at a time. A correct explanation does not certify implementation. A provided model is exposure; a repair remains guided until a later qualifying independent attempt. Stop when the selected criterion is sufficiently demonstrated, not after a quota of examples.
 
+## Calibrated teacher examples
+[Prediction examples and verification](../challenges/js-promises-predict/README.md) cover the selected `predict` capability only.
+
 ## Sources
 [MDN JavaScript execution model](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Execution_model) The course summary is original; inspect the focused primary reference when the distinction is subtle or version-sensitive.
 

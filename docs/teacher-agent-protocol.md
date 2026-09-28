@@ -82,9 +82,14 @@ profile-bound teaching
 → getStudyContinuation(...) before ordinary resumption/next-action selection
 → current session/interview owners for accepted work
 
+shell access to the same kernel
+→ npm run -s kernel -- <method> '<json-arg>' ...
+
 CLI fallback
 → npm run tutor -- ...
 ```
+
+`npm run -s kernel` calls the `createTeacherKernel(db)` method of the same name for the active profile (or `--profile <id>` / `--db <path>`), passing each JSON argument positionally and printing one JSON result. It adds no behavior, so every kernel rule still applies. Prefer it to writing a new script each turn.
 
 Do not use direct SQLite writes for learner-state operations.
 
@@ -435,7 +440,7 @@ Keep this optional and evidence-grounded. It does not create proficiency, select
 
 Build a concrete challenge only from the selected `ChallengeIntent` and preserve its objective, capability, task form, delivery context, novelty, weakness context, changed-surface requirement, recent-surface avoidance, and supplied time constraints.
 
-For a selected `predict` / `runtime_trace` intent on `js-async-await`, `database-transactions-and-concurrent-correctness`, or `retries-idempotency-and-uncertain-outcomes`, check the curated prediction packs with `findCalibratedPredictionCase(knowledgeRoot, intent, kernel.getChallenge)`. It matches the selected concept and novelty and compares the case's code with recent frozen challenges. If it returns a case that also fits the selected weakness and time constraints, use `buildCalibratedPredictionChallenge(...)` to make the concrete challenge, then freeze it with the exact selected intent. Otherwise author a fresh challenge under that same intent. Keep the returned calibration and answer key teacher-only. Let the learner commit a prediction before running the case's source; use the execution result and both frozen criteria to assess the prediction and its causal explanation.
+For every selected `predict` / `runtime_trace` intent, check the curated prediction packs under `knowledge/<course>/challenges/` with `findCalibratedPredictionCase(knowledgeRoot, intent, kernel.getChallenge)`. It matches the selected concept and novelty and compares the case's code with recent frozen challenges. If it returns a case that also fits the selected weakness and time constraints, use `buildCalibratedPredictionChallenge(...)` to make the concrete challenge, then freeze it with the exact selected intent. Otherwise author a fresh challenge under that same intent. Keep the returned calibration and answer key teacher-only. Let the learner commit a prediction before running the case's source; use the execution result and both frozen criteria to assess the prediction and its causal explanation.
 
 Prefer challenges that discriminate between competing mental models: a common wrong model should predict a different observable result from the correct one. For prediction/debug/design diagnosis, collect a committed prediction or hypothesis before decisive evidence when clean evidence is intended.
 

@@ -1,0 +1,100 @@
+{
+  "objective": {
+    "conceptId": "js-this-binding",
+    "capabilityId": "predict",
+    "taskForm": "runtime_trace"
+  },
+  "environment": "This is Node.js ESM code, so it runs in strict mode, with no external packages. Predict before running it; we can run it after your answer.",
+  "cases": [
+    {
+      "id": "detached-method-baseline",
+      "novelty": "same",
+      "surface": "object method called directly and then through a detached reference",
+      "source": "baseline.mjs",
+      "question": "Predict the three lines of output. What decides this in each of the two calls?",
+      "criteria": [
+        {
+          "id": "output_order",
+          "required": true,
+          "description": "Predicts 1, TypeError, 1 in that order."
+        },
+        {
+          "id": "receiver_rule",
+          "required": true,
+          "description": "Explains that this comes from the call form: counter.increment() sets counter as the receiver, while a plain call of the detached function leaves this undefined in strict mode, so reading this.count throws."
+        }
+      ],
+      "expectedOutput": ["1", "TypeError", "1"],
+      "wrongModels": [
+        {
+          "claim": "A method keeps the object it was defined on as this wherever it is called from.",
+          "predictedOutput": ["1", "2", "2"]
+        },
+        {
+          "claim": "A plain call uses the global object as this, so the count becomes NaN on globalThis.",
+          "predictedOutput": ["1", "NaN", "1"]
+        }
+      ]
+    },
+    {
+      "id": "map-callback-variant",
+      "novelty": "variant",
+      "surface": "regular function versus arrow function passed to map inside a method",
+      "source": "callback-variant.mjs",
+      "question": "Predict the two lines of output. Why do the two callbacks see different values of this?",
+      "criteria": [
+        {
+          "id": "output_order",
+          "required": true,
+          "description": "Predicts TypeError, then ana@core,bo@core."
+        },
+        {
+          "id": "receiver_rule",
+          "required": true,
+          "description": "Explains that map calls the regular callback without a receiver, so its own this is undefined, while the arrow callback has no own this and uses the method's this, which is team."
+        }
+      ],
+      "expectedOutput": ["TypeError", "ana@core,bo@core"],
+      "wrongModels": [
+        {
+          "claim": "A nested function inherits this from the method that contains it.",
+          "predictedOutput": ["ana@core,bo@core", "ana@core,bo@core"]
+        },
+        {
+          "claim": "Arrow functions have no this at all, so this.name is undefined inside them.",
+          "predictedOutput": ["TypeError", "ana@undefined,bo@undefined"]
+        }
+      ]
+    },
+    {
+      "id": "event-handler-transfer",
+      "novelty": "transfer",
+      "surface": "class method passed as an event handler three different ways",
+      "source": "handler-transfer.mjs",
+      "question": "The same store method is registered as a handler in three ways. Predict the four lines of output, and explain which registrations keep the store as the receiver.",
+      "criteria": [
+        {
+          "id": "output_order",
+          "required": true,
+          "description": "Predicts handled: TypeError, handled: 1, handled: 2, items: y,z in that order."
+        },
+        {
+          "id": "receiver_rule",
+          "required": true,
+          "description": "Explains that passing store.add passes only the function, so handler(payload) runs with this undefined and the class body is strict; the arrow wrapper calls store.add(item) as a method call; bind fixes the receiver to store."
+        }
+      ],
+      "expectedOutput": ["handled: TypeError", "handled: 1", "handled: 2", "items: y,z"],
+      "wrongModels": [
+        {
+          "claim": "A class method is bound to its instance automatically.",
+          "predictedOutput": ["handled: 1", "handled: 2", "handled: 3", "items: x,y,z"]
+        },
+        {
+          "claim": "Wrapping the method in an arrow function also loses the receiver.",
+          "predictedOutput": ["handled: TypeError", "handled: TypeError", "handled: 1", "items: z"]
+        }
+      ]
+    }
+  ]
+}
