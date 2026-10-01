@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -6,6 +5,7 @@ import { createConcept, createDatabase, createTopic, setGoalObjective } from "..
 import { buildCalibratedAsyncPredictChallenge, loadAsyncPredictCalibration } from "../src/knowledge/challenge-calibration.js";
 import { codingCourseFile } from "../src/knowledge/courses.js";
 import { createTeacherKernel } from "../src/teacher.js";
+import { runFile } from "./helpers/spawn.js";
 
 const knowledgeRoot = fileURLToPath(new URL("../knowledge", import.meta.url));
 const courseDirectory = fileURLToPath(new URL("../knowledge/frontend-revision", import.meta.url));
@@ -18,8 +18,7 @@ describe("calibrated js-async-await prediction examples", () => {
     expect(new Set(pack.cases.map((item) => item.surface)).size).toBe(pack.cases.length);
     for (const item of pack.cases) {
       const source = codingCourseFile(courseDirectory, `${caseDirectory}/${item.source}`);
-      const actual = execFileSync(process.execPath, [source], { encoding: "utf8", timeout: 3000 })
-        .trim().split("\n");
+      const actual = runFile(source);
       expect(actual).toEqual(item.expectedOutput);
       expect(item.criteria.map((criterion) => criterion.id)).toEqual(["output_order", "suspension_boundary"]);
       for (const wrong of item.wrongModels) {
@@ -77,8 +76,7 @@ describe("calibrated js-async-await prediction examples", () => {
         objectiveResults: [{ objectiveId: intent.objectiveId, result: "correct" as const,
           criteriaMet: ["output_order", "suspension_boundary"], rationale: "Correct order and suspension boundary." }] };
       expect(() => kernel.recordAssessment(attemptId, assessment)).toThrow(/verification output/);
-      const actualOutput = execFileSync(process.execPath, [baselinePath], { encoding: "utf8", timeout: 3000 })
-        .trim().split("\n");
+      const actualOutput = runFile(baselinePath);
       expect(actualOutput).toEqual(built.calibration.expectedOutput);
       const committed = kernel.recordAssessment(attemptId, { ...assessment,
         verificationOutput: { outcome: "passed", basis: "Node ESM execution after learner response",

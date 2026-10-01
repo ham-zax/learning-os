@@ -50,8 +50,8 @@ describe('Knowledge Types', () => {
   describe('ManifestSchema', () => {
     it('parses a valid manifest', () => {
       const manifest = ManifestSchema.parse({
-        topic: 'git-basics',
-        version: '1.0',
+        topicId: 'git-basics',
+        topicName: 'Git Basics',
         description: 'Git fundamentals',
         concepts: [
           {
@@ -65,7 +65,7 @@ describe('Knowledge Types', () => {
         ],
       })
       expect(manifest.concepts).toHaveLength(1)
-      expect(manifest.topic).toBe('git-basics')
+      expect(manifest.topicId).toBe('git-basics')
     })
   })
 

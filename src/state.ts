@@ -5,7 +5,11 @@
  * work come from objective evidence/projections and review cards.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { dirname } from "node:path";
+import { loadManifest } from "./knowledge/loader.js";
+import { validateManifest } from "./knowledge/validator.js";
+import { assertSafeId, resolveContainedPath } from "./knowledge/safe-path.js";
 import Database from "better-sqlite3";
 import {
   getConcept,
@@ -30,22 +34,6 @@ export interface TopicSummary {
   dueCount: number;
   overdueCount: number;
   lastSession: string | null;
-}
-
-interface ManifestEntry {
-  id: string;
-  title: string;
-  difficulty: number;
-  prerequisites?: string[];
-  tags?: string[];
-  source?: string;
-  sourceId?: string;
-}
-
-interface Manifest {
-  topicId: string;
-  topicName: string;
-  concepts: ManifestEntry[];
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -127,77 +115,41 @@ export function initializeTopic(
   topicId: string,
   manifestPath: string,
 ): void {
-  const raw = readFileSync(manifestPath, "utf-8");
-  const manifest = JSON.parse(raw) as Manifest;
-  if (typeof manifest.topicId !== "string" || manifest.topicId.trim().length === 0) {
-    throw new Error("Manifest topicId must be a non-empty string");
-  }
+  assertSafeId(topicId, "Topic ID");
+  const manifest = loadManifest(manifestPath);
   if (manifest.topicId !== topicId) {
     throw new Error(`Manifest topicId ${manifest.topicId} does not match requested topic ${topicId}`);
   }
-  if (typeof manifest.topicName !== "string" || manifest.topicName.trim().length === 0) {
-    throw new Error("Manifest topicName must be a non-empty string");
-  }
-  if (!Array.isArray(manifest.concepts)) {
-    throw new Error("Manifest concepts must be an array");
-  }
+  const validation = validateManifest(manifest);
+  if (!validation.valid) throw new Error(validation.errors.join("; "));
 
-  const conceptIds = new Set<string>();
-  for (const entry of manifest.concepts) {
-    if (typeof entry.id !== "string" || entry.id.trim().length === 0) {
-      throw new Error("Manifest concept IDs must be non-empty strings");
+  const entries = manifest.concepts.map((entry) => {
+    const existing = getConcept(db, entry.id);
+    if (existing && existing.topic_id !== topicId) {
+      throw new Error(`Concept ID ${entry.id} already belongs to topic ${existing.topic_id}; concept IDs are global within a learner profile`);
     }
-    if (conceptIds.has(entry.id)) {
-      throw new Error(`Duplicate concept ID in manifest: ${entry.id}`);
-    }
-    conceptIds.add(entry.id);
-    if (typeof entry.title !== "string" || entry.title.trim().length === 0) {
-      throw new Error(`Manifest concept ${entry.id} title must be a non-empty string`);
-    }
-    if (!Number.isInteger(entry.difficulty) || entry.difficulty < 1 || entry.difficulty > 5) {
-      throw new Error(`Manifest concept ${entry.id} difficulty must be an integer from 1 to 5`);
-    }
-    if (entry.prerequisites !== undefined && !Array.isArray(entry.prerequisites)) {
-      throw new Error(`Manifest concept ${entry.id} prerequisites must be an array`);
-    }
-    for (const prerequisite of entry.prerequisites ?? []) {
-      if (!conceptIds.has(prerequisite) && !manifest.concepts.some((candidate) => candidate.id === prerequisite)) {
-        throw new Error(`Manifest concept ${entry.id} references unknown prerequisite ${prerequisite}`);
+    const topicDir = dirname(manifestPath);
+    const candidates = entry.file ? [entry.file] : [`${entry.id}.md`, `concepts/${entry.id}.md`];
+    const paths = candidates.map((candidate) => resolveContainedPath(topicDir, candidate));
+    return { entry, filePath: paths.find((candidate) => existsSync(candidate)) ?? null };
+  });
+
+  db.transaction(() => {
+    if (!getTopic(db, topicId)) createTopic(db, { id: topicId, name: manifest.topicName });
+    for (const { entry, filePath } of entries) {
+      // Recheck ownership while holding the write transaction: another process
+      // may have inserted this global ID after the read-only preflight.
+      const existing = getConcept(db, entry.id);
+      if (existing && existing.topic_id !== topicId) {
+        throw new Error(`Concept ID ${entry.id} already belongs to topic ${existing.topic_id}`);
       }
+      if (existing) continue;
+      createConcept(db, {
+        id: entry.id, topicId, title: entry.title, difficulty: entry.difficulty,
+        prerequisites: entry.prerequisites, tags: entry.tags,
+        source: entry.source, sourceId: entry.sourceId,
+      });
+      if (filePath) db.prepare("UPDATE concepts SET file_path = ? WHERE id = ?").run(filePath, entry.id);
     }
-  }
-
-  // Create topic if it doesn't exist
-  const existing = getTopic(db, topicId);
-  if (!existing) {
-    createTopic(db, {
-      id: topicId,
-      name: manifest.topicName,
-    });
-  }
-
-  // Create concepts that don't already exist
-  for (const entry of manifest.concepts) {
-    const existingConcept = getConcept(db, entry.id);
-    if (existingConcept) {
-      if (existingConcept.topic_id !== topicId) {
-        throw new Error(
-          `Concept ID ${entry.id} already belongs to topic ${existingConcept.topic_id}; concept IDs are global within a learner profile`,
-        );
-      }
-      continue;
-    }
-
-    createConcept(db, {
-      id: entry.id,
-      topicId,
-      title: entry.title,
-      difficulty: entry.difficulty,
-      prerequisites: entry.prerequisites,
-      tags: entry.tags,
-      source: entry.source,
-      sourceId: entry.sourceId,
-    });
-
-  }
+  })();
 }

@@ -1,6 +1,6 @@
 {
-  "topic": "topic-name",
-  "version": "1.0",
+  "topicId": "topic-name",
+  "topicName": "Topic Name",
   "description": "Description of the topic",
   "concepts": [
     {

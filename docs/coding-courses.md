@@ -64,6 +64,8 @@ One episode includes its necessary feedback/repair and may span several turns. I
 
 ## Practical work and valid evidence
 
+Optional worked examples and completion prompts for async/await and retry idempotency are available through `workspace.listScaffoldPacks()` and `workspace.getScaffoldMaterial(packId, stage)`. The latter includes private teacher notes, so do not forward its entire result. Use the bound kernel's `prepareScaffoldPresentation(...)` before learner disclosure and its `getSessionScaffoldPresentations(...)` for persisted replay. See the [scaffold pilot](scaffold-fading-pilot.md) for supported packs, assistance boundaries and the remaining implementation roadmap.
+
 Each pack has `LABS.md` and small original deliberately faulty starters. Exercises and scratchpads are optional: copy a selected file to a disposable learner workspace only after the learner adopts that practical work or under an applicable standing instruction. Otherwise continue conversationally. Freeze the actual capability, environment, criteria and permitted help before the learner answers. A cold prediction precedes decisive execution. The learner must own the target reasoning; agent-written code does not establish independent implementation.
 
 Node models do not prove browser/framework or PostgreSQL behavior. Run the environment needed by the frozen claim, or report the narrower evidence actually available. Keep regression checks of Learning OS separate from teaching labs. Never manufacture results or weaken evidence rules because setup failed.

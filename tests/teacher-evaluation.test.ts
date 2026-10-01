@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +10,7 @@ import { inspectTeacherScenario, prepareTeacherScenario, teacherScenarios } from
 import { codingCourseFile } from "../src/knowledge/courses.js";
 import { buildCalibratedPredictionChallenge, findCalibratedPredictionCase,
   loadCalibratedPredictionPack } from "../src/knowledge/challenge-calibration.js";
+import { runFile } from "./helpers/spawn.js";
 
 const dirs: string[] = [];
 const backendCourse = fileURLToPath(new URL("../knowledge/backend-systems", import.meta.url));
@@ -80,7 +80,7 @@ describe("teacher evaluation scenarios", () => {
       const responseText = "A:accepted; B:accepted; decisions:[true,true]; seats:-1. Both checked before either decremented.";
       kernel.submitAttempt(attemptId, { questionSeq, responseText });
       const source = codingCourseFile(backendCourse, "challenges/database-transactions-predict/baseline.mjs");
-      const output = execFileSync(process.execPath, [source], { encoding: "utf8", timeout: 3000 }).trim().split("\n");
+      const output = runFile(source);
       kernel.recordAssessment(attemptId, { evaluatorType: "agent", assessmentBasis: "deterministic_execution",
         verificationOutput: { outcome: "passed", basis: "Node ESM execution after response",
           summary: output.join(", "), details: { stdout: output } },
@@ -147,7 +147,7 @@ describe("teacher evaluation scenarios", () => {
         questionSeq: prepared.initialQuestionSeq!, responseText: response,
       });
       const source = codingCourseFile(backendCourse, "challenges/database-transactions-predict/baseline.mjs");
-      const output = execFileSync(process.execPath, [source], { encoding: "utf8", timeout: 3000 }).trim().split("\n");
+      const output = runFile(source);
       expect(output).toEqual(["A:accepted", "B:accepted", "decisions:[true,true]", "seats:-1"]);
       kernel.recordAssessment(prepared.attemptId, { evaluatorType: "agent",
         assessmentBasis: "deterministic_execution",
@@ -176,7 +176,7 @@ describe("teacher evaluation scenarios", () => {
         questionSeq: prepared.initialQuestionSeq!, responseText: response,
       });
       const source = codingCourseFile(backendCourse, "challenges/retries-idempotency-predict/new-key-baseline.mjs");
-      const output = execFileSync(process.execPath, [source], { encoding: "utf8", timeout: 3000 }).trim().split("\n");
+      const output = runFile(source);
       expect(output).toEqual(["retry:10", "total:10"]);
       kernel.recordAssessment(prepared.attemptId, { evaluatorType: "agent",
         assessmentBasis: "deterministic_execution",
@@ -205,7 +205,7 @@ describe("teacher evaluation scenarios", () => {
       const kernel = createTeacherKernel(db);
       kernel.submitAttempt(prepared.attemptId, { questionSeq: prepared.initialQuestionSeq!, responseText: response });
       const source = codingCourseFile(backendCourse, "challenges/database-transactions-predict/baseline.mjs");
-      const output = execFileSync(process.execPath, [source], { encoding: "utf8", timeout: 3000 }).trim().split("\n");
+      const output = runFile(source);
       kernel.recordAssessment(prepared.attemptId, { evaluatorType: "agent",
         assessmentBasis: "deterministic_execution",
         verificationOutput: { outcome: "passed", basis: "Node ESM execution after response",

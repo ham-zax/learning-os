@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +7,7 @@ import {
   listCalibratedPredictionPacks,
   loadCalibratedPredictionPack,
 } from "../src/knowledge/challenge-calibration.js";
+import { runFile } from "./helpers/spawn.js";
 
 const knowledgeRoot = fileURLToPath(new URL("../knowledge", import.meta.url));
 const packs = listCalibratedPredictionPacks(knowledgeRoot);
@@ -27,8 +27,7 @@ describe("discovered calibrated prediction packs", () => {
     expect(new Set(pack.cases.map((item) => item.surface)).size).toBe(pack.cases.length);
     for (const item of pack.cases) {
       const source = join(knowledgeRoot, location.course, location.directory, item.source);
-      const actual = execFileSync(process.execPath, [source], { encoding: "utf8", timeout: 3000 })
-        .trim().split("\n");
+      const actual = runFile(source);
       expect(actual, `${location.id}/${item.id}`).toEqual(item.expectedOutput);
       for (const wrong of item.wrongModels) {
         if (wrong.predictedOutput) expect(wrong.predictedOutput).not.toEqual(actual);

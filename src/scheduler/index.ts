@@ -139,7 +139,16 @@ export function rebuildObjectiveReviewCard(
   }
 
   const lastReview = reviews[reviews.length - 1];
-  const updatedAt = new Date().toISOString();
+  return persistReviewCard(db, objectiveId, lastReview, { cardJson: cardJson!, dueAt }, highestSeq);
+}
+
+function persistReviewCard(
+  db: Database.Database,
+  objectiveId: string,
+  review: ReviewEvent,
+  applied: { cardJson: Record<string, unknown>; dueAt: string },
+  sourceReviewSeq: number,
+): ReviewCard {
   db.prepare(
     `INSERT INTO review_cards (
        objective_id,
@@ -159,15 +168,43 @@ export function rebuildObjectiveReviewCard(
        updated_at = excluded.updated_at`,
   ).run(
     objectiveId,
-    dueAt,
-    JSON.stringify(cardJson),
-    lastReview.rating,
-    highestSeq,
-    lastReview.scheduler_version,
-    updatedAt,
+    applied.dueAt,
+    JSON.stringify(applied.cardJson),
+    review.rating,
+    sourceReviewSeq,
+    review.scheduler_version,
+    new Date().toISOString(),
   );
 
   return getObjectiveReviewCard(db, objectiveId)!;
+}
+
+/** Apply a chronological append once; stale or out-of-order cards are replayed. */
+export function advanceObjectiveReviewCard(
+  db: Database.Database,
+  review: ReviewEvent,
+): ReviewCard | undefined {
+  const card = getObjectiveReviewCard(db, review.objective_id);
+  const previous = db.prepare(`
+    SELECT MAX(review.seq) AS highest_seq, MAX(review.reviewed_at) AS latest_at
+    FROM review_events review
+    WHERE review.objective_id = ? AND review.seq <> ?
+      AND COALESCE((SELECT revision.action FROM evidence_revisions revision
+        WHERE revision.evidence_event_id = review.evidence_event_id
+        ORDER BY revision.seq DESC LIMIT 1), 'restore') <> 'invalidate'
+  `).get(review.objective_id, review.seq) as { highest_seq: number | null; latest_at: string | null };
+  const chronological = previous.latest_at === null || previous.latest_at <= review.reviewed_at;
+  const current = previous.highest_seq === null
+    ? card === undefined
+    : card?.source_review_seq === previous.highest_seq;
+  if (!chronological || !current || (card && review.seq <= card.source_review_seq)) {
+    return rebuildObjectiveReviewCard(db, review.objective_id);
+  }
+  const applied = applyReviewRating(card?.card_json ?? null, review.reviewed_at, review.rating, {
+    schedulerVersion: review.scheduler_version,
+    parameters: review.parameters_json,
+  });
+  return persistReviewCard(db, review.objective_id, review, applied, review.seq);
 }
 
 export function getDueObjectives(

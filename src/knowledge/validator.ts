@@ -122,6 +122,7 @@ export function validateManifest(manifest: Manifest): ValidationResult {
   for (const concept of manifest.concepts) {
     for (const prereq of concept.prerequisites) {
       // prereq -> concept edge (prereq must come before concept)
+      if (!idSet.has(prereq)) continue;
       adjacency.get(prereq)!.push(concept.id);
       inDegree.set(concept.id, (inDegree.get(concept.id) ?? 0) + 1);
     }
@@ -151,7 +152,7 @@ export function validateManifest(manifest: Manifest): ValidationResult {
 
   // 4. All file paths are non-empty
   for (const concept of manifest.concepts) {
-    if (!concept.file || concept.file.trim().length === 0) {
+    if (concept.file !== undefined && concept.file.trim().length === 0) {
       errors.push(`Concept "${concept.id}" has an empty file path.`);
     }
   }

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "title": "Trace stable operation identity after a lost reply",
+  "objective": {
+    "conceptId": "retries-idempotency-and-uncertain-outcomes",
+    "capabilityId": "predict",
+    "taskForm": "runtime_trace"
+  },
+  "scopeNote": "Deterministic sequential Node.js models with a retained in-memory map and lost replies. No overlap serialization, restart safety, durable storage, or distributed guarantee is claimed. Teaching stages are choices, not a required sequence.",
+  "stages": {
+    "worked_example": {
+      "material": "worked-example.md",
+      "teacherNotes": "Follow identity, retained result, then retry versus new intent. Optional principle answer: a quantity key would collapse separate legitimate bookings with equal quantities. A lost reply leaves the effect and stored confirmation intact in this model. Showing the worked trace is instruction, not clean retrieval evidence."
+    },
+    "completion": {
+      "material": "completion.md",
+      "teacherNotes": "Replace FILL_RETRY_KEY with dispatch-23. Output: retry-receipt:studio/parcel-1, new-order:studio/parcel-2, parcels-sent:2. The retry hits its recorded operation; dispatch-24 is a new intent despite the equal address. Require the identity reason. Use completion-solution.mjs to verify; keep this solution out of the learner prompt."
+    }
+  },
+  "checks": [
+    { "source": "worked-example.mjs", "expectedOutput": ["recovered:booking-2", "separate:booking-4", "slots-used:4"] },
+    { "source": "completion-solution.mjs", "expectedOutput": ["retry-receipt:studio/parcel-1", "new-order:studio/parcel-2", "parcels-sent:2"] }
+  ]
+}

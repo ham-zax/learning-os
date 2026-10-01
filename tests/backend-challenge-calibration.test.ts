@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -7,6 +6,7 @@ import { buildCalibratedPredictionChallenge, findCalibratedPredictionCase, loadC
 import type { CalibratedPredictionPackId } from "../src/knowledge/challenge-calibration.js";
 import { codingCourseFile } from "../src/knowledge/courses.js";
 import { createTeacherKernel } from "../src/teacher.js";
+import { runFile } from "./helpers/spawn.js";
 
 const knowledgeRoot = fileURLToPath(new URL("../knowledge", import.meta.url));
 const courseDirectory = fileURLToPath(new URL("../knowledge/backend-systems", import.meta.url));
@@ -61,8 +61,7 @@ describe("backend calibrated prediction examples", () => {
     expect(new Set(pack.cases.map((item) => item.surface)).size).toBe(3);
     for (const item of pack.cases) {
       const source = codingCourseFile(courseDirectory, `${config.directory}/${item.source}`);
-      const actual = execFileSync(process.execPath, [source], { encoding: "utf8", timeout: 3000 })
-        .trim().split("\n");
+      const actual = runFile(source);
       expect(actual).toEqual(item.expectedOutput);
       expect(item.criteria).toHaveLength(2);
       expect(item.criteria.every((criterion) => criterion.required)).toBe(true);

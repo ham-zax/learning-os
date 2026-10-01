@@ -15,6 +15,8 @@ export interface CompletionOptions {
   temperature?: number;
   maxTokens?: number;
   systemPrompt?: string;
+  /** Provider implementations must cancel in-flight work when this signal aborts. */
+  signal?: AbortSignal;
 }
 
 export interface LLMClient {

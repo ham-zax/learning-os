@@ -11,11 +11,14 @@ import {
   getTopic,
 } from "./db/database.js";
 import {
+  AttemptSchema,
+  EvidenceEventSchema,
+  ExposureEventSchema,
+  HintObservationSchema,
   RevisionNoteSchema,
   TeachingArtifactSchema,
 } from "./db/types.js";
 import type {
-  Attempt,
   EvidenceEvent,
   ExposureEvent,
   HintObservation,
@@ -23,17 +26,11 @@ import type {
   TeachingArtifact,
 } from "./db/types.js";
 import {
-  getAttemptsTargetingObjective,
   getChallenge,
-  getExposureEventsByObjective,
-  getHintObservationsForAttempt,
   getLearningObjective,
   getObjectiveProjection,
 } from "./kernel/foundation.js";
-import {
-  getEffectiveEvidenceEventsByObjective,
-  getWeaknessProjections,
-} from "./kernel/evidence.js";
+import { getWeaknessProjections } from "./kernel/evidence.js";
 
 export type RevisionNoteScope =
   | { kind: "profile" }
@@ -374,10 +371,14 @@ function loadTeachingArtifacts(
       .filter((id): id is string => id !== null),
   );
   const result = new Map<string, TeachingArtifact>();
-  const query = db.prepare(`SELECT * FROM teaching_artifacts WHERE id = ?`);
-  for (const id of ids) {
-    const row = query.get(id);
-    if (row !== undefined) result.set(id, TeachingArtifactSchema.parse(row));
+  if (ids.length > 0) {
+    const rows = db.prepare(`SELECT * FROM teaching_artifacts WHERE id IN (
+      SELECT value FROM json_each(?)
+    )`).all(JSON.stringify(ids));
+    for (const row of rows) {
+      const artifact = TeachingArtifactSchema.parse(row);
+      result.set(artifact.id, artifact);
+    }
   }
   return result;
 }
@@ -408,10 +409,6 @@ function exposureContext(
   };
 }
 
-function maxOrZero(values: readonly number[]): number {
-  return values.length === 0 ? 0 : Math.max(...values);
-}
-
 function currentRevisionHighWater(
   db: Database.Database,
   objectiveIds: readonly string[],
@@ -419,9 +416,8 @@ function currentRevisionHighWater(
   focusWindow: { openedAt: string; closedAt: string | null } | null,
 ): number {
   if (objectiveIds.length === 0) return 0;
-  const placeholders = objectiveIds.map(() => "?").join(", ");
-  const clauses = [`evidence.objective_id IN (${placeholders})`];
-  const params: Array<string | number> = [...objectiveIds];
+  const clauses = [`evidence.objective_id IN (SELECT value FROM json_each(?))`];
+  const params: Array<string | number> = [JSON.stringify(objectiveIds)];
   if (sessionId !== undefined) {
     clauses.push("evidence.session_id = ?");
     params.push(sessionId);
@@ -457,13 +453,91 @@ function sourceStateEqual(left: RevisionNoteSourceState, right: RevisionNoteSour
   );
 }
 
-function withinWindow(
-  timestamp: string,
-  focusWindow: { openedAt: string; closedAt: string | null } | null,
-): boolean {
-  if (focusWindow === null) return true;
-  if (timestamp < focusWindow.openedAt) return false;
-  return focusWindow.closedAt === null || timestamp <= focusWindow.closedAt;
+// Scope predicates are shared by the bounded detail queries and aggregate high-water
+// queries. Aggregates deliberately include omitted history: correcting an old event
+// or adding a hint to an old attempt must still invalidate a saved note.
+function historyScope(resolved: ResolvedRevisionNoteScope, objectiveIds: readonly string[]) {
+  const params: Array<string | number> = [JSON.stringify(objectiveIds)];
+  const scoped = (alias: string, timestamp: string) => {
+    const values = [...params];
+    const clauses: string[] = [];
+    if (resolved.scope.kind === "session") {
+      clauses.push(`${alias}.session_id = ?`);
+      values.push(resolved.scope.sessionId);
+    }
+    if (resolved.focusWindow !== null) {
+      clauses.push(`${timestamp} >= ?`);
+      values.push(resolved.focusWindow.openedAt);
+      if (resolved.focusWindow.closedAt !== null) {
+        clauses.push(`${timestamp} <= ?`);
+        values.push(resolved.focusWindow.closedAt);
+      }
+    }
+    return { suffix: clauses.length ? ` AND ${clauses.join(" AND ")}` : "", params: values };
+  };
+  const attempt = scoped("a", "COALESCE(a.submitted_at, a.started_at)");
+  const evidence = scoped("e", "e.performed_at");
+  const exposure = scoped("x", "x.occurred_at");
+  return {
+    attempts: {
+      where: `EXISTS (SELECT 1 FROM challenge_targets target
+        JOIN challenge_versions challenge ON challenge.challenge_id = target.challenge_id
+          AND challenge.version = target.version
+        WHERE target.challenge_id = a.challenge_id AND target.version = a.challenge_version
+          AND challenge.is_frozen = 1
+          AND target.objective_id IN (SELECT value FROM json_each(?)))${attempt.suffix}`,
+      params: attempt.params,
+    },
+    evidence: {
+      where: `e.objective_id IN (SELECT value FROM json_each(?))${evidence.suffix}
+        AND COALESCE((SELECT revision.action FROM evidence_revisions revision
+          WHERE revision.evidence_event_id = e.id ORDER BY revision.seq DESC LIMIT 1),
+          'restore') <> 'invalidate'`,
+      params: evidence.params,
+    },
+    exposures: {
+      where: `x.objective_id IN (SELECT value FROM json_each(?))${exposure.suffix}`,
+      params: exposure.params,
+    },
+  };
+}
+
+function revisionSourceState(
+  db: Database.Database,
+  resolved: ResolvedRevisionNoteScope,
+  objectiveIds: readonly string[],
+): { sourceState: RevisionNoteSourceState; attemptCount: number; missingHistoricalTeaching: boolean } {
+  const history = historyScope(resolved, objectiveIds);
+  const attempts = db.prepare(`SELECT COUNT(*) AS count, COALESCE(MAX(a.id), 0) AS max
+    FROM attempts a WHERE ${history.attempts.where}`).get(...history.attempts.params) as { count: number; max: number };
+  const evidence = db.prepare(`SELECT COALESCE(MAX(e.seq), 0) AS max FROM evidence_events e
+    WHERE ${history.evidence.where}`).get(...history.evidence.params) as { max: number };
+  const exposures = db.prepare(`SELECT COALESCE(MAX(x.seq), 0) AS max,
+    COALESCE(MAX(x.teaching_artifact_id IS NULL), 0) AS missing FROM exposure_events x
+    WHERE ${history.exposures.where}`).get(...history.exposures.params) as { max: number; missing: number };
+  const hints = db.prepare(`SELECT COALESCE(MAX(h.seq), 0) AS max FROM hint_observations h
+    JOIN attempts a ON a.id = h.attempt_id WHERE ${history.attempts.where}`)
+    .get(...history.attempts.params) as { max: number };
+  return {
+    attemptCount: attempts.count,
+    missingHistoricalTeaching: exposures.missing !== 0,
+    sourceState: {
+      maxAttemptId: attempts.max,
+      maxEvidenceSeq: evidence.max,
+      maxEvidenceRevisionSeq: currentRevisionHighWater(db, resolved.objectiveIds,
+        resolved.scope.kind === "session" ? resolved.scope.sessionId : undefined, resolved.focusWindow),
+      maxExposureSeq: exposures.max,
+      maxHintSeq: hints.max,
+      preparationUpdatedAt: resolved.preparationUpdatedAt,
+      focusEpisodeClosedAt: resolved.focusEpisodeClosedAt,
+    },
+  };
+}
+
+function historyObjectiveIds(db: Database.Database, objectiveIds: readonly string[]): string[] {
+  return (db.prepare(`SELECT objective_id FROM objective_projections
+    WHERE objective_id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(objectiveIds)) as Array<{ objective_id: string }>)
+    .map((row) => row.objective_id);
 }
 
 export function getRevisionNoteContext(
@@ -477,9 +551,6 @@ export function getRevisionNoteContext(
   const objectiveContexts: RevisionNoteObjectiveContext[] = [];
   const knowledgeRefs: RevisionNoteKnowledgeRef[] = [];
   const knowledgeByConcept = new Map<string, RevisionNoteKnowledgeRef>();
-  const attemptsById = new Map<number, Attempt>();
-  const evidenceById = new Map<string, EvidenceEvent>();
-  const exposuresBySeq = new Map<number, ExposureEvent>();
 
   for (const objectiveId of objectiveIds) {
     const objective = getLearningObjective(db, objectiveId);
@@ -515,56 +586,38 @@ export function getRevisionNoteContext(
       knowledgeByConcept.set(concept.id, ref);
       knowledgeRefs.push(ref);
     }
-
-    for (const attempt of getAttemptsTargetingObjective(db, objectiveId)) {
-      attemptsById.set(attempt.id, attempt);
-    }
-    for (const evidence of getEffectiveEvidenceEventsByObjective(db, objectiveId)) {
-      evidenceById.set(evidence.id, evidence);
-    }
-    for (const exposure of getExposureEventsByObjective(db, objectiveId)) {
-      exposuresBySeq.set(exposure.seq, exposure);
-    }
   }
 
-  const sessionScopeId = resolved.scope.kind === "session" ? resolved.scope.sessionId : null;
-  let allAttempts = [...attemptsById.values()];
-  if (sessionScopeId !== null) {
-    allAttempts = allAttempts.filter((attempt) => attempt.session_id === sessionScopeId);
-  }
-  if (resolved.focusWindow !== null) {
-    allAttempts = allAttempts.filter((attempt) =>
-      withinWindow(attempt.submitted_at ?? attempt.started_at, resolved.focusWindow),
-    );
-  }
-  allAttempts.sort((left, right) =>
-    right.started_at.localeCompare(left.started_at) || right.id - left.id,
-  );
-
-  const allEvidence = [...evidenceById.values()].filter(
-    (evidence) =>
-      (sessionScopeId === null || evidence.session_id === sessionScopeId) &&
-      withinWindow(evidence.performed_at, resolved.focusWindow),
-  );
-  const allExposures = [...exposuresBySeq.values()].filter(
-    (exposure) =>
-      (sessionScopeId === null || exposure.session_id === sessionScopeId) &&
-      withinWindow(exposure.occurred_at, resolved.focusWindow),
-  );
-  const artifacts = loadTeachingArtifacts(db, allExposures);
-
-  const selectedAttempts = allAttempts.slice(0, maxInteractions);
-  const selectedAttemptIds = new Set(selectedAttempts.map((attempt) => attempt.id));
+  const eligibleObjectiveIds = objectiveContexts.map((objective) => objective.objectiveId);
+  const history = historyScope(resolved, eligibleObjectiveIds);
+  const selectedAttempts = AttemptSchema.array().parse(db.prepare(`SELECT a.* FROM attempts a
+    WHERE ${history.attempts.where} ORDER BY a.started_at DESC, a.id DESC LIMIT ?`)
+    .all(...history.attempts.params, maxInteractions));
+  const selectedAttemptIds = selectedAttempts.map((attempt) => attempt.id);
+  const selectedIdsJson = JSON.stringify(selectedAttemptIds);
+  const selectedEvidenceEvents = EvidenceEventSchema.array().parse(db.prepare(`SELECT e.* FROM evidence_events e
+    WHERE ${history.evidence.where} AND e.attempt_id IN (SELECT value FROM json_each(?)) ORDER BY e.seq`)
+    .all(...history.evidence.params, selectedIdsJson));
+  const interactionExposures = ExposureEventSchema.array().parse(db.prepare(`SELECT x.* FROM exposure_events x
+    WHERE ${history.exposures.where} AND x.attempt_id IN (SELECT value FROM json_each(?)) ORDER BY x.seq`)
+    .all(...history.exposures.params, selectedIdsJson));
+  const standaloneExposureEvents = ExposureEventSchema.array().parse(db.prepare(`SELECT x.* FROM exposure_events x
+    WHERE ${history.exposures.where} AND (x.attempt_id IS NULL OR x.attempt_id NOT IN (SELECT value FROM json_each(?)))
+    ORDER BY x.occurred_at DESC, x.seq DESC LIMIT ?`)
+    .all(...history.exposures.params, selectedIdsJson, maxInteractions));
+  const selectedHints = HintObservationSchema.array().parse(db.prepare(`SELECT * FROM hint_observations
+    WHERE attempt_id IN (SELECT value FROM json_each(?)) ORDER BY seq`).all(selectedIdsJson));
+  const artifacts = loadTeachingArtifacts(db, [...interactionExposures, ...standaloneExposureEvents]);
   const interactions: RevisionNoteInteractionContext[] = selectedAttempts.map((attempt) => {
     const challenge =
       attempt.challenge_id !== null && attempt.challenge_version !== null
         ? getChallenge(db, attempt.challenge_id, attempt.challenge_version)
         : undefined;
-    const attemptEvidence = allEvidence
+    const attemptEvidence = selectedEvidenceEvents
       .filter((evidence) => evidence.attempt_id === attempt.id)
       .sort((left, right) => left.seq - right.seq);
-    const hints = getHintObservationsForAttempt(db, attempt.id);
-    const attemptExposures = allExposures
+    const hints = selectedHints.filter((hint) => hint.attempt_id === attempt.id);
+    const attemptExposures = interactionExposures
       .filter((exposure) => exposure.attempt_id === attempt.id)
       .sort((left, right) => left.seq - right.seq);
 
@@ -610,27 +663,8 @@ export function getRevisionNoteContext(
     };
   });
 
-  const standaloneExposures = allExposures
-    .filter((exposure) => exposure.attempt_id === null || !selectedAttemptIds.has(exposure.attempt_id))
-    .sort((left, right) => right.occurred_at.localeCompare(left.occurred_at) || right.seq - left.seq)
-    .slice(0, maxInteractions)
-    .map((event) => exposureContext(event, artifacts));
-
-  const allHints = allAttempts.flatMap((attempt) => getHintObservationsForAttempt(db, attempt.id));
-  const sourceState: RevisionNoteSourceState = {
-    maxAttemptId: maxOrZero(allAttempts.map((attempt) => attempt.id)),
-    maxEvidenceSeq: maxOrZero(allEvidence.map((evidence) => evidence.seq)),
-    maxEvidenceRevisionSeq: currentRevisionHighWater(
-      db,
-      objectiveIds,
-      sessionScopeId ?? undefined,
-      resolved.focusWindow,
-    ),
-    maxExposureSeq: maxOrZero(allExposures.map((exposure) => exposure.seq)),
-    maxHintSeq: maxOrZero(allHints.map((hint) => hint.seq)),
-    preparationUpdatedAt: resolved.preparationUpdatedAt,
-    focusEpisodeClosedAt: resolved.focusEpisodeClosedAt,
-  };
+  const standaloneExposures = standaloneExposureEvents.map((event) => exposureContext(event, artifacts));
+  const { sourceState, attemptCount, missingHistoricalTeaching } = revisionSourceState(db, resolved, eligibleObjectiveIds);
 
   const selectedEvidence = interactions.flatMap((interaction) => interaction.evidence);
   const selectedExposures = [
@@ -676,18 +710,15 @@ export function getRevisionNoteContext(
     knowledge: knowledgeRefs,
   };
 
-  const missingHistoricalTeaching = allExposures.some(
-    (exposure) => exposure.teaching_artifact_id === null,
-  );
   const limitations: string[] = [];
   if (missingHistoricalTeaching) {
     limitations.push(
       "Some historical exposure events do not contain recoverable learner-visible teaching material. Use their provenance plus learner/evidence history, but do not claim an exact prior explanation was recovered.",
     );
   }
-  if (allAttempts.length > selectedAttempts.length) {
+  if (attemptCount > selectedAttempts.length) {
     limitations.push(
-      `Context is bounded to the ${selectedAttempts.length} most recent relevant interactions out of ${allAttempts.length}.`,
+      `Context is bounded to the ${selectedAttempts.length} most recent relevant interactions out of ${attemptCount}.`,
     );
   }
 
@@ -776,14 +807,25 @@ function canonicalContextEqual(left: RevisionNoteContext, right: RevisionNoteCon
   return isDeepStrictEqual(left, right);
 }
 
-function rowToSnapshot(db: Database.Database, row: RevisionNote): RevisionNoteSnapshot {
+function rowToSnapshot(
+  db: Database.Database,
+  row: RevisionNote,
+  stateCache?: Map<string, RevisionNoteSourceState | null>,
+): RevisionNoteSnapshot {
   const scope = parseStoredScope(row.scope_kind, row.scope_json);
   const sourceState = parseSourceState(row.source_state_json);
   let stale = true;
   try {
-    const current = getRevisionNoteContext(db, { scope, maxInteractions: 1 }).sourceState;
-    stale = !sourceStateEqual(sourceState, current);
+    const key = JSON.stringify(scope);
+    let current = stateCache?.get(key);
+    if (current === undefined) {
+      const resolved = scopeObjectiveIds(db, scope);
+      current = revisionSourceState(db, resolved, historyObjectiveIds(db, resolved.objectiveIds)).sourceState;
+      stateCache?.set(key, current);
+    }
+    stale = current === null || !sourceStateEqual(sourceState, current);
   } catch {
+    stateCache?.set(JSON.stringify(scope), null);
     // A saved snapshot remains readable after its former goal/focus/scope is no longer active.
     stale = true;
   }
@@ -846,7 +888,8 @@ export function getRevisionNote(
 }
 
 export function listRevisionNotes(db: Database.Database): RevisionNoteSnapshot[] {
+  const stateCache = new Map<string, RevisionNoteSourceState | null>();
   return RevisionNoteSchema.array()
     .parse(db.prepare(`SELECT * FROM revision_notes ORDER BY generated_at DESC, id DESC`).all())
-    .map((row) => rowToSnapshot(db, row));
+    .map((row) => rowToSnapshot(db, row, stateCache));
 }

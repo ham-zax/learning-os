@@ -4,11 +4,18 @@ import {
   readFileSync,
   renameSync,
   rmSync,
-  statSync,
+  chmodSync,
+  copyFileSync,
+  closeSync,
+  fsyncSync,
+  mkdtempSync,
+  openSync,
   writeFileSync,
 } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import type Database from "better-sqlite3";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import Database from "better-sqlite3";
+import { createHash, randomUUID } from "node:crypto";
+import { CURRENT_SCHEMA_VERSION } from "../db/schema.js";
 import { createDatabase } from "../db/database.js";
 import type {
   CreateProfileInput,
@@ -24,10 +31,7 @@ export type {
 const REGISTRY_VERSION = 1;
 const PROFILE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_PROFILE_ID_LENGTH = 64;
-const REGISTRY_LOCK_RETRY_MS = 10;
 const REGISTRY_LOCK_TIMEOUT_MS = 5_000;
-const REGISTRY_LOCK_STALE_MS = 30_000;
-const REGISTRY_LOCK_WAIT = new Int32Array(new SharedArrayBuffer(4));
 
 interface RegistryProfile {
   id: string;
@@ -172,51 +176,52 @@ function loadRegistry(paths: ProfilePaths): ProfileRegistry {
   };
 }
 
+function syncFile(path: string): void {
+  const descriptor = openSync(path, "r");
+  try {
+    fsyncSync(descriptor);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
 function saveRegistry(paths: ProfilePaths, registry: ProfileRegistry): void {
   mkdirSync(paths.profilesDir, { recursive: true, mode: 0o700 });
-  const tempPath = `${paths.registryPath}.tmp-${process.pid}`;
-  writeFileSync(tempPath, `${JSON.stringify(registry, null, 2)}\n`, {
-    encoding: "utf8",
-    mode: 0o600,
-  });
-  renameSync(tempPath, paths.registryPath);
+  const tempPath = `${paths.registryPath}.tmp-${process.pid}-${randomUUID()}`;
+  try {
+    writeFileSync(tempPath, `${JSON.stringify(registry, null, 2)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+      flag: "wx",
+    });
+    syncFile(tempPath);
+    renameSync(tempPath, paths.registryPath);
+    syncFile(paths.profilesDir);
+  } finally {
+    rmSync(tempPath, { force: true });
+  }
 }
 
 function withRegistryLock<T>(paths: ProfilePaths, operation: () => T): T {
   mkdirSync(paths.profilesDir, { recursive: true, mode: 0o700 });
-  const lockPath = `${paths.registryPath}.lock`;
-  const deadline = Date.now() + REGISTRY_LOCK_TIMEOUT_MS;
-
-  while (true) {
-    try {
-      mkdirSync(lockPath, { mode: 0o700 });
-      break;
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "EEXIST") throw error;
-
-      try {
-        const stats = statSync(lockPath);
-        if (Date.now() - stats.mtimeMs > REGISTRY_LOCK_STALE_MS) {
-          rmSync(lockPath, { recursive: true, force: true });
-          continue;
-        }
-      } catch (statError) {
-        if ((statError as NodeJS.ErrnoException).code === "ENOENT") continue;
-        throw statError;
-      }
-
-      if (Date.now() >= deadline) {
-        throw new Error("Timed out waiting for learner profile registry lock.");
-      }
-      Atomics.wait(REGISTRY_LOCK_WAIT, 0, 0, REGISTRY_LOCK_RETRY_MS);
-    }
-  }
-
+  // SQLite owns the writer lock until commit/rollback or process termination.
+  // Never remove this coordination file: doing so splits live writers by inode.
+  const lockPath = `${paths.registryPath}.lock.db`;
+  const lock = new Database(lockPath, { timeout: REGISTRY_LOCK_TIMEOUT_MS });
   try {
-    return operation();
+    chmodSync(lockPath, 0o600);
+    lock.pragma(`busy_timeout = ${REGISTRY_LOCK_TIMEOUT_MS}`);
+    lock.exec("BEGIN IMMEDIATE");
+    try {
+      const result = operation();
+      lock.exec("COMMIT");
+      return result;
+    } catch (error) {
+      lock.exec("ROLLBACK");
+      throw error;
+    }
   } finally {
-    rmSync(lockPath, { recursive: true, force: true });
+    lock.close();
   }
 }
 
@@ -295,7 +300,11 @@ export function createProfile(
       saveRegistry(paths, registry);
       return toLearnerProfile(profile);
     } catch (error) {
-      rmSync(profileDir, { recursive: true, force: true });
+      // A directory fsync can fail after the registry rename has published it.
+      // Preserve a registered database rather than leave a dangling registry entry.
+      if (!loadRegistry(paths).profiles.some((profile) => profile.id === id)) {
+        rmSync(profileDir, { recursive: true, force: true });
+      }
       throw error;
     }
   });
@@ -333,7 +342,11 @@ export function discardCreatedProfile(
         profiles: registry.profiles.filter((candidate) => candidate.id !== profile.id),
       });
     } catch (error) {
-      renameSync(quarantine, profileDir);
+      if (loadRegistry(paths).profiles.some((candidate) => candidate.id === profile.id)) {
+        renameSync(quarantine, profileDir);
+      } else {
+        rmSync(quarantine, { recursive: true, force: true });
+      }
       throw error;
     }
     rmSync(quarantine, { recursive: true, force: true });
@@ -441,4 +454,165 @@ export function checkpointProfileDatabase(
   } finally {
     db.close();
   }
+}
+
+export interface ProfileBackupManifest {
+  version: 1;
+  createdAt: string;
+  schemaVersion: number;
+  profile: LearnerProfile;
+  database: { file: "tutor.db"; sha256: string };
+}
+
+export interface ProfileBackup {
+  snapshotDir: string;
+  manifest: ProfileBackupManifest;
+}
+
+function databaseChecksum(path: string): string {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function validateSnapshotDatabase(path: string): void {
+  const db = new Database(path, { readonly: true, fileMustExist: true });
+  try {
+    const version = db.pragma("user_version", { simple: true });
+    if (version !== CURRENT_SCHEMA_VERSION) {
+      throw new Error(`Unsupported snapshot schema v${String(version)}; expected v${CURRENT_SCHEMA_VERSION}.`);
+    }
+    const integrity = db.pragma("integrity_check") as IntegrityCheckResult[];
+    if (integrity.length !== 1 || integrity[0]?.integrity_check !== "ok") {
+      throw new Error("Snapshot database integrity check failed.");
+    }
+    if ((db.pragma("foreign_key_check") as unknown[]).length !== 0) {
+      throw new Error("Snapshot database foreign key check failed.");
+    }
+    // user_version alone does not establish that the complete current schema exists.
+    const schemaQuery = "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name";
+    const expected = createDatabase(":memory:");
+    try {
+      if (JSON.stringify(db.prepare(schemaQuery).all()) !== JSON.stringify(expected.prepare(schemaQuery).all())) {
+        throw new Error("Snapshot database does not match the current learner schema.");
+      }
+    } finally {
+      expected.close();
+    }
+  } finally {
+    db.close();
+  }
+}
+
+function readBackupManifest(snapshotDir: string): ProfileBackupManifest {
+  const raw = JSON.parse(readFileSync(join(snapshotDir, "manifest.json"), "utf8")) as Record<string, unknown>;
+  if (!raw || typeof raw !== "object" || raw.version !== 1 || raw.schemaVersion !== CURRENT_SCHEMA_VERSION) {
+    throw new Error("Unsupported profile backup manifest or schema version.");
+  }
+  const profile = parseRegistryProfile(raw.profile);
+  const database = raw.database as Record<string, unknown> | undefined;
+  if (!database || database.file !== "tutor.db" || typeof database.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(database.sha256)) {
+    throw new Error("Invalid profile backup database checksum.");
+  }
+  return {
+    version: 1,
+    createdAt: requireTimestamp(raw.createdAt, "Backup createdAt"),
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    profile,
+    database: { file: "tutor.db", sha256: database.sha256 },
+  };
+}
+
+/** Create a standalone, consistent SQLite snapshot, including committed WAL state. */
+export async function backupProfile(
+  snapshotDir: string,
+  profileId?: string,
+  options: ProfileStoreOptions = {},
+): Promise<ProfileBackup> {
+  const paths = profilePaths(options);
+  const profile = resolveProfile(profileId, options);
+  const destination = resolve(snapshotDir);
+  if (existsSync(destination)) throw new Error(`Backup destination already exists: ${destination}`);
+  mkdirSync(dirname(destination), { recursive: true, mode: 0o700 });
+  const temporary = mkdtempSync(join(dirname(destination), ".profile-backup-"));
+  chmodSync(temporary, 0o700);
+  try {
+    const source = new Database(databasePathForProfile(paths, profile), { readonly: true, fileMustExist: true });
+    try {
+      await source.backup(join(temporary, "tutor.db"));
+    } finally {
+      source.close();
+    }
+    const databasePath = join(temporary, "tutor.db");
+    chmodSync(databasePath, 0o600);
+    validateSnapshotDatabase(databasePath);
+    const manifest: ProfileBackupManifest = {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      profile,
+      database: { file: "tutor.db", sha256: databaseChecksum(databasePath) },
+    };
+    writeFileSync(join(temporary, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+    syncFile(databasePath);
+    syncFile(join(temporary, "manifest.json"));
+    syncFile(temporary);
+    if (existsSync(destination)) throw new Error(`Backup destination already exists: ${destination}`);
+    renameSync(temporary, destination);
+    syncFile(dirname(destination));
+    return { snapshotDir: destination, manifest };
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
+/** Restore into a newly registered, unselected profile; existing profiles are never replaced. */
+export function restoreProfile(
+  snapshotDir: string,
+  input: CreateProfileInput,
+  options: ProfileStoreOptions = {},
+): LearnerProfile {
+  const manifest = readBackupManifest(resolve(snapshotDir));
+  const displayName = input.displayName.trim();
+  if (!displayName) throw new Error("Profile display name must not be empty.");
+  const id = input.id === undefined ? deriveProfileId(displayName) : assertProfileId(input.id);
+  const paths = profilePaths(options);
+  return withRegistryLock(paths, () => {
+    const registry = loadRegistry(paths);
+    const destination = managedProfileDirectory(paths, id);
+    if (registry.profiles.some((profile) => profile.id === id) || existsSync(destination)) {
+      throw new Error(`Profile already exists or has an unregistered directory: ${id}`);
+    }
+    const temporary = mkdtempSync(join(paths.profilesDir, ".profile-restore-"));
+    chmodSync(temporary, 0o700);
+    let published = false;
+    try {
+      const databasePath = join(temporary, "tutor.db");
+      copyFileSync(join(resolve(snapshotDir), "tutor.db"), databasePath);
+      chmodSync(databasePath, 0o600);
+      if (databaseChecksum(databasePath) !== manifest.database.sha256) {
+        throw new Error("Profile backup database checksum mismatch.");
+      }
+      validateSnapshotDatabase(databasePath);
+      syncFile(databasePath);
+      syncFile(temporary);
+      const profile: LearnerProfile = {
+        id,
+        displayName,
+        description: input.description === undefined ? manifest.profile.description : input.description.trim() || null,
+        createdAt: new Date().toISOString(),
+      };
+      renameSync(temporary, destination);
+      published = true;
+      registry.profiles.push(profile);
+      registry.profiles.sort((left, right) => left.id.localeCompare(right.id));
+      saveRegistry(paths, registry);
+      return profile;
+    } catch (error) {
+      if (published && !loadRegistry(paths).profiles.some((profile) => profile.id === id)) {
+        rmSync(destination, { recursive: true, force: true });
+      }
+      throw error;
+    } finally {
+      rmSync(temporary, { recursive: true, force: true });
+    }
+  });
 }

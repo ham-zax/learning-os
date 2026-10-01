@@ -7,6 +7,7 @@ import type {
   IntakeArea,
   KnowledgeCatalog,
 } from "./types.js";
+import { assertSafeId, resolveContainedPath } from "../knowledge/safe-path.js";
 import { normalizeAreaKey } from "./types.js";
 
 type RawManifestConcept = {
@@ -41,21 +42,22 @@ function requiredString(value: unknown, label: string): string {
 
 function materialRefs(knowledgeRoot: string, topicDir: string, conceptId: string): string[] {
   const candidates = [
-    join(topicDir, `${conceptId}.md`),
-    join(topicDir, "concepts", `${conceptId}.md`),
+    resolveContainedPath(knowledgeRoot, relative(knowledgeRoot, join(topicDir, `${conceptId}.md`))),
+    resolveContainedPath(knowledgeRoot, relative(knowledgeRoot, join(topicDir, "concepts", `${conceptId}.md`))),
   ];
   const exact = candidates.filter((path) => existsSync(path));
   if (exact.length > 0) {
     return exact.map((path) => relative(knowledgeRoot, path)).sort();
   }
 
-  const topicIndex = join(topicDir, "INDEX.md");
+  const topicIndex = resolveContainedPath(knowledgeRoot, relative(knowledgeRoot, join(topicDir, "INDEX.md")));
   return existsSync(topicIndex) ? [relative(knowledgeRoot, topicIndex)] : [];
 }
 
 function readTopicManifest(knowledgeRoot: string, manifestPath: string): CatalogTopic {
   const raw = JSON.parse(readFileSync(manifestPath, "utf8")) as RawTopicManifest;
   const topicId = requiredString(raw.topicId, `${manifestPath}: topicId`);
+  assertSafeId(topicId, "Topic ID");
   const topicName = requiredString(raw.topicName, `${manifestPath}: topicName`);
   const description = typeof raw.description === "string" ? raw.description.trim() : "";
   if (!Array.isArray(raw.concepts)) {
@@ -67,6 +69,7 @@ function readTopicManifest(knowledgeRoot: string, manifestPath: string): Catalog
   const concepts = (raw.concepts as RawManifestConcept[])
     .map((entry, index): CatalogConcept => {
       const conceptId = requiredString(entry.id, `${manifestPath}: concepts[${index}].id`);
+      assertSafeId(conceptId, "Concept ID");
       if (seen.has(conceptId)) throw new Error(`${manifestPath}: duplicate concept id ${conceptId}`);
       seen.add(conceptId);
       const difficulty = Number(entry.difficulty);
@@ -115,7 +118,7 @@ export function loadKnowledgeCatalog(knowledgeRoot: string): KnowledgeCatalog {
   }>;
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     if (!entry.isDirectory()) continue;
-    const manifestPath = join(knowledgeRoot, entry.name, "manifest.json");
+    const manifestPath = resolveContainedPath(knowledgeRoot, `${entry.name}/manifest.json`);
     if (!existsSync(manifestPath)) continue;
     const topic = readTopicManifest(knowledgeRoot, manifestPath);
     const previousTopic = seenTopicIds.get(topic.topicId);

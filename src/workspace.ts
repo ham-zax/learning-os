@@ -29,6 +29,8 @@ import type {
   DurablePreparationContext,
 } from "./onboarding/apply.js";
 import { createTeacherKernel } from "./teacher.js";
+import { getScaffoldMaterial, listScaffoldPacks } from "./knowledge/scaffolds.js";
+import type { ScaffoldStage } from "./knowledge/scaffolds.js";
 import { getConcept, updateConcept } from "./db/database.js";
 import {
   codingCourseFile,
@@ -72,6 +74,8 @@ export function createTeacherWorkspace(options: TeacherWorkspaceOptions = {}) {
   const course = (id: string) => findCodingCourse(courses(), id);
 
   return {
+    listScaffoldPacks: () => listScaffoldPacks(knowledgeRoot),
+    getScaffoldMaterial: (packId: string, stage: ScaffoldStage) => getScaffoldMaterial(knowledgeRoot, packId, stage),
     listCourses: courses,
     getCourse: course,
     listCourseResources: (courseId: string) =>
@@ -135,7 +139,7 @@ export function createTeacherWorkspace(options: TeacherWorkspaceOptions = {}) {
     openProfile: (profileId?: string) => {
       const profile = resolveProfile(profileId, profileStore);
       const db = openProfileDatabase(profile.id, profileStore);
-      const kernel = createTeacherKernel(db);
+      const kernel = createTeacherKernel(db, { knowledgeRoot });
       return {
         profile,
         kernel,

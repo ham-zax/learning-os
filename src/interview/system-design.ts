@@ -18,6 +18,9 @@ import type {
 import type { LLMClient } from "../llm/client.js";
 import type { Novelty } from "../db/types.js";
 import { getAttempt, getChallenge, openAttempt, submitAttempt } from "../kernel/foundation.js";
+import { getLearningObjective, getChallengeAttemptDisposition } from "../kernel/foundation.js";
+import { getSession } from "../db/database.js";
+import { answerAttemptSubquestion, getAttemptSubquestions, openAttemptSubquestion } from "../kernel/questions.js";
 import { recordAssessment } from "../kernel/evidence.js";
 import { createInterviewSessionForConcept, prepareInterviewChallenge } from "./evidence.js";
 
@@ -38,7 +41,8 @@ export interface DesignDrillConfig {
 }
 
 export interface DesignDrillState {
-  problem: SystemDesignProblem;
+  // Difficulty is catalog metadata, absent from a frozen durable challenge.
+  problem: Omit<SystemDesignProblem, "difficulty"> & { difficulty?: number };
   sessionId: number;
   objectiveId: string;
   challengeId: string;
@@ -92,7 +96,7 @@ function pickRandom<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)];
 }
 
-function extractFirstComponent(problem: SystemDesignProblem): string {
+function extractFirstComponent(problem: Pick<SystemDesignProblem, "rubric" | "tags" | "title">): string {
   // Try to pull a component name from the first rubric deepDive entry.
   const first = problem.rubric.deepDive[0];
   if (first) {
@@ -136,6 +140,10 @@ export function startDesignDrill(
   db: Database,
   config?: DesignDrillConfig,
 ): DesignDrillState {
+  return db.transaction(() => startDesignDrillInTransaction(db, config))();
+}
+
+function startDesignDrillInTransaction(db: Database, config?: DesignDrillConfig): DesignDrillState {
   let problem: SystemDesignProblem | undefined;
 
   if (config?.problemId) {
@@ -209,22 +217,78 @@ export function startDesignDrill(
   const sessionId = createInterviewSessionForConcept(db, problem.conceptId);
   const opened = openAttempt(db, prepared.challenge.id, prepared.challenge.version, sessionId);
 
+  const state = resumeDesignDrill(db, opened.attempt.id);
+  openDesignPhaseQuestion(db, state);
+  // These catalog fields are for the initial display only; resumed pedagogical
+  // content comes from the frozen challenge, even if the catalog later changes.
+  return { ...state, problem: { ...state.problem, difficulty: problem.difficulty, tags: problem.tags } };
+}
+
+/** Reconstruct a drill from its frozen challenge and durable phase answers, never the mutable problem bank. */
+export function resumeDesignDrill(db: Database, attemptId: number): DesignDrillState {
+  const attempt = getAttempt(db, attemptId);
+  if (!attempt || attempt.session_id === null || attempt.challenge_id === null || attempt.challenge_version === null) {
+    throw new Error(`Design attempt not found: ${attemptId}`);
+  }
+  if (getChallengeAttemptDisposition(db, attemptId)) throw new Error(`Design attempt has a terminal disposition: ${attemptId}`);
+  const challenge = getChallenge(db, attempt.challenge_id, attempt.challenge_version);
+  if (!challenge || challenge.deliveryContext !== "interview" || challenge.taskForm !== "design"
+    || challenge.targets.length !== 1 || !challenge.sourceProblemId
+    || challenge.verification.required || challenge.verification.basis !== "frozen_rubric") {
+    throw new Error(`Attempt is not a frozen design drill: ${attemptId}`);
+  }
+  const session = getSession(db, attempt.session_id);
+  if (!session || (attempt.submitted_at === null && (session.phase !== "awaiting_response"
+    || session.pending_action !== "collect_response" || session.active_attempt_id !== attemptId
+    || session.active_challenge_id !== challenge.id || session.active_challenge_version !== challenge.version))) {
+    throw new Error(`Design attempt is not the active response target: ${attemptId}`);
+  }
+  const objective = getLearningObjective(db, challenge.targets[0].objectiveId);
+  if (!objective || objective.capability_id !== "design") {
+    throw new Error(`Design objective not found: ${challenge.targets[0].objectiveId}`);
+  }
+  const separator = challenge.publicPrompt.indexOf("\n\n");
+  const title = separator < 0 ? challenge.publicPrompt : challenge.publicPrompt.slice(0, separator);
+  const description = separator < 0 ? "" : challenge.publicPrompt.slice(separator + 2);
+  const rubric = { requirements: [] as string[], highLevel: [] as string[], deepDive: [] as string[], tradeOffs: [] as string[] };
+  for (const phase of PHASE_ORDER) {
+    if (phase !== "complete") rubric[phase] = challenge.rubric.criteria
+      .filter((criterion) => criterion.id.startsWith(`${phase}-`)).map((criterion) => criterion.description);
+  }
+  const phases = { requirements: "", highLevel: "", deepDive: "", tradeOffs: "" };
+  const questions = getAttemptSubquestions(db, attemptId)
+    .filter((question) => question.purpose === "response" && question.superseded_at === null);
+  if (questions.length > PHASE_ORDER.length) throw new Error(`Unexpected design phase history: ${attemptId}`);
+  let answered = 0;
+  for (let index = 0; index < questions.length; index++) {
+    const question = questions[index];
+    if (question.response_text === null) {
+      if (index !== questions.length - 1) throw new Error(`Nonsequential design phase history: ${attemptId}`);
+      break;
+    }
+    const phase = PHASE_ORDER[index];
+    if (phase !== "complete") phases[phase] = question.response_text;
+    answered++;
+  }
+  if (attempt.submitted_at !== null && answered !== PHASE_ORDER.length) {
+    throw new Error(`Submitted design attempt has incomplete phase history: ${attemptId}`);
+  }
   return {
-    problem,
-    sessionId,
-    objectiveId: prepared.objectiveId,
-    challengeId: prepared.challenge.id,
-    challengeVersion: prepared.challenge.version,
-    attemptId: opened.attempt.id,
-    currentPhase: "requirements",
-    phases: {
-      requirements: "",
-      highLevel: "",
-      deepDive: "",
-      tradeOffs: "",
-    },
-    startedAt: Date.now(),
+    problem: { id: challenge.sourceProblemId, title, description, tags: [], rubric, conceptId: objective.concept_id },
+    sessionId: attempt.session_id, objectiveId: objective.id,
+    challengeId: challenge.id, challengeVersion: challenge.version, attemptId,
+    currentPhase: PHASE_ORDER[answered] ?? "complete", phases,
+    startedAt: Date.parse(attempt.started_at ?? attempt.created_at),
   };
+}
+
+function openDesignPhaseQuestion(db: Database, state: DesignDrillState): void {
+  const prompt = getPhasePrompt(state);
+  openAttemptSubquestion(db, state.attemptId, {
+    questionChunking: "default",
+    contextText: `${state.problem.title}\n\n${state.problem.description}`,
+    promptText: prompt.prompt + (prompt.followUp ? `\n\n${prompt.followUp}` : ""),
+  });
 }
 
 /**
@@ -283,28 +347,24 @@ export function submitPhase(
   state: DesignDrillState,
   response: string,
 ): DesignDrillState {
-  if (state.currentPhase === "complete") {
-    throw new Error("Drill is already complete. Call assessDesignDrill to get results.");
-  }
-
-  const updated: DesignDrillState = {
-    ...state,
-    phases: { ...state.phases },
-  };
-
-  // Store the response.
-  updated.phases[state.currentPhase] = response;
-
-  // Advance to the next phase.
-  const idx = PHASE_ORDER.indexOf(state.currentPhase);
-  if (idx < PHASE_ORDER.length - 1) {
-    updated.currentPhase = PHASE_ORDER[idx + 1];
-  } else {
-    updated.currentPhase = "complete";
-    submitAttempt(db, state.attemptId, { responseText: combinedResponse(updated) });
-  }
-
-  return updated;
+  return db.transaction(() => {
+    const durable = resumeDesignDrill(db, state.attemptId);
+    if (durable.currentPhase === "complete") {
+      throw new Error("Drill is already complete. Call assessDesignDrill to get results.");
+    }
+    if (state.currentPhase !== durable.currentPhase) throw new Error("Design drill state is stale; resume before answering");
+    const pending = getAttemptSubquestions(db, state.attemptId)
+      .find((question) => question.purpose === "response" && question.superseded_at === null && question.response_text === null);
+    if (!pending) throw new Error(`Design phase question is missing: ${state.attemptId}`);
+    answerAttemptSubquestion(db, state.attemptId, { seq: pending.seq, responseText: response });
+    const updated = resumeDesignDrill(db, state.attemptId);
+    if (updated.currentPhase === "complete") {
+      submitAttempt(db, state.attemptId, { responseText: combinedResponse(updated) });
+    } else {
+      openDesignPhaseQuestion(db, updated);
+    }
+    return updated;
+  })();
 }
 
 export function assessDesignAttempt(
@@ -381,6 +441,7 @@ export async function assessDesignDrill(
   db: Database,
   state: DesignDrillState,
 ): Promise<DesignDrillResult> {
+  state = resumeDesignDrill(db, state.attemptId);
   if (state.currentPhase !== "complete") {
     throw new Error(
       `Cannot assess — drill is still in the "${state.currentPhase}" phase. Submit all phases first.`,

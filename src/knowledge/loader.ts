@@ -113,7 +113,11 @@ function splitFrontmatter(raw: string): [string, string] {
  * Missing sections default to empty strings / arrays as appropriate.
  */
 export function loadConcept(filePath: string): ConceptFile {
-  const raw = fs.readFileSync(filePath, 'utf-8');
+  return parseConcept(fs.readFileSync(filePath, 'utf-8'), filePath);
+}
+
+/** Parse serialized material before it is committed to disk. */
+export function parseConcept(raw: string, filePath: string): ConceptFile {
   const [yamlStr, body] = splitFrontmatter(raw);
 
   // Frontmatter is optional — topic packs keep concept metadata in the topic's

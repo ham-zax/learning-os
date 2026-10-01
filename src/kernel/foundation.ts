@@ -639,6 +639,9 @@ export function openAttempt(
     const session = SessionSchema.parse(
       db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId),
     );
+    if (session.phase === "complete") {
+      throw new Error(`Session ${sessionId} is complete`);
+    }
     if (authoringContract) {
       if (session.topic_id !== authoringContract.goalId) {
         throw new Error(
@@ -663,6 +666,16 @@ export function openAttempt(
       throw new Error(
         `Session ${sessionId} is conversation-only. Practical work requires the learner to explicitly change that choice before opening this attempt`,
       );
+    }
+
+    const pending = db.prepare(
+      `SELECT a.id FROM attempts a
+       LEFT JOIN challenge_attempt_dispositions d ON d.attempt_id = a.id
+       WHERE a.session_id = ? AND a.submitted_at IS NULL AND d.attempt_id IS NULL
+       LIMIT 1`,
+    ).get(sessionId) as { id: number } | undefined;
+    if (pending) {
+      throw new Error(`Session ${sessionId} already has an unsubmitted attempt: ${pending.id}`);
     }
 
     const now = new Date().toISOString();
@@ -713,6 +726,21 @@ export function submitAttempt(
     const attempt = getAttemptOrThrow(db, attemptId);
     if (attempt.submitted_at !== null) {
       throw new Error(`Attempt is already submitted: ${attemptId}`);
+    }
+    if (getChallengeAttemptDisposition(db, attemptId)) {
+      throw new Error(`Attempt has a terminal disposition: ${attemptId}`);
+    }
+    if (attempt.session_id === null || attempt.challenge_id === null || attempt.challenge_version === null) {
+      throw new Error(`Attempt is not attached to an active session challenge: ${attemptId}`);
+    }
+    const session = SessionSchema.parse(
+      db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(attempt.session_id),
+    );
+    if (session.phase !== "awaiting_response" || session.pending_action !== "collect_response"
+      || session.active_attempt_id !== attemptId
+      || session.active_challenge_id !== attempt.challenge_id
+      || session.active_challenge_version !== attempt.challenge_version) {
+      throw new Error(`Attempt is not the active response target: ${attemptId}`);
     }
     const activeTimeSeconds = validateActiveTimeSeconds(input.activeTimeSeconds);
     if (input.questionSeq !== undefined) {

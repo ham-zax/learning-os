@@ -28,6 +28,7 @@ import type {
 } from "../db/types.js";
 import {
   appendReviewEventForEvidence,
+  advanceObjectiveReviewCard,
   rebuildObjectiveReviewCard,
 } from "../scheduler/index.js";
 import {
@@ -736,44 +737,6 @@ function maxReadiness(
   return readinessRank(left) >= readinessRank(right) ? left : right;
 }
 
-function computeReadiness(
-  events: EvidenceEvent[],
-  blockingMisconceptionCount: number,
-): ObjectiveProjection["readiness"] {
-  const gradable = events.filter((event) => event.result !== "ungradable");
-  if (gradable.length === 0) return "unknown";
-
-  const hasUsefulSuccess = gradable.some(
-    (event) =>
-      (event.result === "correct" || event.result === "partially_correct") &&
-      ((event.hint_level >= 1 && event.hint_level <= 4) ||
-        (event.hint_level === 0 && event.retrieval_valid)),
-  );
-  if (!hasUsefulSuccess) return "exposed";
-
-  const qualifyingUnaided = gradable.filter(
-    (event) => event.hint_level === 0 && event.retrieval_valid,
-  );
-  let readiness: ObjectiveProjection["readiness"] = "guided";
-  if (qualifyingUnaided.length >= 2) {
-    const [previous, latest] = qualifyingUnaided.slice(-2);
-    const distinctFrozenSurface =
-      previous.task_id !== latest.task_id || previous.task_version !== latest.task_version;
-    if (
-      previous.result === "correct" &&
-      latest.result === "correct" &&
-      distinctFrozenSurface
-    ) {
-      readiness = "independent";
-    }
-  }
-
-  if (blockingMisconceptionCount > 0 && readiness === "independent") {
-    return "guided";
-  }
-  return readiness;
-}
-
 function computeTransferState(events: EvidenceEvent[]): ObjectiveProjection["transfer_state"] {
   const qualifying = events.filter(
     (event) =>
@@ -811,11 +774,10 @@ function computeDurabilityState(
 }
 
 function computeProjection(
-  db: Database.Database,
   objectiveId: string,
+  events: EvidenceEvent[],
+  observations: EffectiveObservation[],
 ): ObjectiveProjection {
-  const events = getEffectiveEvidenceEventsByObjective(db, objectiveId);
-  const observations = getEffectiveMisconceptionObservations(db, objectiveId);
   const observationsByEvidence = new Map<string, EffectiveObservation[]>();
   for (const observation of observations) {
     const list = observationsByEvidence.get(observation.observation.evidence_event_id) ?? [];
@@ -824,26 +786,46 @@ function computeProjection(
   }
 
   const activeBlocking = new Map<string, boolean>();
+  let blockingMisconceptionCount = 0;
   let historicalHighest: ObjectiveProjection["readiness"] = "unknown";
-  const prefix: EvidenceEvent[] = [];
+  let hasGradable = false;
+  let hasUsefulSuccess = false;
+  const latestUnaided: EvidenceEvent[] = [];
   let currentReadiness: ObjectiveProjection["readiness"] = "unknown";
 
   for (const event of events) {
-    prefix.push(event);
-    for (const observation of observationsByEvidence.get(event.id) ?? []) {
-      if (observation.isBlocking) {
-        activeBlocking.set(
-          observation.observation.misconception_id,
-          observation.observation.disposition === "observed",
-        );
+    if (event.result !== "ungradable") {
+      hasGradable = true;
+      if ((event.result === "correct" || event.result === "partially_correct") &&
+          ((event.hint_level >= 1 && event.hint_level <= 4) ||
+           (event.hint_level === 0 && event.retrieval_valid))) {
+        hasUsefulSuccess = true;
+      }
+      if (event.hint_level === 0 && event.retrieval_valid) {
+        latestUnaided.push(event);
+        if (latestUnaided.length > 2) latestUnaided.shift();
       }
     }
-    const blockingCount = [...activeBlocking.values()].filter(Boolean).length;
-    currentReadiness = computeReadiness(prefix, blockingCount);
+    for (const observation of observationsByEvidence.get(event.id) ?? []) {
+      if (observation.isBlocking) {
+        const id = observation.observation.misconception_id;
+        const wasActive = activeBlocking.get(id) ?? false;
+        const isActive = observation.observation.disposition === "observed";
+        blockingMisconceptionCount += Number(isActive) - Number(wasActive);
+        activeBlocking.set(id, isActive);
+      }
+    }
+    currentReadiness = !hasGradable ? "unknown" : !hasUsefulSuccess ? "exposed" : "guided";
+    if (hasUsefulSuccess && latestUnaided.length === 2 && blockingMisconceptionCount === 0) {
+      const [previous, latest] = latestUnaided;
+      if (previous.result === "correct" && latest.result === "correct" &&
+          (previous.task_id !== latest.task_id || previous.task_version !== latest.task_version)) {
+        currentReadiness = "independent";
+      }
+    }
     historicalHighest = maxReadiness(historicalHighest, currentReadiness);
   }
 
-  const blockingMisconceptionCount = [...activeBlocking.values()].filter(Boolean).length;
   const gradable = events.filter((event) => event.result !== "ungradable");
   const latestGradable = gradable.at(-1);
   const rebuiltAt = new Date().toISOString();
@@ -906,9 +888,9 @@ function compareEvidenceOrder(left: EvidenceEvent, right: EvidenceEvent): number
 function rebuildWeaknessesInternal(
   db: Database.Database,
   objectiveId: string,
+  events: EvidenceEvent[],
+  observations: EffectiveObservation[],
 ): WeaknessProjection[] {
-  const events = getEffectiveEvidenceEventsByObjective(db, objectiveId);
-  const observations = getEffectiveMisconceptionObservations(db, objectiveId);
   const rebuiltAt = new Date().toISOString();
   const rows: Array<{
     key: string;
@@ -1002,9 +984,11 @@ function rebuildObjectiveStateInternal(
   db: Database.Database,
   objectiveId: string,
 ): { projection: ObjectiveProjection; weaknesses: WeaknessProjection[] } {
-  const projection = computeProjection(db, objectiveId);
+  const events = getEffectiveEvidenceEventsByObjective(db, objectiveId);
+  const observations = getEffectiveMisconceptionObservations(db, objectiveId);
+  const projection = computeProjection(objectiveId, events, observations);
   persistProjection(db, projection);
-  const weaknesses = rebuildWeaknessesInternal(db, objectiveId);
+  const weaknesses = rebuildWeaknessesInternal(db, objectiveId, events, observations);
   return { projection, weaknesses };
 }
 
@@ -1096,7 +1080,7 @@ export function recordAssessment(
     for (const evidence of evidenceEvents) {
       const reviewEvent = appendReviewEventForEvidence(db, evidence);
       if (reviewEvent) {
-        rebuildObjectiveReviewCard(db, evidence.objective_id);
+        advanceObjectiveReviewCard(db, reviewEvent);
       }
     }
 

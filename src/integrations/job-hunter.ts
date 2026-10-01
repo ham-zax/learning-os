@@ -150,9 +150,7 @@ function rowToLearningResource(row: RawLearningResourceRow): LearningResource {
  */
 export function openJobHunterDb(dbPath?: string): Database.Database {
   const resolved = resolve(dbPath ?? "data/job_hunter.db");
-  const db = new Database(resolved, { readonly: true });
-  db.pragma("journal_mode = WAL");
-  return db;
+  return new Database(resolved, { readonly: true });
 }
 
 /**

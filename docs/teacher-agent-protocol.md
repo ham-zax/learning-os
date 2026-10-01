@@ -278,6 +278,8 @@ When specialized guidance is needed, load one primary playbook for the current e
 
 Failure handling is stable protocol, not returned state: slips get brief correction; coherent causal/model errors get minimum repair plus one reconstruction; ambiguous impasse gets one cheap blocker check before reteaching; interview/mock remains assessment-first and defers answer-bearing coaching until debrief. Scaffold withdrawal, authentic surfaces, targeted weakness authoring, and repair depth are likewise derived from existing intent/evidence state. Use the frozen challenge's hint ladder and the existing hint/exposure lifecycle rather than a second pedagogy-owned hint system.
 
+For async/await or retry-identity prediction, optional curated materials are discoverable through `listScaffoldPacks()` and `getScaffoldMaterial(packId, stage)`. The latter is a teacher preparation surface with private answer notes. Before showing unedited material, call `prepareScaffoldPresentation(sessionId, {packId, stage})`; show only its returned `markdown`. Causal repair in feedback uses `requireReconstruction: true` and the existing saved reconstruction question. On resume, `getSessionScaffoldPresentations(sessionId)` replays the exact recorded material without creating a new exposure. These completion prompts are guided instruction on distinct code: never replace the frozen assessment or grade them against its key. Follow the [scaffold pilot contract](scaffold-fading-pilot.md) only when this instruction is needed; it is not a mandatory lesson sequence.
+
 ### Adapt feedback to the actual answer
 
 Use the resume result's `feedback` or call `getSessionFeedback(sessionId)` after

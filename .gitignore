@@ -29,3 +29,10 @@ data/**/*.db-wal
 data/**/*.db-journal
 data/profiles/registry.json.lock/
 data/profiles/registry.json.tmp-*
+data/profiles/registry.json.lock.db
+data/profiles/registry.json.lock.db-*
+# Profile snapshots contain private learner state; publish only canonical managed state.
+backups/
+data/backups/
+data/profiles/.profile-restore-*/
+.profile-backup-*/

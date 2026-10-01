@@ -20,7 +20,7 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { Command } from "commander";
 import chalk from "chalk";
@@ -28,6 +28,8 @@ import chalk from "chalk";
 import type { createDatabase } from "./db/database.js";
 import {
   checkpointProfileDatabase,
+  backupProfile,
+  restoreProfile,
   createProfile,
   getActiveProfile,
   getProfile,
@@ -62,6 +64,7 @@ import type { LLMClient } from "./llm/client.js";
 import { startCodingDrill, submitCodingSolution, formatCodingResult } from "./interview/coding.js";
 import {
   startDesignDrill,
+  resumeDesignDrill,
   submitPhase,
   getPhasePrompt,
   assessDesignDrill,
@@ -97,6 +100,8 @@ import type { ConceptMap, ConceptProposal, ConceptFile } from "./knowledge/types
 import { DeliveryContext, GoalImportance, GoalTargetReadiness } from "./db/types.js";
 import { runOfflineOnboarding } from "./onboarding/cli.js";
 import { getStudyContinuation } from "./study/continuation.js";
+import { assertSafeId, resolveContainedPath } from "./knowledge/safe-path.js";
+import { inspectProfileHealth } from "./diagnostics.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -226,10 +231,15 @@ function resolveConceptFile(
   knowledgeDir: string,
   topicId: string,
   conceptId: string,
+  storedPath?: string | null,
 ): string | null {
+  assertSafeId(topicId, "Topic ID");
+  assertSafeId(conceptId, "Concept ID");
   const candidates = [
-    resolve(knowledgeDir, topicId, "concepts", `${conceptId}.md`),
-    resolve(knowledgeDir, topicId, `${conceptId}.md`),
+    ...(storedPath ? [resolveContainedPath(knowledgeDir,
+      isAbsolute(storedPath) ? relative(knowledgeDir, storedPath) : storedPath)] : []),
+    resolveContainedPath(knowledgeDir, `${topicId}/concepts/${conceptId}.md`),
+    resolveContainedPath(knowledgeDir, `${topicId}/${conceptId}.md`),
   ];
   return candidates.find((p) => existsSync(p)) ?? null;
 }
@@ -239,12 +249,14 @@ function tryLoadConceptFile(
   knowledgeDir: string,
   topicId: string,
   conceptId: string,
+  storedPath?: string | null,
 ): ConceptFile | null {
-  const filePath = resolveConceptFile(knowledgeDir, topicId, conceptId);
+  const filePath = resolveConceptFile(knowledgeDir, topicId, conceptId, storedPath);
   if (!filePath) return null;
   try {
     return loadConcept(filePath);
   } catch {
+    warn(`Concept material for ${conceptId} is invalid; using metadata only.`);
     return null;
   }
 }
@@ -419,7 +431,7 @@ async function runSession(
     console.log(chalk.bold.underline(`\nConcept: ${concept.title}`));
     console.log(chalk.dim(`  Difficulty: ${concept.difficulty}/5`));
 
-    const file = tryLoadConceptFile(knowledgeDir, topicId, concept.id);
+    const file = tryLoadConceptFile(knowledgeDir, topicId, concept.id, concept.file_path);
     if (!file) missingFiles++;
 
     let surfaceId: string;
@@ -690,9 +702,12 @@ async function runDesignDrill(
   db: ReturnType<typeof createDatabase>,
   conceptId: string,
   difficulty?: number,
+  resumeAttemptId?: number,
 ): Promise<void> {
   try {
-    const state = startDesignDrill(db, { conceptId, difficulty });
+    const state = resumeAttemptId === undefined
+      ? startDesignDrill(db, { conceptId, difficulty })
+      : resumeDesignDrill(db, resumeAttemptId);
     const rl = createPrompt();
 
     header(`System Design: ${state.problem.title}`);
@@ -760,6 +775,52 @@ program
   .option("--profile <id>", "Use a learner profile for this command");
 
 const profileCommand = program.command("profile").description("Manage learner profiles");
+
+profileCommand
+  .command("doctor")
+  .description("Read-only database integrity and runtime diagnostics")
+  .argument("[id]", "Profile ID (defaults to selected profile)")
+  .action((id?: string) => {
+    try {
+      const health = inspectProfileHealth(id ?? cliProfileOverride(), profileStoreOptions());
+      console.log(JSON.stringify(health, null, 2));
+      if (!health.healthy) process.exitCode = 1;
+    } catch (err) {
+      error(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+    }
+  });
+
+profileCommand
+  .command("backup")
+  .description("Create a consistent, private learner-state snapshot")
+  .argument("<destination>", "New snapshot directory; never overwrites an existing destination")
+  .argument("[id]", "Profile ID (defaults to selected profile)")
+  .action(async (destination: string, id?: string) => {
+    try {
+      const snapshot = await backupProfile(destination, id ?? cliProfileOverride(), profileStoreOptions());
+      success(`Backed up profile ${snapshot.manifest.profile.id} to ${snapshot.snapshotDir}.`);
+    } catch (err) {
+      error(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+    }
+  });
+
+profileCommand
+  .command("restore")
+  .description("Validate and restore a snapshot into a new, unselected profile")
+  .argument("<snapshot>", "Snapshot directory")
+  .requiredOption("--id <id>", "New profile ID")
+  .requiredOption("--name <name>", "Display name for the restored profile")
+  .action((snapshot: string, opts: { id: string; name: string }) => {
+    try {
+      const profile = restoreProfile(snapshot, { id: opts.id, displayName: opts.name }, profileStoreOptions());
+      success(`Restored profile ${profile.id}. Select it explicitly with profile use ${profile.id}.`);
+    } catch (err) {
+      error(err instanceof Error ? err.message : String(err));
+      process.exitCode = 1;
+    }
+  });
 
 profileCommand
   .command("create")
@@ -1149,15 +1210,24 @@ program
   .argument("<concept-id>", "Concept ID to interview")
   .option("-t, --type <type>", "Interview type: coding or system-design", "coding")
   .option("-d, --difficulty <n>", "Difficulty level (1-5)")
-  .action(async (conceptId: string, opts: { type: string; difficulty?: string }) => {
+  .option("--resume-attempt <id>", "Resume a durable system-design attempt")
+  .action(async (conceptId: string, opts: { type: string; difficulty?: string; resumeAttempt?: string }) => {
     const db = openCliDatabase();
 
     try {
-      const difficulty = opts.difficulty ? parseInt(opts.difficulty, 10) : undefined;
+      const difficulty = opts.difficulty === undefined ? undefined : Number(opts.difficulty);
+      if (difficulty !== undefined && (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 5)) {
+        throw new Error("Difficulty must be an integer from 1 to 5.");
+      }
+      const resumeAttemptId = opts.resumeAttempt === undefined ? undefined : Number(opts.resumeAttempt);
+      if (resumeAttemptId !== undefined && (!Number.isSafeInteger(resumeAttemptId) || resumeAttemptId <= 0)) {
+        throw new Error("Resume attempt must be a positive integer.");
+      }
 
       if (opts.type === "system-design") {
-        await runDesignDrill(db, conceptId, difficulty);
+        await runDesignDrill(db, conceptId, difficulty, resumeAttemptId);
       } else {
+        if (opts.type !== "coding" || resumeAttemptId !== undefined) throw new Error("Use coding or system-design; resume-attempt requires system-design.");
         await runCodingDrill(db, conceptId, difficulty);
       }
     } catch (err) {

@@ -6,8 +6,12 @@
  * reviewed and materialized into knowledge files.
  */
 
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, open, unlink } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import yaml from "yaml";
+import { assertSafeId, resolveContainedPath } from "../knowledge/safe-path.js";
+import { parseConcept } from "../knowledge/loader.js";
+import { ConceptMapSchema } from "../knowledge/types.js";
 import Database from "better-sqlite3";
 
 import {
@@ -23,17 +27,20 @@ import {
 } from "../integrations/ai-feeds.js";
 
 import type { ConceptMap, ConceptProposal } from "../knowledge/types.js";
-import { validateConcept, type ValidationResult } from "../knowledge/validator.js";
+import { validateConcept, validateManifest, type ValidationResult } from "../knowledge/validator.js";
 
 import {
   createConcept,
   getTopic,
+  getConcept,
+  getConceptsByTopic,
   upsertGap,
   upsertSignal,
 } from "../db/database.js";
 
 import { enrichConcepts, type EnrichedConcept } from "./enricher.js";
 import type { LLMClient } from "../llm/client.js";
+import { fetchPublicText } from "./safe-fetch.js";
 
 // ─── Exported Types ──────────────────────────────────────────────────────────
 
@@ -252,14 +259,7 @@ export async function ingestFromSource(
       }
       // Fetch the URL content and parse it similarly to manual material
       try {
-        const response = await fetch(url);
-        if (!response.ok) {
-          validationErrors.push(
-            `Failed to fetch URL: ${response.status} ${response.statusText}`,
-          );
-          break;
-        }
-        const text = await response.text();
+        const text = await fetchPublicText(url);
         // Strip HTML tags for a rough text extraction
         const plainText = text
           .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
@@ -306,7 +306,7 @@ export async function ingestFromSource(
 /**
  * Generate markdown concept files from an approved concept map.
  *
- * Creates files in `knowledgeDir/concepts/`, validates each generated file,
+ * Creates files in `knowledgeDir/<topicId>/concepts/`, validates each generated file,
  * registers concepts in the database, and returns the list of created file
  * paths.
  *
@@ -321,14 +321,28 @@ export async function generateConceptFiles(
   knowledgeDir: string,
   llmClient?: LLMClient | null,
 ): Promise<string[]> {
+  assertSafeId(topicId, "Topic ID");
+  conceptMap = ConceptMapSchema.parse(conceptMap);
   // Ensure the topic exists
   const topic = getTopic(db, topicId);
   if (!topic) {
     throw new Error(`Topic "${topicId}" does not exist.`);
   }
 
-  const conceptsDir = join(knowledgeDir, "concepts");
-  await mkdir(conceptsDir, { recursive: true });
+  const conceptsDir = resolveContainedPath(knowledgeDir, `${topicId}/concepts`);
+  const validation = validateManifest({
+    topicId, topicName: topic.name, description: conceptMap.description,
+    concepts: [...getConceptsByTopic(db, topicId).map((concept) => ({
+      id: concept.id, title: concept.title, difficulty: concept.difficulty,
+      prerequisites: concept.prerequisites, tags: concept.tags,
+    })), ...conceptMap.concepts.map((proposal) => ({ ...proposal, tags: [] }))],
+  });
+  if (!validation.valid) throw new Error(validation.errors.join("; "));
+  for (const proposal of conceptMap.concepts) {
+    if (getConcept(db, proposal.id)) throw new Error(`Concept already exists: ${proposal.id}`);
+    const target = resolveContainedPath(knowledgeDir, `${topicId}/concepts/${proposal.id}.md`);
+    if (existsSync(target)) throw new Error(`Concept file already exists: ${target}`);
+  }
 
   // Enrich concepts with LLM if client is available
   let enrichmentMap: Map<string, EnrichedConcept> | null = null;
@@ -342,10 +356,11 @@ export async function generateConceptFiles(
 
   const createdFiles: string[] = [];
   const allErrors: string[] = [];
+  const staged: Array<{ filePath: string; content: string; proposal: ConceptProposal; tags: string[] }> = [];
 
   for (const proposal of conceptMap.concepts) {
     const fileName = `${proposal.id}.md`;
-    const filePath = join(conceptsDir, fileName);
+    const filePath = resolveContainedPath(knowledgeDir, `${topicId}/concepts/${fileName}`);
 
     // Get enriched content or use static fallback
     const enriched = enrichmentMap?.get(proposal.id);
@@ -360,12 +375,13 @@ export async function generateConceptFiles(
     // Build the markdown content
     const content = [
       "---",
-      `id: "${proposal.id}"`,
-      `title: "${proposal.title}"`,
-      `difficulty: ${proposal.difficulty}`,
-      `prerequisites: [${proposal.prerequisites.map((p) => `"${p}"`).join(", ")}]`,
-      `tags: [${tags.map((t) => `"${t}"`).join(", ")}]`,
+      yaml.stringify({ id: proposal.id, title: proposal.title, difficulty: proposal.difficulty,
+        prerequisites: proposal.prerequisites, tags }).trimEnd(),
       "---",
+      "",
+      enriched?.provenance?.source === "llm"
+        ? "> AI-generated draft: verify accuracy before using as authoritative learning material."
+        : "> Template draft: substantive educational content still needs authoring.",
       "",
       `## Summary`,
       "",
@@ -391,21 +407,7 @@ export async function generateConceptFiles(
     ].filter(Boolean).join("\n");
 
     // Validate the generated content
-    const conceptFile = {
-      frontmatter: {
-        id: proposal.id,
-        title: proposal.title,
-        difficulty: proposal.difficulty,
-        prerequisites: proposal.prerequisites,
-        tags,
-      },
-      summary,
-      keyPoints,
-      deepDive,
-      practiceQuestions,
-      misconceptions,
-      sections: {},
-    };
+    const conceptFile = parseConcept(content, filePath);
 
     const validation: ValidationResult = validateConcept(conceptFile);
     if (!validation.valid) {
@@ -415,27 +417,35 @@ export async function generateConceptFiles(
       continue;
     }
 
-    // Write the file
-    await writeFile(filePath, content, "utf-8");
-    createdFiles.push(filePath);
-
-    // Register in the database
-    createConcept(db, {
-      id: proposal.id,
-      topicId,
-      title: proposal.title,
-      difficulty: proposal.difficulty,
-      prerequisites: proposal.prerequisites,
-      tags,
-      source: proposal.source,
-      sourceId: proposal.id,
-    });
+    staged.push({ filePath, content, proposal, tags });
   }
 
   if (allErrors.length > 0) {
     throw new Error(
       `Some concepts failed validation:\n${allErrors.join("\n")}`,
     );
+  }
+
+  try {
+    await mkdir(conceptsDir, { recursive: true });
+    for (const item of staged) {
+      resolveContainedPath(knowledgeDir, `${topicId}/concepts/${item.proposal.id}.md`);
+      const handle = await open(item.filePath, "wx");
+      createdFiles.push(item.filePath);
+      try { await handle.writeFile(item.content, "utf8"); } finally { await handle.close(); }
+    }
+    db.transaction(() => {
+      for (const { proposal, tags, filePath } of staged) {
+        createConcept(db, {
+          id: proposal.id, topicId, title: proposal.title, difficulty: proposal.difficulty,
+          prerequisites: proposal.prerequisites, tags, source: proposal.source, sourceId: proposal.id,
+        });
+        db.prepare("UPDATE concepts SET file_path = ? WHERE id = ?").run(filePath, proposal.id);
+      }
+    })();
+  } catch (error) {
+    await Promise.all(createdFiles.map((filePath) => unlink(filePath)));
+    throw error;
   }
 
   return createdFiles;

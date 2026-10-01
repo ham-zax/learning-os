@@ -1,14 +1,19 @@
 import { z } from 'zod';
+import { assertSafeId } from './safe-path.js';
+
+const SafeIdSchema = z.string().superRefine((value, context) => {
+  try { assertSafeId(value); } catch { context.addIssue({ code: z.ZodIssueCode.custom, message: 'ID must be a safe path component' }); }
+});
 
 // ---------------------------------------------------------------------------
 // ConceptFrontmatter — markdown frontmatter for a single concept file
 // ---------------------------------------------------------------------------
 
 export const ConceptFrontmatterSchema = z.object({
-  id: z.string(),
-  title: z.string(),
+  id: SafeIdSchema,
+  title: z.string().trim().min(1),
   difficulty: z.number().int().min(1).max(5),
-  prerequisites: z.array(z.string()).default([]),
+  prerequisites: z.array(SafeIdSchema).default([]),
   tags: z.array(z.string()).default([]),
 });
 
@@ -41,10 +46,12 @@ export type ConceptFile = z.infer<typeof ConceptFileSchema>;
 // ---------------------------------------------------------------------------
 
 export const ManifestEntrySchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  file: z.string(), // path relative to concepts/
-  prerequisites: z.array(z.string()).default([]),
+  id: SafeIdSchema,
+  title: z.string().trim().min(1),
+  file: z.string().min(1).refine((value) => !value.startsWith('/') && !value.includes('\\') && !value.includes('\0') && !value.split('/').includes('..'), 'File must be a contained relative path').optional(), // optional path relative to the topic directory
+  source: z.string().optional(),
+  sourceId: z.string().optional(),
+  prerequisites: z.array(SafeIdSchema).default([]),
   difficulty: z.number().int().min(1).max(5),
   tags: z.array(z.string()).default([]),
 });
@@ -56,9 +63,9 @@ export type ManifestEntry = z.infer<typeof ManifestEntrySchema>;
 // ---------------------------------------------------------------------------
 
 export const ManifestSchema = z.object({
-  topic: z.string(),
-  version: z.string(),
-  description: z.string(),
+  topicId: SafeIdSchema,
+  topicName: z.string().trim().min(1),
+  description: z.string().default(''),
   concepts: z.array(ManifestEntrySchema),
 });
 
@@ -69,9 +76,9 @@ export type Manifest = z.infer<typeof ManifestSchema>;
 // ---------------------------------------------------------------------------
 
 export const ConceptProposalSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  prerequisites: z.array(z.string()).default([]),
+  id: SafeIdSchema,
+  title: z.string().trim().min(1),
+  prerequisites: z.array(SafeIdSchema).default([]),
   difficulty: z.number().int().min(1).max(5),
   estimatedMinutes: z.number().int().positive(),
   source: z.enum(['manual', 'job-hunter', 'ai-feeds', 'generated']),

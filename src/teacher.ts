@@ -1,4 +1,9 @@
 import type Database from "better-sqlite3";
+import { resolve } from "node:path";
+import { getScaffoldMaterial, listScaffoldPacks } from "./knowledge/scaffolds.js";
+import type { ScaffoldStage } from "./knowledge/scaffolds.js";
+import { getSessionScaffoldPresentations, prepareScaffoldPresentation } from "./kernel/scaffolds.js";
+import type { ScaffoldPresentationInput } from "./kernel/scaffolds.js";
 import {
   clearGoalStudyFocus,
   createSession,
@@ -99,8 +104,14 @@ import type {
  * depends on provider conversation IDs, transcripts, or tool state. A fresh
  * compatible teacher can continue from getStudyContinuation().
  */
-export function createTeacherKernel(db: Database.Database) {
+export function createTeacherKernel(db: Database.Database, options: { knowledgeRoot?: string } = {}) {
+  const knowledgeRoot = resolve(options.knowledgeRoot ?? "knowledge");
   return {
+    listScaffoldPacks: () => listScaffoldPacks(knowledgeRoot),
+    getScaffoldMaterial: (packId: string, stage: ScaffoldStage) => getScaffoldMaterial(knowledgeRoot, packId, stage),
+    prepareScaffoldPresentation: (sessionId: number, input: ScaffoldPresentationInput) =>
+      prepareScaffoldPresentation(db, knowledgeRoot, sessionId, input),
+    getSessionScaffoldPresentations: (sessionId: number) => getSessionScaffoldPresentations(db, sessionId),
     getStudyContinuation: (input: StudyContinuationInput) =>
       getStudyContinuation(db, input),
     getSessionQuestionPresentation: (sessionId: number) => getSessionQuestionPresentation(db, sessionId),

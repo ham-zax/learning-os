@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -16,6 +15,7 @@ import {
   CONCEPT_ID,
   OBJECTIVE_ID,
 } from "./helpers/kernel-fixture.js";
+import { runSync } from "./helpers/spawn.js";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const tsxBin = join(repoRoot, "node_modules", ".bin", "tsx");
@@ -44,7 +44,7 @@ describe("continue CLI", () => {
   });
 
   function runContinue(...args: string[]) {
-    return spawnSync(tsxBin, [cliPath, "continue", GOAL_ID, ...args], {
+    return runSync(tsxBin, [cliPath, "continue", GOAL_ID, ...args], {
       cwd: root,
       encoding: "utf8",
     });

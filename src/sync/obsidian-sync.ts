@@ -7,7 +7,8 @@
 
 import type Database from "better-sqlite3";
 import { writeFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import yaml from "yaml";
+import { assertSafeId, resolveContainedPath } from "../knowledge/safe-path.js";
 import { getConceptsByTopic, getTopic } from "../db/database.js";
 import type { Concept, DurabilityState, Readiness, TransferState } from "../db/types.js";
 import { listRevisionNotes } from "../revision-notes.js";
@@ -51,6 +52,8 @@ export interface ObsidianObjectiveState {
 export async function syncToObsidian(options: ObsidianSyncOptions): Promise<SyncResult> {
   const { db, topicId, vaultPath, subfolder = "tutor" } = options;
 
+  assertSafeId(topicId, "Topic ID");
+  const outputDir = resolveContainedPath(vaultPath, `${subfolder}/${topicId}`);
   const topic = getTopic(db, topicId);
   if (!topic) {
     throw new Error(`Topic "${topicId}" not found.`);
@@ -58,10 +61,13 @@ export async function syncToObsidian(options: ObsidianSyncOptions): Promise<Sync
 
   const concepts = getConceptsByTopic(db, topicId);
   if (concepts.length === 0) {
-    return { synced: 0, revisionNotesSynced: 0, outputPath: join(vaultPath, subfolder, topicId) };
+    return { synced: 0, revisionNotesSynced: 0, outputPath: outputDir };
   }
 
-  const outputDir = join(vaultPath, subfolder, topicId);
+  for (const concept of concepts) {
+    assertSafeId(concept.id, "Concept ID");
+    resolveContainedPath(vaultPath, `${subfolder}/${topicId}/${concept.id}.md`);
+  }
   await mkdir(outputDir, { recursive: true });
 
   const objectiveState = loadObjectiveStateByConcept(db, topicId);
@@ -69,7 +75,7 @@ export async function syncToObsidian(options: ObsidianSyncOptions): Promise<Sync
   // Write each concept as a note
   for (const concept of concepts) {
     const content = buildObsidianNote(concept, topicId, objectiveState.get(concept.id) ?? []);
-    const filePath = join(outputDir, `${concept.id}.md`);
+    const filePath = resolveContainedPath(vaultPath, `${subfolder}/${topicId}/${concept.id}.md`);
     await writeFile(filePath, content, "utf-8");
   }
 
@@ -79,11 +85,12 @@ export async function syncToObsidian(options: ObsidianSyncOptions): Promise<Sync
     note.sourceRefs.conceptIds.some((conceptId) => conceptIds.has(conceptId)),
   );
   if (revisionNotes.length > 0) {
-    const revisionDir = join(outputDir, "_revision-notes");
+    const revisionDir = resolveContainedPath(vaultPath, `${subfolder}/${topicId}/_revision-notes`);
     await mkdir(revisionDir, { recursive: true });
     for (const note of revisionNotes) {
+      assertSafeId(note.id, "Revision note ID");
       await writeFile(
-        join(revisionDir, `${note.id}.md`),
+        resolveContainedPath(vaultPath, `${subfolder}/${topicId}/_revision-notes/${note.id}.md`),
         buildRevisionNoteExport(note),
         "utf-8",
       );
@@ -92,7 +99,7 @@ export async function syncToObsidian(options: ObsidianSyncOptions): Promise<Sync
 
   // Write a summary/index note
   const summaryContent = buildSummaryNote(topic.name, topicId, concepts, objectiveState);
-  await writeFile(join(outputDir, "_index.md"), summaryContent, "utf-8");
+  await writeFile(resolveContainedPath(vaultPath, `${subfolder}/${topicId}/_index.md`), summaryContent, "utf-8");
 
   return {
     synced: concepts.length,
@@ -163,11 +170,8 @@ function loadObjectiveStateByConcept(
 function buildRevisionNoteExport(note: RevisionNoteSnapshot): string {
   return [
     "---",
-    `revision_note_id: "${note.id}"`,
-    `title: ${JSON.stringify(note.title)}`,
-    `generated_at: "${note.generatedAt}"`,
-    `stale: ${note.stale ? "true" : "false"}`,
-    `scope_kind: "${note.scope.kind}"`,
+    yaml.stringify({ revision_note_id: note.id, title: note.title, generated_at: note.generatedAt,
+      stale: note.stale, scope_kind: note.scope.kind }).trimEnd(),
     "---",
     "",
     note.markdown.trim(),
@@ -199,12 +203,8 @@ function buildObsidianNote(
 
   const lines = [
     "---",
-    `id: "${concept.id}"`,
-    `title: "${concept.title}"`,
-    `difficulty: ${concept.difficulty}`,
-    `objective_count: ${objectiveState.length}`,
-    `tags:`,
-    ...[...new Set(tags)].map((tag) => `  - ${tag}`),
+    yaml.stringify({ id: concept.id, title: concept.title, difficulty: concept.difficulty,
+      objective_count: objectiveState.length, tags: [...new Set(tags)] }).trimEnd(),
     "---",
     "",
     `# ${concept.title}`,
@@ -259,13 +259,8 @@ function buildSummaryNote(
 
   const lines = [
     "---",
-    `topic: "${topicName}"`,
-    `topic_id: "${topicId}"`,
-    `total_concepts: ${concepts.length}`,
-    `total_objectives: ${totalObjectives}`,
-    `tags:`,
-    `  - tutor`,
-    `  - ${topicId}`,
+    yaml.stringify({ topic: topicName, topic_id: topicId, total_concepts: concepts.length,
+      total_objectives: totalObjectives, tags: ["tutor", topicId] }).trimEnd(),
     "---",
     "",
     `# ${topicName} — Progress`,

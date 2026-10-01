@@ -1,0 +1,5 @@
+# Curated public curriculum is distributable; personal source documents are not.
+coding-interview/behavioral-prep.md
+**/*.db
+**/*.sqlite
+**/.env*

@@ -68,4 +68,4 @@ npm run tutor -- onboard
 npm run tutor -- today <goal-id>
 ```
 
-Keep learner data, resumes/JDs, provider transcripts, and secrets out of Git.
+Follow AGENTS.md for learner-state privacy: canonical managed registry.json and tutor.db files are versioned; checkpoint changed profiles before staging. Keep raw resumes/JDs, provider transcripts, configuration, and secrets out of Git. Repository access grants access to versioned learner evidence.

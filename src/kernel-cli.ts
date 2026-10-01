@@ -21,6 +21,7 @@ import {
 } from "./knowledge/challenge-calibration.js";
 import { openProfileDatabase } from "./profile/index.js";
 import { createTeacherKernel } from "./teacher.js";
+import { OperationError, serializeOperationError } from "./errors.js";
 
 const knowledgeRoot = fileURLToPath(new URL("../knowledge", import.meta.url));
 const dataDir = fileURLToPath(new URL("../data", import.meta.url));
@@ -36,7 +37,7 @@ function parseArgs(argv: string[]) {
     const arg = argv[index]!;
     if (arg === "--profile" || arg === "--db") {
       const value = argv[++index];
-      if (!value || value.startsWith("--")) throw new Error(`${arg} needs a value`);
+      if (!value || value.startsWith("--")) throw new OperationError("INVALID_ARGUMENT", `${arg} needs a value`);
       if (arg === "--profile") profileId = value;
       else dbPath = value;
     } else rest.push(arg);
@@ -63,7 +64,7 @@ function main(): void {
 
   const db = dbPath ? createDatabase(dbPath) : openProfileDatabase(profileId, { dataDir });
   try {
-    const kernel = createTeacherKernel(db);
+    const kernel = createTeacherKernel(db, { knowledgeRoot });
     const methods: Record<string, Handler> = {
       ...(kernel as unknown as Record<string, Handler>),
       ...extraMethods(kernel),
@@ -73,12 +74,12 @@ function main(): void {
       return;
     }
     const handler = methods[method];
-    if (typeof handler !== "function") throw new Error(`Unknown kernel method: ${method}`);
+    if (!Object.hasOwn(methods, method) || typeof handler !== "function") throw new OperationError("UNKNOWN_METHOD", "Unknown kernel method.");
     const args = jsonArgs.map((arg, index) => {
       try {
         return JSON.parse(arg) as unknown;
       } catch {
-        throw new Error(`Argument ${index + 1} is not valid JSON: ${arg}`);
+        throw new OperationError("INVALID_JSON", `Argument ${index + 1} is not valid JSON.`);
       }
     });
     console.log(JSON.stringify(handler(...args) ?? null));
@@ -90,6 +91,6 @@ function main(): void {
 try {
   main();
 } catch (error) {
-  console.error(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+  console.error(JSON.stringify(serializeOperationError(error, "kernel")));
   process.exit(1);
 }

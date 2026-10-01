@@ -7,6 +7,6 @@ export default defineConfig({
     include: ['tests/**/*.test.{ts,tsx}'],
     pool: 'threads',
     testTimeout: 10000,
-    poolOptions: { threads: { maxThreads: 4 } },
+    maxWorkers: 4,
   },
 })

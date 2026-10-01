@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "title": "Trace an async call and its continuation",
+  "objective": {
+    "conceptId": "js-async-await",
+    "capabilityId": "predict",
+    "taskForm": "runtime_trace"
+  },
+  "scopeNote": "Node.js ESM examples of synchronous call prefixes and await continuations. These teaching surfaces are separate from the calibrated assessment cases; stages are optional teaching choices, not a mandatory sequence.",
+  "stages": {
+    "worked_example": {
+      "material": "worked-example.md",
+      "teacherNotes": "Explain each labeled subgoal. Optional principle answer: Promise.resolve(0) still suspends at await, so printer:released stays after desk:free. Showing this example is instruction, not clean retrieval evidence."
+    },
+    "completion": {
+      "material": "completion.md",
+      "teacherNotes": "Solution: stamp:cyan, receipt:promise=true, counter:open, result:sealed. The call runs its prefix immediately and returns a promise when stamp suspends. Top-level synchronous logs run before the final await receives sealed. Ask for the boundary reason, not only the trace. Use completion-solution.mjs to verify; keep this answer key out of the learner prompt."
+    }
+  },
+  "checks": [
+    { "source": "worked-example.mjs", "expectedOutput": ["label:parcel", "desk:free", "printer:released"] },
+    { "source": "completion-solution.mjs", "expectedOutput": ["stamp:cyan", "receipt:promise=true", "counter:open", "result:sealed"] }
+  ]
+}

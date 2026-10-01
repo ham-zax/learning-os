@@ -1056,6 +1056,8 @@ Prepare the exact learner-visible material first, then call this immediately bef
 
 Old exposure rows may have no teaching artifact. Treat them as proof that an exposure occurred, not proof of the exact wording/content that was shown.
 
+The optional curated prediction scaffold adapter exposes `listScaffoldPacks()`, teacher-only preparation via `getScaffoldMaterial(packId, stage)`, and `prepareScaffoldPresentation(sessionId, {packId, stage, requireReconstruction?})`. Presentation validates the active frozen target, records the exact material through this exposure boundary, and then returns learner-safe Markdown. It introduces no evidence, schema or scheduling authority. `getSessionScaffoldPresentations(sessionId)` replays the active attempt's persisted scaffold artifacts independently of current curriculum files. Completion material is instruction on a separate surface, not a substitute frozen assessment. See [scaffold pilot contract](scaffold-fading-pilot.md).
+
 ### 6. Submit learner work
 
 ```text

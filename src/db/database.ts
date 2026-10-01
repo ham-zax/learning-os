@@ -741,6 +741,12 @@ export function createSession(
   db: Database.Database,
   input: { topicId: string; mode: DeliveryContext; practicalWork?: PracticalWorkPreference },
 ): Session {
+  // Validate shell/agent inputs before any durable write, including untyped callers.
+  SessionSchema.pick({ topic_id: true, mode: true, practical_work: true }).parse({
+    topic_id: input.topicId,
+    mode: input.mode,
+    practical_work: input.practicalWork === undefined ? null : input.practicalWork,
+  });
   const practicalWork = input.practicalWork === undefined
     ? null : PracticalWorkPreference.parse(input.practicalWork);
   const requiredRepair = db

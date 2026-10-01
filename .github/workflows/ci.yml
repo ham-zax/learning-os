@@ -1,0 +1,40 @@
+name: Verification
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: verification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run check:package
+      - run: npm audit --omit=dev --audit-level=high
+      - name: Verify installed package without development dependencies
+        shell: bash
+        run: |
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/package-smoke"
+          cd "$RUNNER_TEMP/package-smoke"
+          npm init -y
+          node -e 'const fs = require("node:fs"); const p = JSON.parse(fs.readFileSync("package.json", "utf8")); p.allowScripts = { "better-sqlite3@12.10.0": true }; fs.writeFileSync("package.json", JSON.stringify(p));'
+          npm install --omit=dev "$RUNNER_TEMP/learning-os-0.1.0.tgz"
+          ./node_modules/.bin/tutor --help
+          node node_modules/learning-os/dist/kernel-cli.js --db "$RUNNER_TEMP/smoke.db" methods

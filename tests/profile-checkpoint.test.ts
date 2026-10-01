@@ -1,7 +1,6 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createTopic } from "../src/db/database.js";
@@ -11,6 +10,7 @@ import {
   openProfileDatabase,
   selectProfile,
 } from "../src/profile/index.js";
+import { runSync } from "./helpers/spawn.js";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const tsxBin = join(repoRoot, "node_modules", ".bin", "tsx");
@@ -69,7 +69,7 @@ describe("profile database checkpoint", () => {
     );
     selectProfile(profile.id, { dataDir });
 
-    const result = spawnSync(
+    const result = runSync(
       tsxBin,
       [cliPath, "profile", "checkpoint", profile.id],
       { cwd: root, encoding: "utf8" },

@@ -82,7 +82,9 @@ Fresh-teacher portability therefore requires **semantic handoff integrity**, not
 
 ## Learner profile and onboarding boundary
 
-Managed learners use one SQLite database per profile under ignored local `data/`; the repository `knowledge/` tree remains one shared curriculum library. The profile resolver chooses which learner database the kernel receives, so goals, imported concept metadata, objectives, sessions, attempts, evidence, weaknesses, scheduling, and resumable state cannot mix across learners.
+Managed learners use one SQLite database per profile under `data/profiles/`; canonical registry and learner database files are intentionally versioned, while SQLite sidecars and registry coordination files remain ignored. Repository access therefore grants access to learner evidence. The repository `knowledge/` tree remains one shared curriculum library. The profile resolver chooses which learner database the kernel receives, so goals, imported concept metadata, objectives, sessions, attempts, evidence, weaknesses, scheduling, and resumable state cannot mix across learners.
+
+Profile routing assumes a trusted local operator; it does not authenticate callers or prevent them from selecting another profile. [Local operation and recovery](operations.md) describes this trust boundary, package privacy checks, backup/restore procedures, and the current-schema policy.
 
 Onboarding begins outside every learner database. Structured intake and the deterministic proposal are draft planning input until the learner explicitly confirms the exact proposal. Confirmed application then provisions a new unselected profile, materializes only the included curriculum metadata plus required prerequisite closure, creates the dedicated topic-backed goal, activates sparse objective requirements, and persists purpose/time/initial-strategy/diagnostic planning metadata. Only after that configuration succeeds is the profile selected.
 
