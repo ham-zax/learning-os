@@ -1,17 +1,17 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { createConcept, createDatabase, createTopic, setGoalObjective } from "../src/db/database.js";
 import { createTeacherKernel } from "../src/teacher.js";
 import { assessorCases, publicAssessorCases, scoreAssessorSubmission } from "../src/evaluation/assessment-calibration.js";
-import { inspectTeacherScenario, prepareTeacherScenario, teacherScenarios } from "../src/evaluation/teacher-scenarios.js";
+import { adviseOnReply, inspectTeacherScenario, prepareTeacherScenario, teacherScenarios } from "../src/evaluation/teacher-scenarios.js";
 import { codingCourseFile } from "../src/knowledge/courses.js";
 import { buildCalibratedPredictionChallenge, findCalibratedPredictionCase,
   loadCalibratedPredictionPack } from "../src/knowledge/challenge-calibration.js";
-import { runFile } from "./helpers/spawn.js";
+import { runFile, runSync } from "./helpers/spawn.js";
 
 const dirs: string[] = [];
 const backendCourse = fileURLToPath(new URL("../knowledge/backend-systems", import.meta.url));
@@ -462,6 +462,53 @@ describe("scaffold revision-friction and fresh-session continuity", () => {
     }
     const failed = inspectTeacherScenario(path, prepared).filter((check) => !check.passed).map((check) => check.label);
     expect(failed).toEqual(expect.arrayContaining(["no unrequested instruction recorded", "reconstruction not required"]));
+  });
+});
+
+describe("advisory reply heuristics", () => {
+  const flagsFor = (reply: string) => {
+    const { path, prepared } = prepare("scaffold_interrupted_after_presentation");
+    return adviseOnReply(path, prepared, reply).map((item) => item.flag);
+  };
+
+  it("stays quiet on a reply that discloses assistance and uses only recorded wording", () => {
+    expect(flagsFor("Your connection dropped after I recorded a worked example for this attempt, so it is assisted. Did it come through? The pending question is the same one.")).toEqual([]);
+  });
+
+  it("flags repeated sentences, unrecorded mechanism wording and a missing assistance mention", () => {
+    const stutter = "This is the same pending question about the last seat as before. This is the same pending question about the last seat as before.";
+    expect(flagsFor(stutter)).toEqual(expect.arrayContaining(["repeated_sentences", "no_mention_of_prior_assistance"]));
+    expect(flagsFor("It is a classic check-then-act problem, so tell me what happens. The attempt is assisted.")).toContain("mechanism_wording_not_in_any_exposure");
+  });
+
+  it("flags a verbatim echo of the recorded scaffold but not wording the exposure contains", () => {
+    const { path, prepared } = prepare("scaffold_interrupted_after_presentation");
+    const db = createDatabase(path);
+    let body: string;
+    try {
+      body = (db.prepare("SELECT content FROM teaching_artifacts").get() as { content: string }).content;
+    } finally {
+      db.close();
+    }
+    expect(adviseOnReply(path, prepared, `Recorded and assisted: ${body}`).map((item) => item.flag)).toContain("recorded_material_echoed");
+    expect(adviseOnReply(path, prepared, "The earlier example mentioned a stale decision; this attempt is assisted.").map((item) => item.flag))
+      .not.toContain("mechanism_wording_not_in_any_exposure");
+  });
+
+  it("is advisory in the inspect command: it prints flags and does not change the exit code", () => {
+    const { path, prepared } = prepare("scaffold_interrupted_after_presentation");
+    const dir = join(path, "..");
+    writeFileSync(join(dir, "scenario.json"), JSON.stringify({ prepared }));
+    const reply = join(dir, "reply.txt");
+    writeFileSync(reply, "Classic check-then-act, nothing else to add here at all today.");
+    const repo = resolve(fileURLToPath(new URL("..", import.meta.url)));
+    const result = runSync(join(repo, "node_modules", ".bin", "tsx"),
+      [join(repo, "src", "evaluation", "cli.ts"), "inspect", dir, reply], { cwd: dir, encoding: "utf8" });
+    const output = JSON.parse(result.stdout as string);
+    expect(result.status).toBe(0);
+    expect(output.passed).toBe(output.total);
+    expect(output.replyAdvisories.advisory).toBe(true);
+    expect(output.replyAdvisories.flags.map((item: { flag: string }) => item.flag)).toContain("mechanism_wording_not_in_any_exposure");
   });
 });
 

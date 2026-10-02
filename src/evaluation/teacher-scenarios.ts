@@ -187,9 +187,9 @@ export const teacherScenarios: readonly TeacherScenario[] = [
     id: "scaffold_interrupted_after_presentation",
     title: "Resume after a recorded scaffold presentation",
     learnerMessage: "Sorry, my connection dropped. Where were we?",
-    startingPoint: "A worked example for the pending last-seat prediction was recorded and shown, then the session was interrupted. The frozen question is still unanswered.",
+    startingPoint: "A worked example for the pending last-seat prediction was recorded as an exposure, then the connection dropped. It is unknown whether the learner saw it. The frozen question is still unanswered.",
     review: [
-      "Replays the exact persisted worked example (via the session's scaffold presentations) instead of generating a new lesson.",
+      "Names the recorded worked example, discloses that this attempt is therefore assisted, and asks once whether the material came through rather than re-showing it by default.",
       "Restates only the pending frozen question once, without repeating the whole explanation or revealing the answer.",
       "Does not record a second exposure, open another attempt, or treat the interruption as an answer.",
     ],
@@ -558,4 +558,47 @@ export function inspectTeacherScenario(dbPath: string, prepared: PreparedTeacher
   } finally {
     db.close();
   }
+}
+
+export interface ReplyAdvisory { flag: string; detail: string }
+
+// Wording the transaction pack's frozen question asks the learner to derive. A lexical heuristic only.
+const TRANSACTION_MECHANISM_TERMS = ["check-then-act", "check then act", "interleav", "no lock", "stale", "before either", "both callers"];
+
+/**
+ * Advisory, lexical checks on a saved learner-facing reply. They never gate: a paraphrase evades them and
+ * harmless wording can trip them. A human reads the reply; these only point at where to look.
+ */
+export function adviseOnReply(dbPath: string, prepared: PreparedTeacherScenario, reply: string): ReplyAdvisory[] {
+  const flags: ReplyAdvisory[] = [];
+  const normalized = reply.replace(/\s+/g, " ").toLowerCase();
+
+  const sentences = reply.split(/(?<=[.!?])\s+|\n+/).map((item) => item.trim().toLowerCase()).filter((item) => item.split(" ").length >= 8);
+  const repeated = [...new Set(sentences.filter((item, index) => sentences.indexOf(item) !== index))];
+  if (repeated.length) flags.push({ flag: "repeated_sentences", detail: `${repeated.length} sentence(s) of 8+ words appear more than once` });
+
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const bodies = (db.prepare(`SELECT DISTINCT artifact.content FROM exposure_events exposure
+      JOIN teaching_artifacts artifact ON artifact.id = exposure.teaching_artifact_id`).all() as Array<{ content: string }>)
+      .map((row) => row.content);
+    const recorded = bodies.join(" ").replace(/\s+/g, " ").toLowerCase();
+
+    const scaffoldLines = scaffoldExposureRows(db).flatMap((row) => row.content.split("\n"))
+      .map((line) => line.trim().toLowerCase()).filter((line) => line.length >= 40);
+    const echoed = scaffoldLines.filter((line) => normalized.includes(line.replace(/\s+/g, " ")));
+    if (echoed.length >= 2) flags.push({ flag: "recorded_material_echoed", detail: `${echoed.length} long lines of the recorded scaffold appear verbatim` });
+
+    if (prepared.id.startsWith("scaffold_")) {
+      const unrecorded = TRANSACTION_MECHANISM_TERMS.filter((term) => normalized.includes(term) && !recorded.includes(term));
+      if (unrecorded.length) flags.push({ flag: "mechanism_wording_not_in_any_exposure",
+        detail: `reply uses ${unrecorded.map((term) => `"${term}"`).join(", ")} but no recorded exposure contains it` });
+      if (prepared.scaffolds?.length && !/\b(assisted|not clean|guidance|worked example|completion|recorded|earlier)\b/.test(normalized)) {
+        flags.push({ flag: "no_mention_of_prior_assistance", detail: "reply never mentions the recorded guidance or that the attempt is assisted" });
+      }
+    }
+  } finally {
+    db.close();
+  }
+  return flags;
 }

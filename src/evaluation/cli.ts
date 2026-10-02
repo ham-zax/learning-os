@@ -7,6 +7,7 @@ import { publicAssessorCases, scoreAssessorSubmission } from "./assessment-calib
 import { summarizeDogfoodMetrics } from "./dogfood-metrics.js";
 import { loadOutcomeManifest, summarizeLearningOutcomes } from "./learning-outcomes.js";
 import {
+  adviseOnReply,
   inspectTeacherScenario,
   prepareTeacherScenario,
   teacherScenarios,
@@ -15,7 +16,7 @@ import {
 } from "./teacher-scenarios.js";
 
 function usage(): never {
-  throw new Error("Usage: npm run eval:teacher -- <list | prepare CASE_ID [DIRECTORY] | inspect DIRECTORY | assessor-cases | grade-assessments FILE | metrics DATABASE GOAL_ID | outcomes MANIFEST [AS_OF]>");
+  throw new Error("Usage: npm run eval:teacher -- <list | prepare CASE_ID [DIRECTORY] | inspect DIRECTORY [REPLY_FILE] | assessor-cases | grade-assessments FILE | metrics DATABASE GOAL_ID | outcomes MANIFEST [AS_OF]>");
 }
 
 function main(args: string[]): void {
@@ -41,7 +42,7 @@ function main(args: string[]): void {
       instruction: "Have a fresh compatible teacher continue this synthetic DB through the public teacher API. Then run inspect on the directory. The reviewer must also inspect the learner-facing response." }, null, 2));
     return;
   }
-  if (command === "inspect" && value && !extra) {
+  if (command === "inspect" && value) {
     const dir = resolve(value);
     const manifest = JSON.parse(readFileSync(join(dir, "scenario.json"), "utf8")) as { prepared: PreparedTeacherScenario };
     const scenario = teacherScenarios.find((item) => item.id === manifest.prepared.id);
@@ -50,6 +51,8 @@ function main(args: string[]): void {
     console.log(JSON.stringify({ caseId: scenario.id, automatedChecks: checks,
       passed: checks.filter((item) => item.passed).length, total: checks.length,
       reviewerChecks: scenario.review,
+      ...(extra ? { replyAdvisories: { advisory: true, note: "Lexical heuristics on the saved reply; they never change the exit code and cannot replace human review.",
+        flags: adviseOnReply(join(dir, "tutor.db"), manifest.prepared, readFileSync(resolve(extra), "utf8")) } } : {}),
       limitation: "Database checks cannot establish whether the teacher's question was neutral, feedback was accurate, or exposure was shown immediately after recording." }, null, 2));
     if (checks.some((item) => !item.passed)) process.exitCode = 1;
     return;
