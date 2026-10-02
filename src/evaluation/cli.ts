@@ -1,9 +1,11 @@
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { publicAssessorCases, scoreAssessorSubmission } from "./assessment-calibration.js";
 import { summarizeDogfoodMetrics } from "./dogfood-metrics.js";
+import { loadOutcomeManifest, summarizeLearningOutcomes } from "./learning-outcomes.js";
 import {
   inspectTeacherScenario,
   prepareTeacherScenario,
@@ -13,7 +15,7 @@ import {
 } from "./teacher-scenarios.js";
 
 function usage(): never {
-  throw new Error("Usage: npm run eval:teacher -- <list | prepare CASE_ID [DIRECTORY] | inspect DIRECTORY | assessor-cases | grade-assessments FILE | metrics DATABASE GOAL_ID>");
+  throw new Error("Usage: npm run eval:teacher -- <list | prepare CASE_ID [DIRECTORY] | inspect DIRECTORY | assessor-cases | grade-assessments FILE | metrics DATABASE GOAL_ID | outcomes MANIFEST [AS_OF]>");
 }
 
 function main(args: string[]): void {
@@ -73,6 +75,13 @@ function main(args: string[]): void {
     } finally {
       db.close();
     }
+    return;
+  }
+  if (command === "outcomes" && value) {
+    // Read-only descriptive report; opens every database read-only and writes nothing.
+    const knowledgeRoot = fileURLToPath(new URL("../../knowledge", import.meta.url));
+    const report = summarizeLearningOutcomes(loadOutcomeManifest(value, knowledgeRoot), extra ? { asOf: extra } : {});
+    console.log(JSON.stringify(report, null, 2));
     return;
   }
   usage();

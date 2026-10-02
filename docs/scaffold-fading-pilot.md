@@ -78,7 +78,7 @@ Existing aliases `async-predict` and `idempotency-predict` resolve to canonical 
 | 2 | Audit existing variants and add selected confusable contrasts | Assess the decisive mechanism on a changed surface; remove topic cues where appropriate; validate each frozen key |
 | 3 | Improve targeted feedback and uncertainty handling | Feedback follows demonstrated gaps; correct-but-uncertain responses receive concise reinforcement without changing correctness; no blanket extra questions |
 | 4 | Add conditional exploration/consolidation examples | Exploratory attempts precede instruction only where prerequisites allow meaningful work; consolidation relates to the learner's actual model |
-| 5 | Run a bounded learning-outcome pilot | Equivalent unseen baseline/delayed tasks, frozen rubrics, assistance history and reliable time measurements; report uncertainty and non-returners |
+| 5 — tooling delivered, pilot not run | Run a bounded learning-outcome pilot | Equivalent unseen baseline/delayed tasks, frozen rubrics, assistance history and reliable time measurements; report uncertainty and non-returners |
 
 Each milestone needs a separate scoped change and verification. Do not implement a second selector, mastery scalar or forced five-stage lesson engine to satisfy this roadmap. Extending content to other capabilities requires appropriate task forms and executable checks, rather than reusing a prediction rubric everywhere.
 
@@ -88,7 +88,7 @@ The primary outcome is delayed unassisted performance on unfamiliar tasks, adjus
 
 Compare one curated scaffold policy with current teaching on matched unfamiliar objective families. Keep study time comparable, counterbalance order where feasible, and track hint depth, reveal frequency, recurring misconception and non-return. Do not treat every repeated attempt by the same learner as an independent participant. A single-learner pilot can establish feasibility and personal usefulness, not population effectiveness. Do not claim a percentage learning-rate improvement from this implementation.
 
-This slice supplies reproducible instruction and preserves assistance provenance. It does not add an automated experiment, a gain calculator, reliable time instrumentation, fresh held-out measurement packs or a policy-effectiveness dashboard. Those remain necessary before an effectiveness claim.
+This slice supplies reproducible instruction and preserves assistance provenance. A separate read-only reporting command (`npm run eval:teacher -- outcomes MANIFEST`, see [learning-outcome-pilot.md](learning-outcome-pilot.md)) computes descriptive baseline, delayed independent, change and gain-per-recorded-minute figures from a manifest. It does not run an experiment, adjust for baseline, supply reliable time instrumentation, author held-out measurement packs or show a policy effect. The delayed pilot itself has not been run, and those remain necessary before an effectiveness claim.
 
 ## Verification
 

@@ -59,3 +59,7 @@ npm run eval:teacher -- metrics /path/to/tutor.db <goal-id>
 ```
 
 The command opens the database read-only and prints counts of assessed/effective events, valid retrievals delayed at least seven days, correct changed-surface transfer events, evidence revisions, post-assessment exposures, answered reconstruction questions, and abandoned unsubmitted episodes. It prints no learner responses. Compare the same goal after later study sessions; keep the learner-facing interaction unchanged. These counts are observations, not a causal estimate of teaching quality or a claim that the learner is done. The repository has not run a longitudinal learner pilot merely because this report exists.
+
+## Learning-outcome reporting
+
+For a bounded pilot comparing teaching conditions on delayed, unassisted tasks, see [learning-outcome-pilot.md](learning-outcome-pilot.md). `npm run eval:teacher -- outcomes MANIFEST [AS_OF]` opens the listed databases read-only and reports baseline and delayed scores, assistance status, elapsed delay, recorded active time, and missing follow-ups. It reports descriptive change only; it performs no baseline adjustment and makes no causal claim.
