@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,6 +18,13 @@ const backendCourse = fileURLToPath(new URL("../knowledge/backend-systems", impo
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
+
+const scaffoldBeforeResponse = new Set<string>([
+  "scaffold_interrupted_after_presentation", "scaffold_completion_return_to_frozen", "scaffold_assisted_answer_closure",
+]);
+const unchangedStateIsCorrect = new Set<string>([
+  "im_stuck", "scaffold_interrupted_after_presentation", "scaffold_completion_return_to_frozen",
+]);
 
 function prepare(id: Parameters<typeof prepareTeacherScenario>[0]) {
   const dir = mkdtempSync(join(tmpdir(), "learning-os-teacher-eval-test-"));
@@ -99,10 +107,12 @@ describe("teacher evaluation scenarios", () => {
     }
   });
 
-  it("offers twelve replayable episodes including blocker, transfer, and backend counterexamples", () => {
-    expect(teacherScenarios).toHaveLength(12);
+  it("offers sixteen replayable episodes including blocker, transfer, backend counterexamples and scaffold continuity", () => {
+    expect(teacherScenarios).toHaveLength(16);
     for (const id of ["im_stuck", "transfer_answer", "calibrated_transaction_wrong_model",
-      "calibrated_idempotency_ambiguous"]) {
+      "calibrated_idempotency_ambiguous", "scaffold_interrupted_after_presentation",
+      "scaffold_completion_return_to_frozen", "scaffold_assisted_answer_closure",
+      "scaffold_declined_further_instruction"]) {
       expect(teacherScenarios.some((scenario) => scenario.id === id)).toBe(true);
     }
   });
@@ -273,13 +283,14 @@ describe("teacher evaluation scenarios", () => {
           goalId: prepared.goalId, now: new Date().toISOString(), oneEpisode: true,
         });
         expect(continuation.kind).toBe("resume");
-        expect(prepared.initialExposureCount).toBe(0);
+        // Scaffold scenarios start after one recorded presentation; every other case starts with no exposure.
+        expect(prepared.initialExposureCount).toBe(scaffoldBeforeResponse.has(scenario.id) ? 1 : 0);
       } finally {
         db.close();
       }
       const checks = inspectTeacherScenario(path, prepared);
-      // A blocker question is visible conversation, not a database mutation.
-      expect(checks.some((check) => !check.passed)).toBe(scenario.id !== "im_stuck");
+      // These cases correctly require no database mutation: the right conversation leaves state unchanged.
+      expect(checks.some((check) => !check.passed)).toBe(!unchangedStateIsCorrect.has(scenario.id));
     }
   });
 
@@ -314,6 +325,109 @@ describe("teacher evaluation scenarios", () => {
   it("refuses to overwrite an existing evaluation database", () => {
     const { path } = prepare("resumed_answer");
     expect(() => prepareTeacherScenario("resumed_answer", path)).toThrow(/already exists/);
+  });
+});
+
+describe("scaffold revision-friction and fresh-session continuity", () => {
+  const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+
+  it.each([
+    ["scaffold_interrupted_after_presentation", "worked_example"],
+    ["scaffold_completion_return_to_frozen", "completion"],
+  ] as const)("restarts %s with exact material, the pending question and no duplicate state", (id, stage) => {
+    const { path, prepared } = prepare(id);
+    expect(prepared.scaffolds).toHaveLength(1);
+    expect(prepared.scaffolds![0]).toMatchObject({ stage });
+
+    // Two independent fresh sessions: each reopens the database and reads only public kernel state.
+    for (let restart = 0; restart < 2; restart++) {
+      const db = createDatabase(path);
+      try {
+        const kernel = createTeacherKernel(db);
+        const resumed = kernel.getStudyContinuation({ goalId: prepared.goalId,
+          now: new Date().toISOString(), oneEpisode: true });
+        expect(resumed.kind).toBe("resume");
+        const replay = kernel.getSessionScaffoldPresentations(prepared.sessionId);
+        expect(replay).toHaveLength(1);
+        expect(replay[0]).toMatchObject({ stage, attemptId: prepared.attemptId,
+          teachingArtifactId: prepared.scaffolds![0]!.teachingArtifactId });
+        expect(sha(replay[0]!.markdown)).toBe(prepared.scaffolds![0]!.sha256);
+        expect(replay[0]!.markdown).not.toMatch(/Solution:|teacher|answer key/i);
+        const question = kernel.getSessionQuestionPresentation(prepared.sessionId);
+        expect(question).toMatchObject({ kind: "question", seq: prepared.initialQuestionSeq });
+        expect(db.prepare("SELECT COUNT(*) AS n FROM exposure_events").get()).toEqual({ n: prepared.initialExposureCount });
+        expect(db.prepare("SELECT COUNT(*) AS n FROM evidence_events").get()).toEqual({ n: 0 });
+        expect(db.prepare("SELECT COUNT(*) AS n FROM attempts").get()).toEqual({ n: 1 });
+      } finally {
+        db.close();
+      }
+    }
+    expect(inspectTeacherScenario(path, prepared).every((check) => check.passed)).toBe(true);
+  });
+
+  it("detects a duplicate scaffold presentation after a restart", () => {
+    const { path, prepared } = prepare("scaffold_interrupted_after_presentation");
+    const db = createDatabase(path);
+    try {
+      const kernel = createTeacherKernel(db);
+      kernel.prepareScaffoldPresentation(prepared.sessionId, { packId: "database-transactions-predict", stage: "worked_example" });
+    } finally {
+      db.close();
+    }
+    const checks = inspectTeacherScenario(path, prepared);
+    expect(checks.find((check) => check.label.startsWith("no duplicate"))?.passed).toBe(false);
+  });
+
+  it("closes a sufficient assisted answer as assisted evidence without extending a review card", () => {
+    const { path, prepared } = prepare("scaffold_assisted_answer_closure");
+    const response = teacherScenarios.find((item) => item.id === prepared.id)!.learnerMessage;
+    const db = createDatabase(path);
+    try {
+      const kernel = createTeacherKernel(db);
+      kernel.submitAttempt(prepared.attemptId, { questionSeq: prepared.initialQuestionSeq!, responseText: response });
+      const source = codingCourseFile(backendCourse, "challenges/database-transactions-predict/baseline.mjs");
+      const output = runFile(source);
+      kernel.recordAssessment(prepared.attemptId, { evaluatorType: "agent",
+        assessmentBasis: "deterministic_execution",
+        verificationOutput: { outcome: "passed", basis: "Node ESM execution after response",
+          summary: output.join(", "), details: { stdout: output } },
+        objectiveResults: [{ objectiveId: prepared.objectiveId, result: "correct",
+          criteriaMet: ["observable_outcome", "invariant_boundary"], criteriaUnmet: [],
+          rationale: "Predicts both accepted reservations and the split check/update boundary, after a completion exercise." }] });
+      kernel.completeSessionFeedback(prepared.sessionId);
+    } finally {
+      db.close();
+    }
+    const checks = inspectTeacherScenario(path, prepared);
+    expect(checks.filter((check) => !check.passed)).toEqual([]);
+    expect(checks.map((check) => check.label)).toContain("one correct assessment recorded as assisted, not valid retrieval");
+  });
+
+  it("closes a declined-instruction episode without an unrequested exposure or mandatory reconstruction", () => {
+    const { path, prepared } = prepare("scaffold_declined_further_instruction");
+    const before = inspectTeacherScenario(path, prepared);
+    expect(before.find((check) => check.label.startsWith("feedback episode closed"))?.passed).toBe(false);
+    const db = createDatabase(path);
+    try {
+      createTeacherKernel(db).completeSessionFeedback(prepared.sessionId);
+    } finally {
+      db.close();
+    }
+    expect(inspectTeacherScenario(path, prepared).filter((check) => !check.passed)).toEqual([]);
+  });
+
+  it("flags a declined episode where the teacher forced instruction anyway", () => {
+    const { path, prepared } = prepare("scaffold_declined_further_instruction");
+    const db = createDatabase(path);
+    try {
+      createTeacherKernel(db).recordExposure(prepared.sessionId, { attemptId: prepared.attemptId,
+        objectiveIds: [prepared.objectiveId], exposureType: "explanation_shown",
+        teachingMaterial: { content: "Unrequested explanation." }, requireReconstruction: true });
+    } finally {
+      db.close();
+    }
+    const failed = inspectTeacherScenario(path, prepared).filter((check) => !check.passed).map((check) => check.label);
+    expect(failed).toEqual(expect.arrayContaining(["no unrequested instruction recorded", "reconstruction not required"]));
   });
 });
 

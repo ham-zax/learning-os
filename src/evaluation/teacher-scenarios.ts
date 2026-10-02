@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createDatabase, createConcept, createTopic, setGoalObjective } from "../db/database.js";
@@ -30,7 +31,15 @@ export type TeacherScenarioId =
   | "calibrated_transaction_answer"
   | "calibrated_transaction_wrong_model"
   | "calibrated_idempotency_model_error"
-  | "calibrated_idempotency_ambiguous";
+  | "calibrated_idempotency_ambiguous"
+  | "scaffold_interrupted_after_presentation"
+  | "scaffold_completion_return_to_frozen"
+  | "scaffold_assisted_answer_closure"
+  | "scaffold_declined_further_instruction";
+
+const SCAFFOLD_PACK_ID = "database-transactions-predict";
+type ScaffoldScenarioId = "scaffold_interrupted_after_presentation" | "scaffold_completion_return_to_frozen"
+  | "scaffold_assisted_answer_closure";
 
 export interface TeacherScenario {
   id: TeacherScenarioId;
@@ -173,6 +182,50 @@ export const teacherScenarios: readonly TeacherScenario[] = [
       "Does not commit assessment evidence from the ambiguous phrase.",
     ],
   },
+  {
+    id: "scaffold_interrupted_after_presentation",
+    title: "Resume after a recorded scaffold presentation",
+    learnerMessage: "Sorry, my connection dropped. Where were we?",
+    startingPoint: "A worked example for the pending last-seat prediction was recorded and shown, then the session was interrupted. The frozen question is still unanswered.",
+    review: [
+      "Replays the exact persisted worked example (via the session's scaffold presentations) instead of generating a new lesson.",
+      "Restates only the pending frozen question once, without repeating the whole explanation or revealing the answer.",
+      "Does not record a second exposure, open another attempt, or treat the interruption as an answer.",
+    ],
+  },
+  {
+    id: "scaffold_completion_return_to_frozen",
+    title: "Return from a completion exercise to the frozen question",
+    learnerMessage: "I finished the completion trace: A:paid, B:paid, decisions:[true,true], balance:-20, because both checked before the lock. I'm ready for the real one.",
+    startingPoint: "A completion exercise was shown while the frozen last-seat prediction is still pending. The learner reports finishing the exercise.",
+    review: [
+      "Gives brief feedback on the completion work as instruction, not as an assessment of the frozen question.",
+      "Transitions clearly back to the original frozen prompt without redisplaying the whole exercise.",
+      "Does not treat the completion answer as the frozen response, create evidence, or add another exercise.",
+    ],
+  },
+  {
+    id: "scaffold_assisted_answer_closure",
+    title: "Close a sufficient assisted answer",
+    learnerMessage: "A:accepted; B:accepted; decisions:[true,true]; seats:-1. Both callers checked the seat before either decremented it, so the one-seat rule failed.",
+    startingPoint: "A completion exercise was shown before this answer to the pending frozen last-seat prediction.",
+    review: [
+      "Runs the frozen source after the prediction, assesses both criteria, and gives concise feedback grounded in the response.",
+      "States that the answer was assisted and does not claim independent retrieval or mastery.",
+      "Closes the episode without a bonus question, repeated explanation, or extra exercise.",
+    ],
+  },
+  {
+    id: "scaffold_declined_further_instruction",
+    title: "Respect a decline of further instruction",
+    learnerMessage: "No thanks, I don't want another explanation or exercise right now.",
+    startingPoint: "The learner's explanation was assessed incorrect and feedback is pending. No optional instruction has been shown yet.",
+    review: [
+      "Acknowledges the decline in one short sentence and does not argue for more instruction.",
+      "Gives concise feedback on the assessed gap and closes the episode without a mandatory exercise.",
+      "Does not record an unrequested exposure, require reconstruction, or imply the gap is resolved.",
+    ],
+  },
 ];
 
 export interface PreparedTeacherScenario {
@@ -184,25 +237,30 @@ export interface PreparedTeacherScenario {
   initialQuestionSeq: number | null;
   initialEvidenceCount: number;
   initialExposureCount: number;
+  /** Present only for scenarios that start after a recorded scaffold presentation. */
+  scaffolds?: Array<{ stage: "worked_example" | "completion"; sourceRef: string;
+    teachingArtifactId: string; sha256: string }>;
+  initialReviewCardCount?: number;
+  initialAttemptCount?: number;
 }
 
-function count(db: Database.Database, table: "evidence_events" | "exposure_events" | "attempt_subquestions" | "attempts"): number {
+function count(db: Database.Database, table: "evidence_events" | "exposure_events" | "attempt_subquestions" | "attempts" | "review_cards"): number {
   return (db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count;
 }
 
 function prepareCalibratedScenario(
   db: Database.Database,
   id: "calibrated_transaction_answer" | "calibrated_transaction_wrong_model"
-    | "calibrated_idempotency_model_error" | "calibrated_idempotency_ambiguous",
+    | "calibrated_idempotency_model_error" | "calibrated_idempotency_ambiguous" | ScaffoldScenarioId,
 ): PreparedTeacherScenario {
-  const packId: CalibratedPredictionPackId = id.startsWith("calibrated_transaction")
-    ? "transaction-predict" : "idempotency-predict";
+  const packId: CalibratedPredictionPackId = id.startsWith("calibrated_idempotency")
+    ? "idempotency-predict" : "transaction-predict";
   const pack = loadCalibratedPredictionPack(KNOWLEDGE_ROOT, packId);
   const conceptId = pack.objective.conceptId;
   const objectiveId = `${conceptId}:predict`;
   createTopic(db, { id: GOAL_ID, name: "Synthetic calibrated teacher evaluation" });
   createConcept(db, { id: conceptId, topicId: GOAL_ID, title: conceptId });
-  const kernel = createTeacherKernel(db);
+  const kernel = createTeacherKernel(db, { knowledgeRoot: KNOWLEDGE_ROOT });
   kernel.createLearningObjective({ id: objectiveId, conceptId, capabilityId: "predict" });
   setGoalObjective(db, { goalId: GOAL_ID, objectiveId, importance: "core", targetReadiness: "guided" });
   const continuation = kernel.getStudyContinuation({ goalId: GOAL_ID,
@@ -222,9 +280,20 @@ function prepareCalibratedScenario(
     contextText: built.challenge.publicPrompt.slice(0, -(item.question.length + 2)),
     promptText: item.question, questionChunking: "default",
   });
+  const scaffolds: NonNullable<PreparedTeacherScenario["scaffolds"]> = [];
+  if (id.startsWith("scaffold_")) {
+    // Recorded through the public kernel boundary exactly as a teacher would, before any response.
+    const stage = id === "scaffold_interrupted_after_presentation" ? "worked_example" : "completion";
+    const shown = kernel.prepareScaffoldPresentation(sessionId, { packId: SCAFFOLD_PACK_ID, stage });
+    if (!shown.teachingArtifactId) throw new Error(`Scaffold presentation recorded no artifact for ${id}`);
+    scaffolds.push({ stage, sourceRef: shown.sourceRef, teachingArtifactId: shown.teachingArtifactId,
+      sha256: createHash("sha256").update(shown.markdown).digest("hex") });
+  }
   return { id, goalId: GOAL_ID, objectiveId, sessionId, attemptId,
     initialQuestionSeq: question.seq, initialEvidenceCount: count(db, "evidence_events"),
-    initialExposureCount: count(db, "exposure_events") };
+    initialExposureCount: count(db, "exposure_events"),
+    ...(scaffolds.length ? { scaffolds } : {}),
+    initialReviewCardCount: count(db, "review_cards"), initialAttemptCount: count(db, "attempts") };
 }
 
 export function prepareTeacherScenario(id: TeacherScenarioId, dbPath: string): PreparedTeacherScenario {
@@ -235,7 +304,9 @@ export function prepareTeacherScenario(id: TeacherScenarioId, dbPath: string): P
   const db = createDatabase(dbPath);
   try {
     if (id === "calibrated_transaction_answer" || id === "calibrated_transaction_wrong_model"
-      || id === "calibrated_idempotency_model_error" || id === "calibrated_idempotency_ambiguous") {
+      || id === "calibrated_idempotency_model_error" || id === "calibrated_idempotency_ambiguous"
+      || id === "scaffold_interrupted_after_presentation" || id === "scaffold_completion_return_to_frozen"
+      || id === "scaffold_assisted_answer_closure") {
       return prepareCalibratedScenario(db, id);
     }
     createTopic(db, { id: GOAL_ID, name: "Synthetic teacher evaluation" });
@@ -265,7 +336,7 @@ export function prepareTeacherScenario(id: TeacherScenarioId, dbPath: string): P
     const attemptId = kernel.openAttempt(challengeId, 1, sessionId).attempt.id;
     let initialQuestionSeq: number | null = null;
 
-    if (id === "correct_cold_answer" || id === "causal_model_error") {
+    if (id === "correct_cold_answer" || id === "causal_model_error" || id === "scaffold_declined_further_instruction") {
       const correct = id === "correct_cold_answer";
       kernel.submitAttempt(attemptId, { responseText: correct
         ? "A runs at the call; await suspends B, so end appears before B."
@@ -299,6 +370,17 @@ export function prepareTeacherScenario(id: TeacherScenarioId, dbPath: string): P
 }
 
 export interface ScenarioCheck { label: string; passed: boolean }
+
+function sha256(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+function scaffoldExposureRows(db: Database.Database) {
+  return db.prepare(`SELECT exposure.teaching_artifact_id, artifact.content
+    FROM exposure_events exposure JOIN teaching_artifacts artifact ON artifact.id = exposure.teaching_artifact_id
+    WHERE exposure.source_ref LIKE 'knowledge/%/scaffold/%.md' ORDER BY exposure.seq`)
+    .all() as Array<{ teaching_artifact_id: string; content: string }>;
+}
 
 export function inspectTeacherScenario(dbPath: string, prepared: PreparedTeacherScenario): ScenarioCheck[] {
   const db = new Database(dbPath, { readonly: true });
@@ -411,6 +493,54 @@ export function inspectTeacherScenario(dbPath: string, prepared: PreparedTeacher
           { label: "ambiguous answer preserved on saved question", passed: initial?.response_text === expectedResponse && attempt?.response_text === null },
           { label: "one neutral follow-up remains pending", passed: questions.length === 2 && activeQuestions.length === 1 && activeQuestions[0]?.purpose === "response" },
           { label: "no assessment or exposure from ambiguity", passed: evidenceCount === 0 && exposureCount === 0 },
+        ];
+      case "scaffold_interrupted_after_presentation":
+      case "scaffold_completion_return_to_frozen": {
+        const shown = prepared.scaffolds ?? [];
+        const scaffoldExposures = scaffoldExposureRows(db);
+        const interrupted = prepared.id === "scaffold_interrupted_after_presentation";
+        return [
+          { label: "recorded scaffold material preserved exactly",
+            passed: shown.length === 1 && scaffoldExposures.length === 1 &&
+              scaffoldExposures[0]?.teaching_artifact_id === shown[0]!.teachingArtifactId &&
+              sha256(scaffoldExposures[0]!.content) === shown[0]!.sha256 },
+          { label: "no duplicate presentation or exposure", passed: exposureCount === prepared.initialExposureCount },
+          { label: "frozen question still pending and unanswered", passed: questions.length === 1 &&
+            activeQuestions.length === 1 && initial?.response_text === null && initial?.superseded_at === null &&
+            attempt?.response_text === null },
+          { label: interrupted ? "interruption created no evidence or attempt"
+              : "completion reply was not recorded as the frozen answer or assessed",
+            passed: evidenceCount === prepared.initialEvidenceCount && count(db, "attempts") === prepared.initialAttemptCount },
+        ];
+      }
+      case "scaffold_assisted_answer_closure": {
+        const packExpected = loadCalibratedPredictionPack(KNOWLEDGE_ROOT, "transaction-predict").cases[0]!.expectedOutput;
+        return [
+          { label: "saved question answered with exact learner response",
+            passed: initial?.response_text === expectedResponse && attempt?.response_text === expectedResponse },
+          { label: "deterministic output recorded after submission",
+            passed: verification?.outcome === "passed" &&
+              JSON.stringify(verifiedLines) === JSON.stringify(packExpected) },
+          { label: "one correct assessment recorded as assisted, not valid retrieval",
+            passed: evidence.length === 1 && evidence[0]?.result === "correct" &&
+              (db.prepare("SELECT retrieval_valid FROM evidence_events WHERE attempt_id = ?")
+                .get(prepared.attemptId) as { retrieval_valid: number } | undefined)?.retrieval_valid === 0 &&
+              JSON.stringify([...(criteria?.met ?? [])].sort()) === JSON.stringify(["invariant_boundary", "observable_outcome"]) },
+          { label: "assisted success did not create or advance a review card",
+            passed: count(db, "review_cards") === (prepared.initialReviewCardCount ?? 0) },
+          { label: "closed without bonus question, extra attempt or repeated presentation",
+            passed: session.phase === "complete" && questions.length === 1 &&
+              count(db, "attempts") === prepared.initialAttemptCount && scaffoldExposureRows(db).length === 1 &&
+              exposureCount === prepared.initialExposureCount },
+        ];
+      }
+      case "scaffold_declined_further_instruction":
+        return [
+          { label: "no unrequested instruction recorded", passed: exposureCount === prepared.initialExposureCount },
+          { label: "reconstruction not required", passed: session.reconstruction_status !== "required" },
+          { label: "feedback episode closed without extra question or attempt",
+            passed: session.phase === "complete" && questions.length === 0 && count(db, "attempts") === 1 },
+          { label: "decline created no extra evidence", passed: evidenceCount === prepared.initialEvidenceCount },
         ];
       case "answer_requested":
         return [
