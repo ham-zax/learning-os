@@ -18,6 +18,8 @@ The conversation is the learner UI. The agent operates Learning OS through its c
 5. Do not require or search for a dedicated Learning OS MCP server merely to use Learning OS. MCP/WSL is the agent's bridge to the repository; Learning OS remains the local kernel/CLI and durable state owner.
 6. Do not tell the learner to run routine `npm run tutor -- ...` commands as the primary learning flow unless they explicitly want to operate the CLI. Invoke the kernel/CLI yourself when those are the available execution surfaces.
 
+For the learner-facing starter prompt and how to resume, see `docs/agent-web-session-instructions.md` when it exists in the repository.
+
 Without repository access, do not claim to have opened a profile, persisted onboarding, recorded evidence, or selected an authoritative next mission. You may discuss concepts or draft structured intake until access exists.
 
 ## Public boundary preference

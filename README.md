@@ -244,7 +244,7 @@ npm run tutor -- due
 
 The CLI uses the same durable profile, evidence, review, and continuation semantics as an agent integration. Declining onboarding confirmation creates no learner profile, and a break does not expire an unfinished attempt.
 
-For the complete setup and agent integration flow, see [Getting started](docs/getting-started.md) and the [teacher-agent protocol](docs/teacher-agent-protocol.md). The portable agent guidance lives under [`skills/learning-os-teacher/`](skills/learning-os-teacher/).
+To use it from a chat session (Claude web, ChatGPT or another agent), see [Agent / web session instructions](docs/agent-web-session-instructions.md) for the starter prompt and how to resume. For the complete setup and agent integration flow, see [Getting started](docs/getting-started.md) and the [teacher-agent protocol](docs/teacher-agent-protocol.md). The portable agent guidance lives under [`skills/learning-os-teacher/`](skills/learning-os-teacher/).
 
 ## Profiles
 

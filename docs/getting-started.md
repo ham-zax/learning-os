@@ -40,6 +40,8 @@ Use Learning OS for sequencing, evidence, review timing, and progress claims;
 do not infer mastery from chat memory.
 ```
 
+For a chat session (Claude web, ChatGPT, others) with a copy-paste starter prompt and resume instructions, see [`agent-web-session-instructions.md`](agent-web-session-instructions.md).
+
 For learner-facing agent sessions, [`teacher-agent-protocol.md`](teacher-agent-protocol.md) is the repository authority and [`learning-os-teacher`](../skills/learning-os-teacher/SKILL.md) is the portable teacher Skill. The agent should use public Learning OS boundaries rather than writing SQLite state directly.
 
 The conversational path is:

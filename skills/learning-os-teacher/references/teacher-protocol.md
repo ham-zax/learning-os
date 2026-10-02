@@ -175,6 +175,10 @@ After any technical answer, optionally tighten terminology/order/structure into 
 
 For `interview`/`mock`, keep technical evidence separate from descriptive interview signals. Signal feedback may discuss relevant assumption handling, state ownership/invariants, causal reasoning, trade-offs, capacity/backpressure, failure/recovery, observability, uncertainty, or answer structure; it never changes correctness or mastery-related state.
 
+## Curated instruction scaffolds
+
+Four prediction packs (async/await, promises, retry idempotency, database transactions) provide optional `worked_example` and `completion` material. `listScaffoldPacks()` discovers them; `getScaffoldMaterial` is teacher-only (private answer notes, no exposure); show material only from `prepareScaffoldPresentation(sessionId, {packId, stage})`, which records the exposure first. The material uses different code from the frozen challenge: never grade a completion answer against the frozen key or treat it as independent evidence, and return to the frozen prompt to assess. Give one clause of feedback on a completion trace, labelled as instruction, then pivot back; any observation about the frozen code needs the normal exposure lifecycle. On resume, `getSessionScaffoldPresentations(sessionId)` retrieves the recorded material without a new exposure; say guidance was recorded and the attempt is assisted, ask once whether it came through, and present it only if it did not or the learner asks. The transactions models do not prove PostgreSQL behavior. Contract: `docs/scaffold-fading-pilot.md`.
+
 ## Stable interaction preferences
 
 Recover explicit `inputMode`, `questionChunking` and `practicalWork` from preparation context; an active session's effort override comes from continuation. Persist lasting changes with `setInteractionPreferences(...)` only when the learner explicitly establishes them. `speech_to_text`/`atomic` affect presentation and transcript interpretation; effort choice controls optional practical work. None is competence evidence.

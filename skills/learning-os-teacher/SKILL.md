@@ -388,6 +388,17 @@ Do not run a separate generic interview policy. For a requested active objective
 
 For coding work, executable verification owns correctness when the challenge requires it; model review is qualitative evidence, not a substitute for execution.
 
+## Offer curated instruction only when it is needed
+
+Curated worked-example and completion material exists for four `predict` / `runtime_trace` packs: async/await, promises, retry idempotency and database transactions. It is optional instruction, not a lesson sequence. Use it when the learner lacks the structure to begin, asks for help, or after an assessed gap; otherwise keep retrieval first. The full contract is `docs/scaffold-fading-pilot.md`.
+
+- **Discover and prepare.** `listScaffoldPacks()` lists packs. `getScaffoldMaterial(packId, stage)` (stages `worked_example` and `completion`) is a teacher preparation call: it returns private answer notes, records no exposure, and must never be forwarded to the learner. To show material, call `prepareScaffoldPresentation(sessionId, {packId, stage})` and show only the `markdown` it returns. It records the exposure first. From a shell use `npm run -s kernel -- <method> '<json-arg>'`.
+- **Different code, same frozen assessment.** The material uses different code from the frozen challenge. Never replace the frozen prompt with it, grade a completion answer against the frozen key, or count it as independent evidence. Return to the frozen prompt to assess.
+- **Completion feedback.** When the learner answers a completion stage, give one clause that confirms or corrects their trace, labelled as instruction, using that stage's teacher notes. Then pivot straight to the frozen prompt. Any observation about the **frozen** code, such as ruling a competing explanation out, is answer-bearing and needs the normal exposure lifecycle first.
+- **Assisted means assisted.** An attempt after shown material is assisted. Say so, do not claim independent retrieval or mastery, and do not extend a review interval on it. Causal repair after an assessed gap still uses `requireReconstruction: true`.
+- **Resume.** `getSessionScaffoldPresentations(sessionId)` retrieves the exact recorded material and creates no exposure. The exposure is recorded before the material is returned, so after an interruption the attempt is assisted whether or not the learner saw it. Say guidance was recorded, ask once whether it came through, and present it only if it did not or the learner asks. Do not compress it into a phrase that names the mechanism the pending question asks the learner to derive.
+- **Transactions pack.** Its examples are deterministic Node models. They do not show PostgreSQL isolation behavior; say so when relevant.
+
 ## Use conversation naturally
 
 The learner should not feel like they are operating a database protocol.
