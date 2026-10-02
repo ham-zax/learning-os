@@ -7,6 +7,7 @@ import { buildCalibratedPredictionChallenge, findCalibratedPredictionCase,
   loadCalibratedPredictionPack } from "../knowledge/challenge-calibration.js";
 import type { CalibratedPredictionPackId } from "../knowledge/challenge-calibration.js";
 import { createTeacherKernel } from "../teacher.js";
+import { getSessionFeedback } from "../kernel/feedback.js";
 
 const GOAL_ID = "teacher-eval-goal";
 const OBJECTIVE_ID = "async-prefix:explain";
@@ -540,6 +541,12 @@ export function inspectTeacherScenario(dbPath: string, prepared: PreparedTeacher
           { label: "reconstruction not required", passed: session.reconstruction_status !== "required" },
           { label: "feedback episode closed without extra question or attempt",
             passed: session.phase === "complete" && questions.length === 0 && count(db, "attempts") === 1 },
+          // Closure above implies this, but an open session is the harmful state, not an inert one:
+          // while phase stays 'feedback', continuation keeps returning it with nextAction 'review_gap',
+          // which obliges the next teacher to deliver the repair the learner just declined.
+          { label: "decline left no review_gap obligation for the next session",
+            passed: session.phase === "complete" ||
+              getSessionFeedback(db, prepared.sessionId).nextAction !== "review_gap" },
           { label: "decline created no extra evidence", passed: evidenceCount === prepared.initialEvidenceCount },
         ];
       case "answer_requested":

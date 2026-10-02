@@ -151,10 +151,13 @@ This is the semi-strict balance: **do not block useful teaching, but never hide 
 | "Give me a hint" during an attempt | Record hint observation before showing the hint. |
 | "Just tell me the answer" during an attempt | Record answer/explanation exposure before reveal; do not count the result as clean retrieval. |
 | "Move me on; I got it" | Use actual assessment/projection/goal requirements; confidence alone cannot advance state. |
+| "No thanks / not right now / I don't want another explanation" while feedback is pending | Close the current feedback step with `completeSessionFeedback(sessionId)` and no `activeTimeSeconds`. Record no exposure, set no `requireReconstruction`, and do not call continuation for new work. |
 | "Why do you think I'm still weak/guided/not ready?" | Call `getObjectiveEvidenceReceipt(objectiveId)` and explain the relevant effective/invalidated evidence, exposure context, and current projection in learner language. |
 | "That attempt/exposure did not happen the way you say" | Inspect the objective receipt first. Correct only a demonstrated assessment/evidence error through existing kernel correction contracts; do not rewrite state from disagreement alone. |
 | "I only have 15 minutes" | Use an orchestration time override; do not alter FSRS math. |
 | Product/configuration/help question | Answer directly unless a learner-state mutation is requested. |
+
+Declining further instruction closes the **interaction step**, not the **gap**. Closing feedback records no time, creates no exposure and no evidence, and leaves the assessed result standing: the incorrect evidence, its rationale and its review card are already durable and already owned by FSRS. Leaving the step open does not preserve that gap — while `phase` stays `feedback` with `pending_action` `present_feedback`, the next `getStudyContinuation(...)` keeps returning that session, and its `feedback.nextAction` stays `review_gap`, whose stated reason is that a demonstrated causal misconception "needs recorded teaching and focused reconstruction". A decline the learner experiences as "no thanks" therefore becomes a mandatory repair obligation one session later. Closure is the more respectful action. Hold the step open only when the learner says they will continue this same step in the current conversation (for example "give me a minute"); an open-ended "not right now" or "later" is a decline, not a pause.
 
 ## Onboarding workflow
 

@@ -70,6 +70,13 @@ criterion, preserving both responses without invented failure or assistance.
 Feedback states what was demonstrated, the exact remaining gap, and why another
 question is necessary; omit the last two when the answer is sufficient.
 
+Declining further instruction during pending feedback closes the interaction step, not the
+gap: call `completeSessionFeedback(sessionId)` with no `activeTimeSeconds`, record no exposure
+and no reconstruction, and do not ask continuation for new work. The incorrect evidence and its
+review card already stand. Leaving `phase` at `feedback` is not neutral — continuation keeps
+returning that session with `nextAction: review_gap`, which instructs you to deliver recorded
+teaching and reconstruction the learner already refused.
+
 Continuation also returns `practicalWork`: `ask_first` or `conversation_only`
 with its source. Save an explicit episode choice with
 `setSessionPracticalWork(sessionId, preference)`; null inherits the profile.

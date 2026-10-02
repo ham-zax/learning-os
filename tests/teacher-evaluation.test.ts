@@ -416,6 +416,40 @@ describe("scaffold revision-friction and fresh-session continuity", () => {
     expect(inspectTeacherScenario(path, prepared).filter((check) => !check.passed)).toEqual([]);
   });
 
+  it("shows that leaving a declined step open arms a review_gap repair obligation, and that closing removes it", () => {
+    const { path, prepared } = prepare("scaffold_declined_further_instruction");
+    const open = createDatabase(path);
+    try {
+      const kernel = createTeacherKernel(open);
+      const resumed = kernel.getStudyContinuation({ goalId: prepared.goalId,
+        now: new Date().toISOString(), oneEpisode: true });
+      expect(resumed.kind).toBe("resume");
+      expect(kernel.getSessionFeedback(prepared.sessionId).nextAction).toBe("review_gap");
+    } finally {
+      open.close();
+    }
+    const stale = inspectTeacherScenario(path, prepared);
+    expect(stale.find((check) => check.label.startsWith("decline left no review_gap"))?.passed).toBe(false);
+
+    const closing = createDatabase(path);
+    try {
+      createTeacherKernel(closing).completeSessionFeedback(prepared.sessionId);
+    } finally {
+      closing.close();
+    }
+    expect(inspectTeacherScenario(path, prepared).find((check) => check.label.startsWith("decline left no review_gap"))?.passed).toBe(true);
+    const after = createDatabase(path);
+    try {
+      const next = createTeacherKernel(after).getStudyContinuation({ goalId: prepared.goalId,
+        now: new Date().toISOString(), oneEpisode: true });
+      expect(next.kind).not.toBe("resume");
+      expect(after.prepare("SELECT COUNT(*) AS n FROM exposure_events").get()).toEqual({ n: 0 });
+      expect(after.prepare("SELECT COUNT(*) AS n FROM evidence_events").get()).toEqual({ n: 1 });
+    } finally {
+      after.close();
+    }
+  });
+
   it("flags a declined episode where the teacher forced instruction anyway", () => {
     const { path, prepared } = prepare("scaffold_declined_further_instruction");
     const db = createDatabase(path);

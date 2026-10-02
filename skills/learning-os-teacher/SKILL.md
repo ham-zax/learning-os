@@ -55,6 +55,13 @@ a misconception. For `reconstruct`, use the saved scoped question. Ask the learn
 to explain the idea in their own words, without using the internal label. This is
 practice after feedback, not new retrieval evidence.
 
+If the learner declines further instruction while feedback is pending, close the step with
+`completeSessionFeedback(sessionId)` and no `activeTimeSeconds`: no exposure, no
+`requireReconstruction`, no continuation call for new work. Closure keeps the assessed gap
+standing — its evidence, rationale and review card are already durable — whereas leaving the
+step open makes the next continuation return that same session with `review_gap`, which obliges
+you to teach what the learner just declined.
+
 Before final submission, an ambiguous answer gets one neutral clarification of
 the same criterion through the subquestion lifecycle. Preserve the actual answer
 and its clarification. A context/wording complaint is not an assessed answer.
