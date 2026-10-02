@@ -5,6 +5,8 @@ import { runFile, runSource } from "./helpers/spawn.js";
 const packs = [
   { directory: "frontend-revision/challenges/js-async-await-predict", completionReplacement: null },
   { directory: "backend-systems/challenges/retries-idempotency-predict", completionReplacement: "dispatch-23" },
+  { directory: "frontend-revision/challenges/js-promises-predict", completionReplacement: null },
+  { directory: "backend-systems/challenges/database-transactions-predict", completionReplacement: null },
 ] as const;
 
 function output(source: string): string[] {
@@ -24,7 +26,7 @@ describe("curated scaffold content", () => {
     const read = (name: string) => readFileSync(new URL(name, scaffoldRoot), "utf8");
     const manifest = JSON.parse(read("scaffold.json")) as {
       objective: { conceptId: string; capabilityId: string; taskForm: string };
-      stages: { worked_example: { material: string }; completion: { material: string } };
+      stages: { worked_example: { material: string; teacherNotes: string }; completion: { material: string; teacherNotes: string } };
       checks: Array<{ source: string; expectedOutput: string[] }>;
     };
 
@@ -66,6 +68,18 @@ describe("curated scaffold content", () => {
       expect(output(resolved)).toEqual(check.expectedOutput);
       expect(markdown).toContain("________");
       expect(markdown).toMatch(/reason|Explain/);
+    });
+
+    it(`${pack.directory}: keeps teacher answers and notes out of learner material`, () => {
+      for (const stage of [manifest.stages.worked_example, manifest.stages.completion]) {
+        const markdown = read(stage.material);
+        expect(markdown).not.toContain(stage.teacherNotes);
+        expect(markdown).not.toMatch(/Solution:|teacher|answer key/i);
+      }
+      const expected = manifest.checks.find((item) => item.source === "completion-solution.mjs")!.expectedOutput;
+      const shownTrace = read(manifest.stages.completion.material).match(/```text\n([\s\S]*?)\n```/)![1]!.split("\n");
+      expect(shownTrace).toHaveLength(expected.length);
+      for (const line of expected.slice(1)) expect(shownTrace).not.toContain(line);
     });
   }
 });

@@ -6,14 +6,16 @@ The [research synthesis](research/pedagogy-priorities.md) prioritizes structured
 
 ## Implemented scope
 
-Two curated prediction packs now offer optional instruction:
+Four curated prediction packs now offer optional instruction:
 
 | Pack | Capability / task | Worked example | Completion task |
 | --- | --- | --- | --- |
 | `js-async-await-predict` | `predict` / `runtime_trace` | Separate the synchronous call prefix from an `await` continuation | Complete a trace and explain the suspension boundary |
 | `retries-idempotency-predict` | `predict` / `runtime_trace` | Recover a recorded result after a lost reply; distinguish a separate operation | Choose the retry identity, complete the trace and explain the lookup |
+| `js-promises-predict` | `predict` / `runtime_trace` | Contrast a `then` callback that returns an inner promise with one that only starts work | Complete a trace where one step is returned and the next is not |
+| `database-transactions-predict` | `predict` / `runtime_trace` | Contrast a check made before an interleaving with a check and update inside one protected section | Complete a trace where a lock covers only the update |
 
-Each pack has a strict `scaffold/scaffold.json`, learner Markdown, and executable Node examples. Answer keys for completion live in teacher notes and separate solution sources. Tests execute the exact learner Markdown code and verify the corresponding outputs. The retry models are sequential, retain process memory and make no claim about overlapping calls, restart durability or distributed effects.
+Each pack has a strict `scaffold/scaffold.json`, learner Markdown, and executable Node examples. Answer keys for completion live in teacher notes and separate solution sources. Tests execute the exact learner Markdown code and verify the corresponding outputs. The retry models are sequential, retain process memory and make no claim about overlapping calls, restart durability or distributed effects. The transaction models are deterministic in-memory Node interleavings; they do not prove PostgreSQL isolation behavior.
 
 The public workspace offers read-only discovery and teacher preparation. The bound kernel additionally records exposure and replays the persisted instruction. The JSON kernel CLI exposes these same methods. This is an agent integration surface: normal learners continue in chat.
 
@@ -72,7 +74,7 @@ Existing aliases `async-predict` and `idempotency-predict` resolve to canonical 
 
 | Priority | Work | Acceptance boundary |
 | --- | --- | --- |
-| 1 — delivered | Two optional scaffold packs and durable presentation/replay | Executable examples; no answer-key leakage in presentation; assisted success does not advance FSRS; repair survives restart |
+| 1 — delivered | Four optional scaffold packs and durable presentation/replay | Executable examples; no answer-key leakage in presentation; assisted success does not advance FSRS; repair survives restart |
 | 2 | Audit existing variants and add selected confusable contrasts | Assess the decisive mechanism on a changed surface; remove topic cues where appropriate; validate each frozen key |
 | 3 | Improve targeted feedback and uncertainty handling | Feedback follows demonstrated gaps; correct-but-uncertain responses receive concise reinforcement without changing correctness; no blanket extra questions |
 | 4 | Add conditional exploration/consolidation examples | Exploratory attempts precede instruction only where prerequisites allow meaningful work; consolidation relates to the learner's actual model |
@@ -90,6 +92,6 @@ This slice supplies reproducible instruction and preserves assistance provenance
 
 ## Verification
 
-`tests/scaffold-content.test.ts` verifies both packs' executable sources, exact Markdown code, worked traces and completion solutions. `tests/scaffold-material.test.ts` verifies discovery, teacher-only separation, exposure before return, wrong-target rejection, transactional failure, assisted evidence/FSRS behavior and replay after database restart without curriculum access. `tests/kernel-cli.test.ts` checks method discovery and knowledge routing outside the repository working directory.
+`tests/scaffold-content.test.ts` verifies every pack's executable sources, exact Markdown code, worked traces and completion solutions. `tests/scaffold-material.test.ts` verifies discovery, teacher-only separation, exposure before return, wrong-target rejection, transactional failure, assisted evidence/FSRS behavior and replay after database restart without curriculum access. `tests/kernel-cli.test.ts` checks method discovery and knowledge routing outside the repository working directory.
 
 Use `npm run typecheck`, `npm test` and `npm run build` for integration. Package privacy checking additionally requires intentionally public curriculum sources to be tracked in Git; do not weaken that gate to publish unreviewed files.

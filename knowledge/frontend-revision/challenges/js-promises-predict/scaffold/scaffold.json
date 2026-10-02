@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "title": "Trace what a then callback returns",
+  "objective": {
+    "conceptId": "js-promises",
+    "capabilityId": "predict",
+    "taskForm": "runtime_trace"
+  },
+  "scopeNote": "Node.js ESM examples contrasting a then callback that returns an inner promise with one that only starts work. These teaching surfaces are separate from the calibrated assessment cases; stages are optional teaching choices, not a mandatory sequence.",
+  "stages": {
+    "worked_example": {
+      "material": "worked-example.md",
+      "teacherNotes": "Explain each labeled subgoal. Decisive distinction: the next then waits for what the callback returns, not for work the callback started. Optional principle answer: returning fetchTile(\"north\", 10) moves dropped to after tile:north and the next link prints NORTH. Showing this example is instruction, not clean retrieval evidence."
+    },
+    "completion": {
+      "material": "completion.md",
+      "teacherNotes": "Solution: checked:email, email took:15, after phone:undefined, checked:phone. The email callback returns the check promise, so the chain waits and the next link receives 15. The phone callback only starts a check and returns undefined, so after phone:undefined prints at once and the phone timer fires later. If the phone check took 50 ms nothing in the order would change, because nothing waits for it. Ask for the return-value reason, not only the trace. Use completion-solution.mjs to verify; keep this answer key out of the learner prompt."
+    }
+  },
+  "checks": [
+    { "source": "worked-example.mjs", "expectedOutput": ["dropped:undefined", "tile:north", "tile:south", "kept:SOUTH"] },
+    { "source": "completion-solution.mjs", "expectedOutput": ["form open", "checked:email", "email took:15", "after phone:undefined", "checked:phone"] }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "title": "Trace a check and update that share a boundary",
+  "objective": {
+    "conceptId": "database-transactions-and-concurrent-correctness",
+    "capabilityId": "predict",
+    "taskForm": "runtime_trace"
+  },
+  "scopeNote": "Deterministic in-memory Node.js ESM models contrasting an invariant checked before an interleaving with a check and update performed inside one protected section. They do not prove PostgreSQL isolation behavior. These teaching surfaces are separate from the calibrated assessment cases; stages are optional teaching choices, not a mandatory sequence.",
+  "stages": {
+    "worked_example": {
+      "material": "worked-example.md",
+      "teacherNotes": "Explain each labeled subgoal. Decisive distinction: a check is only valid for the update that shares its uninterrupted section; a decision made before an await is stale by the time it is applied. Optional principle answer: no. If only the update is locked, both callers still check 100 before either updates, so both pay and the balance is -60. State plainly that the Node model does not establish PostgreSQL behavior; real fixes (FOR UPDATE, conditional UPDATE with affected-row check, constraints, isolation level) need database-specific verification. Showing this example is instruction, not clean retrieval evidence."
+    },
+    "completion": {
+      "material": "completion.md",
+      "teacherNotes": "Solution: A:paid, B:paid, decisions:[true,true], balance:-20. Both callers pass the check outside the lock (100 >= 70 and 100 >= 50) before either update runs; the lock then only serializes two already-approved updates, leaving -20. Fix: move the balance check inside the withLock callback so B checks against 30 and returns false (decisions:[true,false], balance:30). Ask for the check-to-update gap reason, not only the trace. Remind the learner this is a Node model, not PostgreSQL evidence. Use completion-solution.mjs to verify; keep this answer key out of the learner prompt."
+    }
+  },
+  "checks": [
+    { "source": "worked-example.mjs", "expectedOutput": ["unprotected A:paid", "unprotected B:paid", "unprotected decisions:[true,true] balance:-60", "protected A:paid", "protected decisions:[true,false] balance:20"] },
+    { "source": "completion-solution.mjs", "expectedOutput": ["A:paid", "B:paid", "decisions:[true,true]", "balance:-20"] }
+  ]
+}

@@ -47,13 +47,24 @@ describe("curated scaffold presentation", () => {
   it("discovers optional packs through the workspace and separates teacher answers", () => {
     const workspace = createTeacherWorkspace({ knowledgeRoot });
     expect(workspace.listScaffoldPacks().map((pack) => pack.packId)).toEqual([
-      "js-async-await-predict", "retries-idempotency-predict",
+      "database-transactions-predict", "js-async-await-predict", "js-promises-predict", "retries-idempotency-predict",
     ]);
     const material = workspace.getScaffoldMaterial("async-predict", "completion");
     expect(material.packId).toBe(packId);
     expect(material.teacherOnly.notes).toContain("Solution:");
     expect(material.learnerMarkdown).not.toContain(material.teacherOnly.notes);
     expect(material.exposureType).toBe("explanation_shown");
+  });
+
+  it.each(["js-promises-predict", "database-transactions-predict"])("serves %s with teacher answers separated", (id) => {
+    const workspace = createTeacherWorkspace({ knowledgeRoot });
+    for (const stage of ["worked_example", "completion"] as const) {
+      const material = workspace.getScaffoldMaterial(id, stage);
+      expect(material.packId).toBe(id);
+      expect(material.teacherOnly.notes.length).toBeGreaterThan(0);
+      expect(material.learnerMarkdown).not.toContain(material.teacherOnly.notes);
+      expect(material.exposureType).toBe(stage === "worked_example" ? "worked_example_shown" : "explanation_shown");
+    }
   });
 
   it.each(["worked_example", "completion"] as const)("persists %s before return without evidence or scheduling", (stage) => {
