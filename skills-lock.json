@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "learning-os-teacher": {
+      "source": ".",
+      "sourceType": "local",
+      "computedHash": "bdbe5f930c96da4e096a201cf538ff24057d24614a3c3572ea509162be9329e8"
+    }
+  }
+}
