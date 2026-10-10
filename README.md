@@ -33,6 +33,12 @@ Learning OS
 
 The agent is responsible for conversation, explanation style, challenge wording, and qualitative feedback. Learning OS owns durable learner truth, sequencing, evidence, scheduling, and continuation. A different compatible agent can resume from the same repository without needing the old provider conversation.
 
+### Capability-aware teaching across agents
+
+Agents can now follow a portable presentation playbook: inspect actual native rendering/execution affordances, load relevant installed skills only as needed, consider already-authorized connected tools, and choose a diagram, graph, simulation, executable example or plain-text fallback that best clarifies the current concept. This includes ad-hoc conceptual lessons without creating a curriculum or learner progress. Visual aids never count as mastery or bypass hint/exposure recording for active attempts. See [the design](docs/capability-aware-teaching.md) and [the teacher-skill reference](skills/learning-os-teacher/references/presentation-capabilities.md).
+
+For CLI agents, the optional DB-free `npm run -s present:teaching -- '<json>'` helper ranks host-reported, verified presentation capabilities. It **does not** inspect tools or require an active learner profile. Host-side discovery remains the agent's responsibility; there is no universal widget integration.
+
 ## What it helps with
 
 Learning OS is strongest for technical learning where understanding has to survive contact with real work, for example:

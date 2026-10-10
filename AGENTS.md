@@ -106,6 +106,8 @@ Use the **semi-strict** policy:
 
 Do not run a separate generic ChatGPT/Claude tutoring or interview policy on top of Learning OS. The model may control conversational style and concrete challenge wording, but Learning OS remains the authority for learner truth and pedagogical sequencing.
 
+Presentation is an agent-owned, capability-aware layer: when it helps explain the selected concept, inspect already-available native visuals/execution, relevant installed skill metadata, then authorized connected tools, progressively and without blanket scanning or silent installation. Use graphs, diagrams, simulations, or code examples when beneficial; otherwise give a complete text explanation. Follow `docs/capability-aware-teaching.md` and `skills/learning-os-teacher/references/presentation-capabilities.md`. These ephemeral choices never create learner evidence, objectives or reviews; answer-bearing visuals/code still require the normal pre-display hint/exposure record in active assessable work. The optional pure `npm run -s present:teaching` advisor is DB-free and does not discover tools.
+
 Environment routing:
 
 - CLI/IDE agents should use the current Learning OS Git root.

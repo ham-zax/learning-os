@@ -93,6 +93,14 @@ CLI fallback
 
 Do not use direct SQLite writes for learner-state operations.
 
+## Capability-aware presentation (agent-owned, non-durable)
+
+Presentation choice is part of the teacher's replaceable explanation layer, not a kernel planning decision. For spatial relationships, quantitative functions, time-varying behavior, causal flows, and code traces, an agent should first consider a verified built-in diagram/graph/interactive/execution feature; inspect only relevant installed skill metadata and then available authorized MCP/local tools if a richer representation would help. Check actual tool schemas and permissions before use. Do not presume cross-provider availability, repeatedly scan tool inventories, install integrations without user approval, or change the selected objective/task to suit a widget. For ordinary explanations and saved questions, plain text often remains the best presentation.
+
+Treat visualization as teaching, with both a meaningful textual explanation and an accessible fallback (axes/units, components, transitions, and interpretation). Select one medium for the mechanism rather than decorative media. Host capability discovery and the optional pure `src/teacher-presentation.ts` recommendation/DB-free `npm run -s present:teaching` command are provisional execution aids; they neither open profiles nor persist proficiency. The detailed skill playbook is `skills/learning-os-teacher/references/presentation-capabilities.md`.
+
+**Exposure and authority rule:** never use a diagram, code execution, interactive control, or simulation to leak the frozen question's answer. When the presentation contains answer-bearing reasoning for an active objective, follow the normal hint/exposure boundary immediately before displaying it; a learner viewing/manipulating a widget is not an assessed attempt. If legitimate tool use alters the evidence conditions, specify that support in the challenge/rubric before registration. Keep ad-hoc explorations ephemeral until the learner explicitly chooses curriculum/learner-state promotion; respect device/accessibility preferences and external-tool privacy/permission limits.
+
 ## Semi-strict teaching policy
 
 The teacher should feel helpful, not bureaucratic. Route only actions whose sequencing or exposure affects learner truth.

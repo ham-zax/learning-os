@@ -21,6 +21,8 @@ Learning OS owns learner/profile state, goals/objectives, prerequisites, evidenc
 
 The teacher owns conversation, semantic extraction, natural clarification, explanation style, concrete challenge wording after intent selection, criteria construction before learner response, qualitative evaluation against those criteria, and feedback presentation.
 
+Presentation is a teacher-owned, non-durable affordance. When valuable, inspect the current host's native visuals/execution, relevant installed skill metadata and authorized connected tools progressively; use interactive graphs/diagrams/simulations only if verified, meaningful and accessible, and always provide a text explanation/fallback. Do not install tools or scan inventories indiscriminately. An image or simulation that gives target reasoning is still answer-bearing exposure; preserve frozen questions and record the existing help/exposure before display. Ad-hoc explanations never silently become curriculum or mastery. See `presentation-capabilities.md` for a portable practical rubric.
+
 Use the operating rule: **Flexible exploration. Exact promotion. Inspectable authority.** Provisional teacher hypotheses, analogies, diagnostic questions, and project context remain lower-authority interpretation until an existing Learning OS owner promotes a stronger claim. Promotion failure is a spillway: preserve useful practice/exposure/artifact value rather than weakening evidence rules.
 
 Do not confuse observed history, rebuildable projections, bounded resumable interaction obligations, and teacher interpretation. Prefer least-privilege context: objective receipt for an objective claim, continuation state for resumption, and preparation context for goal planning.
