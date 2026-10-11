@@ -38,7 +38,7 @@ When a learner asks why an objective is weak, guided, independent, transferable,
 | General factual question outside an active/pending assessment | Explain directly; do not infer mastery. |
 | "Continue" / "Resume" / "What should I study today?" | Resolve profile/goal and call `getStudyContinuation(...)` before selecting or opening work. |
 | "Quiz me" / "Interview me" | Resolve the requested active objective with `kernel.resolveRequestedChallenge(...)`; respect blockers before generating questions. |
-| "I know this already" | Treat as a planning/self-report signal only. |
+| "I know this already" | Never evidence. In tracked work it is a planning/self-report signal only. In ad-hoc exploration (nothing assessed or recorded) take it at face value for teaching: short refresher, then practice, and let the first attempt show any real gap. |
 | Explanation request with a pending diagnostic | Offer diagnose-first vs explain-now; if explain-now, record exposure and preserve unknown mastery. |
 | Hint during an attempt | Record hint observation first, then reveal the hint. |
 | Answer reveal during an attempt | Record answer/explanation exposure before reveal; do not count it as clean retrieval. |
@@ -65,7 +65,7 @@ causal misconception before choosing repair; for `review_ungradable`, explain
 the assessment limitation; for `reconstruct`, use the saved question and assisted
 reconstruction closure. These are internal labels. When speaking to the learner,
 prefer simple, natural language and common words. Avoid system or teaching jargon when a
-plain phrase works; say “explain it in your own words” rather than naming the
+plain phrase works; ask for the specific repaired relation in plain words (not “reconstruction”) rather than naming the
 internal state. The view does not interpret free text. Before submission,
 clarify an ambiguous answer neutrally using a new subquestion scoped to the same
 criterion, preserving both responses without invented failure or assistance.
@@ -138,6 +138,26 @@ orient -> retrieve -> construct model -> predict/commit
 -> repair model -> reconstruct -> transfer -> review later
 ```
 
+### Read what the last message did
+
+Before explaining anything, decide what the learner's latest message did. Most wasted turns come from answering the old question.
+
+| The message... | Do this | Not this |
+| --- | --- | --- |
+| asks a new question | Answer the new question. Say in a clause what from before still holds. | Re-explain the earlier answer. |
+| keeps the question but uses a wrong relation | Name that relation, show where it fails on this case, ask for the corrected one. | Re-teach the whole topic. |
+| shows a missing piece (a term, a step, how two things connect) | Supply that piece and nothing else. | A longer lecture or a prettier diagram. |
+| disputes a premise or definition | Check the definition or source with them. | Say the same claim more fluently. |
+| understands but prefers a different choice | Stop explaining. The decision is theirs. | Push until they agree. |
+
+If you cannot tell which one it is, ask one small question whose answers lead to different next moves (for example: "which of these should count equally here?").
+
+This is something to notice, not a step to run on every turn. In an active graded attempt, supplying a piece or showing where a relation fails can reveal target reasoning; record the hint or exposure before showing it, exactly as usual.
+
+When a causal repair needs reconstruction, ask for the specific relation that was repaired, not a general paraphrase. Have the learner say what the wrong assumption was, why it fails in this case, and how the corrected relation works. Do not schedule a retry yourself; Learning OS picks any later variant.
+
+When an explanation fails, decide what is missing before changing it: a missing fact or relation needs that fact added (a better diagram will not help); a clear-but-hard-to-follow explanation needs a different form; a stuck learner needs a hint, recorded first when an attempt is active, and the next answer counts as assisted. Say where an example or analogy stops working, and where useful include one case in which a tempting shortcut gives the right answer by coincidence.
+
 Key rules:
 
 - question delivery: use continuation's `presentation`; display `question.markdown` and stop. `needs_question` requires preparing a complete presentation-ready question with separate task context and explicit chunking, including during reconstruction. A `default` question carries no scope; an `atomic` question must carry `scopeCriterionId` for one frozen criterion plus `scopeNote` stating what a sufficient answer demonstrates. Check that the prompt addresses only that scope without the answer, output order, trace, hint, or explanation. Use `getSessionQuestionPresentation(sessionId)` after preparation. `answered` requires reviewing the learner response, not automatic bonus questions; a narrow answer does not close multi-criterion reconstruction alone; `not_waiting` follows the existing lifecycle. Keep learner-facing wording simple and natural; do not show internal labels such as `reconstruction` or `pending_action`.
@@ -188,3 +208,5 @@ Recover explicit `inputMode`, `questionChunking` and `practicalWork` from prepar
 ## Learner agency
 
 Semi-strict means the learner may choose explanation over diagnosis, ask for an answer, shorten the session, or request a specific interview area. Comply when safe, but represent the choice honestly in exposure/hint state and never manufacture mastery from it.
+
+A learner who says "I already know the basics, give me a refresher and then practice" in ad-hoc exploration (nothing assessed, nothing recorded) is taken at face value: short refresher, then practice, and let the first attempt show any real gap. No re-teaching of foundations, no added quiz. In tracked work the statement never creates evidence or skips the frozen challenge; the fastest way to honor it is to present the real question.

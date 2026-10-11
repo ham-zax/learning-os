@@ -1,16 +1,18 @@
 # Reasoning and retrieval playbook
 
-Use this reference only when the current Learning OS-selected episode needs specialized concept construction, retrieval repair, discrimination, transfer, or learner-requested depth. Do not load or execute it merely because the techniques are available.
+Use this reference only when the current Learning OS-selected episode needs specialized concept construction, retrieval repair, discrimination, transfer, or learner-requested depth. Do not load or execute it merely because the techniques are available. The exception is "Read what the last message did" and the "already know the basics" routing row: they apply to any teaching turn, including ad-hoc exploration where Learning OS has selected nothing.
 
 ## Contents
 
 - Invocation rule
 - Fast routing
+- Read what the last message did
 - Cognitive-direction rotation
 - Retrieval-first study
 - Retrieval and brain dump
 - Pattern noticing and guided discovery
 - Confusion-pair discrimination
+- Repair the right thing
 - Prediction and self-verification
 - Boundary tests and thought experiments
 - Prior-knowledge bridges
@@ -39,7 +41,25 @@ Never use a playbook technique to select a new objective, review, transfer, rete
 | Learner remembers the fact but not the reusable sequence | causal chunk | isolated trivia drill |
 | Learner knows pieces but not the whole | increase integration span | adding unrelated difficulty |
 | Learner lacks enough structure to begin | minimal scaffold/worked example | full solution when a smaller cue would work |
+| Learner's message asks something new ("but why does it even need a name?") after understanding the last answer | answer the new question; say in a clause what from before still holds | re-explaining the earlier definition |
+| Learner says they already know the basics (ad-hoc exploration only; nothing assessed or recorded) | short refresher, then practice; let the first attempt show any real gap | re-teaching foundations or adding a quiz |
 | Answer is already sufficient | close | another pedagogical operator |
+
+## Read what the last message did
+
+Before explaining anything, decide what the learner's latest message did. Most wasted turns come from answering the old question.
+
+| The message... | Do this | Not this |
+| --- | --- | --- |
+| asks a new question | Answer the new question. Say in a clause what from before still holds. | Re-explain the earlier answer. |
+| keeps the question but uses a wrong relation | Name that relation, show where it fails on this case, ask for the corrected one. | Re-teach the whole topic. |
+| shows a missing piece (a term, a step, how two things connect) | Supply that piece and nothing else. | A longer lecture or a prettier diagram. |
+| disputes a premise or definition | Check the definition or source with them. | Say the same claim more fluently. |
+| understands but prefers a different choice | Stop explaining. The decision is theirs. | Push until they agree. |
+
+If you cannot tell which one it is, ask one small question whose answers lead to different next moves (for example: "which of these should count equally here?").
+
+This is something to notice, not a step to run on every turn. In an active graded attempt, supplying a piece or showing where a relation fails can reveal target reasoning; record the hint or exposure before showing it, exactly as usual.
 
 ## Cognitive-direction rotation
 
@@ -116,6 +136,16 @@ A and B look similar
 
 Prefer this over asking for two memorized definitions. MCQ can be useful when the distractors encode real competing models rather than trivia, but it is a recognition/discrimination technique, not the default evidence shape for an `explain` objective. When explanation quality is being assessed, require the learner's rationale or explanation rather than treating a choice alone as sufficient explanation evidence.
 
+## Repair the right thing
+
+When an explanation did not land, decide what is missing before changing it:
+
+- a fact or relation is missing -> add that fact. A better diagram or table will not.
+- everything is there but hard to follow -> change the form (labels, order, one table or sketch).
+- the learner needs a nudge -> give a hint (recorded first when an attempt is active) and treat the next answer as assisted.
+
+Say where an example or analogy stops working. Where useful, include one case in which a tempting shortcut gives the right answer by coincidence, so it is not over-generalized.
+
 ## Prediction and self-verification
 
 When decisive output, logs, execution, or metrics are available and clean evidence matters:
@@ -157,7 +187,7 @@ which old heuristic becomes dangerous here?
 what invariant replaces it?
 ```
 
-Validate analogies structurally: map roles, relationships, and invariants, not just terminology. Do not infer prior expertise from confidence or chat familiarity.
+Validate analogies structurally: map roles, relationships, and invariants, not just terminology. Do not infer prior expertise from confidence or chat familiarity. That caution is about evidence. When choosing how to teach in ad-hoc exploration, believe the learner's own statement of what they already know.
 
 ## Progressive integration span
 

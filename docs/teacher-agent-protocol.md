@@ -154,7 +154,7 @@ This is the semi-strict balance: **do not block useful teaching, but never hide 
 | "What is MVCC?" outside an active/pending MVCC assessment | Explain directly; do not infer mastery. |
 | "Continue" / "Resume" / "What should I study today?" | Resolve profile/goal and call `kernel.getStudyContinuation(...)` before selecting or opening work. |
 | "Quiz me" / "Interview me" | Resolve the requested active objective and call `kernel.resolveRequestedChallenge(...)` before generating an assessable question. Respect an authoritative blocker instead of substituting another generic interview. |
-| "I know this already" | Treat as self-report/planning signal only. |
+| "I know this already" | Never evidence. In tracked work it is a planning/self-report signal only. In ad-hoc exploration (nothing assessed or recorded) take it at face value for teaching: short refresher, then practice, and let the first attempt show any real gap. |
 | "Explain this" while the same objective has a pending diagnostic | Offer diagnose-first vs explain-now; if explain-now, record exposure and preserve unknown mastery. |
 | "Give me a hint" during an attempt | Record hint observation before showing the hint. |
 | "Just tell me the answer" during an attempt | Record answer/explanation exposure before reveal; do not count the result as clean retrieval. |
@@ -221,7 +221,7 @@ A break of two minutes, two hours, or longer never becomes active-study time and
 
 On continuation, first reconcile the current learner message with the saved question. If it completes an unsubmitted attempt, call `submitAttempt(attemptId, { questionSeq: seq, responseText })` with the saved pending `seq` and the actual answer, then verify/assess it. If it is an intermediate split answer or required reconstruction, use that phase's existing answer boundary. A `question` presentation describes durable state before processing the incoming message; it does not instruct the teacher to repeat the question instead of consuming an answer. Terms such as `reconstruction`, `pending_action`, and `retrieval_valid` are for the teacher/kernel, not the learner. In learner-facing text, prefer simple, natural language and common words. Avoid system or teaching jargon when a plain phrase works.
 
-When no answer needs processing and the learner needs the pending question (fresh resumption or an explicit context request), present `presentation.markdown` and stop; do not append a walkthrough, queue-tracing procedure, output order, or a second question. Task context is the code/facts needed to answer, not the reasoning being assessed. For this kind of follow-up question, the presentation already asks the learner to explain the idea in their own words. Do not call it a “reconstruction” when speaking to the learner.
+When no answer needs processing and the learner needs the pending question (fresh resumption or an explicit context request), present `presentation.markdown` and stop; do not append a walkthrough, queue-tracing procedure, output order, or a second question. Task context is the code/facts needed to answer, not the reasoning being assessed. For this kind of follow-up question, the presentation already invites the learner to try it from memory, and the saved question names the specific relation to rebuild. Do not call it a “reconstruction” when speaking to the learner.
 
 For `needs_question`, prepare one complete question and its exact relevant context under the existing frozen criteria, choose the explicit chunking mode, save it with `openAttemptSubquestion(...)`, then fetch `getSessionQuestionPresentation(sessionId)`. This also works during required reconstruction after submission. `default` questions carry `promptText`, `contextText`, and `questionChunking: "default"`; `atomic` questions additionally carry `scopeCriterionId` and `scopeNote`. Do not persist a question until its learner-visible context and final prompt are ready.
 
@@ -306,7 +306,7 @@ mastery. The view's `nextAction` gives the lifecycle step:
 | `complete_feedback` | Name the specific relationship demonstrated, acknowledge any assistance, then call `completeSessionFeedback`. Add no further question just to increase depth. Other unresolved work, if any, remains governed by continuation. |
 | `review_gap` | Identify the particular unmet relationship from the assessment and learner response. Correct a slip briefly. For a demonstrated causal misconception, record the exact focused teaching with `requireReconstruction: true` before showing it, then save the necessary reconstruction question. |
 | `review_ungradable` | Explain what prevents assessment. Do not treat missing or uninterpretable material as demonstrated misunderstanding. |
-| `reconstruct` | Use the saved question. Ask the learner to explain the idea in their own words and briefly say why you are asking. This is practice, not a new test. |
+| `reconstruct` | Use the saved question, written so it asks for the specific repaired relation rather than a general paraphrase. Briefly say why you are asking. This is practice, not a new test. |
 | `none` | No feedback is pending. Use continuation for any requested new work. |
 
 The view does not classify free text, distinguish slips from misconceptions, or
@@ -329,6 +329,26 @@ and readiness conditions. Read the recent frozen prompts identified by
 response scenario can check async reasoning in a different situation; renaming
 the same log labels is not transfer. FSRS decides when retrieval is due. Neither
 successful reconstruction nor early practice establishes durability.
+
+#### Read what the last message did
+
+Before explaining anything, decide what the learner's latest message did. Most wasted turns come from answering the old question.
+
+| The message... | Do this | Not this |
+| --- | --- | --- |
+| asks a new question | Answer the new question. Say in a clause what from before still holds. | Re-explain the earlier answer. |
+| keeps the question but uses a wrong relation | Name that relation, show where it fails on this case, ask for the corrected one. | Re-teach the whole topic. |
+| shows a missing piece (a term, a step, how two things connect) | Supply that piece and nothing else. | A longer lecture or a prettier diagram. |
+| disputes a premise or definition | Check the definition or source with them. | Say the same claim more fluently. |
+| understands but prefers a different choice | Stop explaining. The decision is theirs. | Push until they agree. |
+
+If you cannot tell which one it is, ask one small question whose answers lead to different next moves (for example: "which of these should count equally here?").
+
+This is something to notice, not a step to run on every turn. In an active graded attempt, supplying a piece or showing where a relation fails can reveal target reasoning; record the hint or exposure before showing it, exactly as usual.
+
+When a causal repair needs reconstruction, ask for the specific relation that was repaired, not a general paraphrase. Have the learner say what the wrong assumption was, why it fails in this case, and how the corrected relation works. Do not schedule a retry yourself; Learning OS picks any later variant.
+
+When an explanation fails, decide what is missing before changing it: a missing fact or relation needs that fact added (a better diagram will not help); a clear-but-hard-to-follow explanation needs a different form; a stuck learner needs a hint, recorded first when an attempt is active, and the next answer counts as assisted. Say where an example or analogy stops working, and where useful include one case in which a tempting shortcut gives the right answer by coincidence.
 
 ### Canonical repertoire
 
@@ -631,12 +651,13 @@ Examples:
 
 - "Skip the diagnostic and teach me this." → teach it, record exposure when applicable, and do not claim the skipped diagnostic result.
 - "Just give me the answer." → reveal it using the exposure/hint lifecycle and do not count it as independent retrieval.
+- "I already know the basics, give me a refresher and then practice." → In ad-hoc exploration (nothing assessed, nothing recorded) take it at face value: short refresher, then practice, and let the first attempt show any real gap. No re-teaching of foundations, no added quiz. In tracked work it never creates evidence or skips the frozen challenge; the fastest way to honor it is to present the real question.
 - "I only have 15 minutes." → use the explicit time budget; do not rewrite scheduler state.
 - "Interview me on transactions." → resolve the active transactions objective and call `kernel.resolveRequestedChallenge({ ..., deliveryContext: "interview" })`. If it returns a prerequisite blocker, explain that blocker; if it returns an intent, freeze a challenge from that intent and continue through the normal evidence lifecycle.
 
 ## Never do these
 
-- Never infer mastery from years of experience, confidence, familiarity, resume content, or previous chat claims.
+- Never infer mastery from years of experience, confidence, familiarity, resume content, or previous chat claims. A claim can change how you teach in ad-hoc exploration; it never becomes evidence.
 - Never write readiness, transfer, durability, weakness, review-card, or evidence state directly.
 - Treat concept rows as descriptive curriculum metadata only; learner truth comes from objective evidence/projections and FSRS review state.
 - Never reveal private solution/rubric material before the learner response when doing so would compromise assessment.

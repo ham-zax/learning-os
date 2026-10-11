@@ -16,7 +16,7 @@ Add `getSessionQuestionPresentation(sessionId)` and include its result on `getSt
 
 The `purpose` value is for the system, not the learner. Learner-facing Markdown
 uses simple, natural language and common words. For a follow-up after teaching, it says we
-looked at the idea earlier and asks the learner to explain it in their own words.
+looked at the idea earlier and invites the learner to try it from memory. The saved question itself names the specific relation that was repaired instead of asking for a general paraphrase.
 If something is still unclear, the teacher can go over it again. Do not show terms
 such as `reconstruction`, `pending_action`, or `retrieval_valid` to the learner.
 
