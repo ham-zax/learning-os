@@ -30,6 +30,20 @@ The sixteen scenarios cover sufficient success, ambiguous wording, a causal misc
 
 The repository integration test separately exercises selected intent → calibrated authoring → freeze → presentation → database close/reopen → answer → deterministic verification → assessment → evidence. That test checks kernel continuity, not the judgment or wording of an independent model teacher.
 
+## Fresh-agent ad-hoc dialogue probes
+
+The two ad-hoc probes test a changed trigonometry question and a meditation learner who already knows the basics. They are **synthetic prompts**, not private conversation transcripts or managed learner episodes. They test the teacher's conversational response to prior knowledge; they create no learner state or evidence.
+
+```bash
+npm run eval:teacher -- adhoc-cases
+npm run eval:teacher -- adhoc-inspect changed_question /absolute/path/to/fresh-reply.txt
+npm run eval:teacher -- adhoc-inspect knows_basics /absolute/path/to/fresh-reply.txt
+```
+
+For each probe, start a **fresh teacher instance** with the current `skills/learning-os-teacher/SKILL.md` and its required references, provide the exported `priorContext` before the separate `learnerMessage`, and save its **actual learner-facing reply** outside the repository. Do not give the model the `review` criteria before it responds; give those only to the independent reviewer. Keep model name, date, invocation/tool permissions and failures in a separate evaluation receipt; an offline response or an unavailable provider must not be reported as a fresh run. The `adhoc-inspect` output provides reply SHA-256, word count and a human rubric, **not an automated quality score or provenance attestation**. Reviewers read the reply and record an evidence-backed verdict for each criterion. Do not copy raw user transcripts or model output into the committed repository.
+
+These probes supplement, rather than replace, the 16 durable-state teacher episodes above. The ad-hoc cases test wording and pace; the tracked episodes exercise actual public-kernel actions and exposure ordering. Neither kind of test proves delayed independent learning gains. The owner-judged replay in the first-wave checklist is a separate gate and stays open until the owner actually judges the replies.
+
 ## Assessor calibration
 
 Print the answer set without gold labels:

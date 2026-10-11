@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createConcept, createDatabase, createTopic, setGoalObjective } from "../src/db/database.js";
 import { createTeacherKernel } from "../src/teacher.js";
 import { assessorCases, publicAssessorCases, scoreAssessorSubmission } from "../src/evaluation/assessment-calibration.js";
+import { adhocTeacherScenarios, getAdhocTeacherScenario, inspectAdhocTeacherReply } from "../src/evaluation/adhoc-teacher.js";
 import { adviseOnReply, inspectTeacherScenario, prepareTeacherScenario, teacherScenarios } from "../src/evaluation/teacher-scenarios.js";
 import { codingCourseFile } from "../src/knowledge/courses.js";
 import { buildCalibratedPredictionChallenge, findCalibratedPredictionCase,
@@ -34,6 +35,23 @@ function prepare(id: Parameters<typeof prepareTeacherScenario>[0]) {
 }
 
 describe("teacher evaluation scenarios", () => {
+  it("provides two DB-free ad-hoc probes without pretending to grade model text", () => {
+    expect(adhocTeacherScenarios.map((s) => s.id)).toEqual(["changed_question", "knows_basics"]);
+    for (const scenario of adhocTeacherScenarios) {
+      expect(scenario.priorContext.length).toBeGreaterThan(50);
+      expect(scenario.learnerMessage.length).toBeGreaterThan(30);
+      expect(scenario.review.length).toBeGreaterThanOrEqual(3);
+      expect(getAdhocTeacherScenario(scenario.id)).toBe(scenario);
+      const inspected = inspectAdhocTeacherReply(scenario.id, "A concrete reply.\n");
+      expect(inspected).toMatchObject({ scenarioId: scenario.id,
+        evaluationStatus: "human_review_required", wordCount: 3, reviewCriteria: scenario.review });
+      expect(inspected.replySha256).toEqual(createHash("sha256").update("A concrete reply.\n").digest("hex"));
+    }
+    expect(getAdhocTeacherScenario("nonexistent")).toBeNull();
+    expect(() => inspectAdhocTeacherReply("nonexistent", "Hello")).toThrow(/Unknown/);
+    expect(() => inspectAdhocTeacherReply("changed_question", " \n")).toThrow(/empty/);
+    expect(() => inspectAdhocTeacherReply("knows_basics", "x".repeat(65 * 1024))).toThrow(/64 KiB/);
+  });
   it("selects, freezes, presents, resumes, verifies, and assesses one calibrated episode", () => {
     const dir = mkdtempSync(join(tmpdir(), "learning-os-full-episode-"));
     dirs.push(dir);
@@ -105,6 +123,28 @@ describe("teacher evaluation scenarios", () => {
     } finally {
       secondDb.close();
     }
+  });
+
+  it("exports ad-hoc prompts without the reviewer rubric and inspects saved responses without grading", () => {
+    const repo = resolve(fileURLToPath(new URL("..", import.meta.url)));
+    const cli = join(repo, "src", "evaluation", "cli.ts");
+    const tsx = join(repo, "node_modules", ".bin", "tsx");
+    const listed = runSync(tsx, [cli, "adhoc-cases"], { cwd: repo, encoding: "utf8" });
+    const cases = JSON.parse(listed.stdout as string);
+    expect(cases.scenarios.map((item: { id: string }) => item.id))
+      .toEqual(["changed_question", "knows_basics"]);
+    expect(JSON.stringify(cases)).not.toContain("reviewCriteria");
+    expect(cases.scenarios[0]).not.toHaveProperty("review");
+    const dir = mkdtempSync(join(tmpdir(), "learning-os-adhoc-review-test-"));
+    dirs.push(dir);
+    const replyFile = join(dir, "reply.txt");
+    writeFileSync(replyFile, "Brief answer with a usable example.\n");
+    const inspected = runSync(tsx, [cli, "adhoc-inspect", "changed_question", replyFile],
+      { cwd: repo, encoding: "utf8" });
+    const output = JSON.parse(inspected.stdout as string);
+    expect(output).toMatchObject({ scenarioId: "changed_question", evaluationStatus: "human_review_required" });
+    expect(output.reviewCriteria).toHaveLength(4);
+    expect(output.replySha256).toBe(createHash("sha256").update("Brief answer with a usable example.\n").digest("hex"));
   });
 
   it("offers sixteen replayable episodes including blocker, transfer, backend counterexamples and scaffold continuity", () => {

@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, existsSync } from "node:fs";
+import { adhocTeacherScenarios, getAdhocTeacherScenario, inspectAdhocTeacherReply } from "./adhoc-teacher.js";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,7 +17,7 @@ import {
 } from "./teacher-scenarios.js";
 
 function usage(): never {
-  throw new Error("Usage: npm run eval:teacher -- <list | prepare CASE_ID [DIRECTORY] | inspect DIRECTORY [REPLY_FILE] | assessor-cases | grade-assessments FILE | metrics DATABASE GOAL_ID | outcomes MANIFEST [AS_OF]>");
+  throw new Error("Usage: npm run eval:teacher -- <list | prepare CASE_ID [DIRECTORY] | inspect DIRECTORY [REPLY_FILE] | adhoc-cases | adhoc-inspect CASE_ID REPLY_FILE | assessor-cases | grade-assessments FILE | metrics DATABASE GOAL_ID | outcomes MANIFEST [AS_OF]>");
 }
 
 function main(args: string[]): void {
@@ -55,6 +56,17 @@ function main(args: string[]): void {
         flags: adviseOnReply(join(dir, "tutor.db"), manifest.prepared, readFileSync(resolve(extra), "utf8")) } } : {}),
       limitation: "Database checks cannot establish whether the teacher's question was neutral, feedback was accurate, or exposure was shown immediately after recording." }, null, 2));
     if (checks.some((item) => !item.passed)) process.exitCode = 1;
+    return;
+  }
+  if (command === "adhoc-cases" && !value && !extra) {
+    console.log(JSON.stringify({ scenarios: adhocTeacherScenarios.map(({ id, title, priorContext, learnerMessage }) =>
+      ({ id, title, priorContext, learnerMessage })),
+      instructions: "Run each scenario with a fresh teacher and its current Teacher skill. Supply priorContext and learnerMessage as separate context and user turn. Reviewer criteria are intentionally omitted; obtain them with adhoc-inspect. Ad-hoc scenarios use no Learning OS database." }, null, 2));
+    return;
+  }
+  if (command === "adhoc-inspect" && value && extra) {
+    if (!getAdhocTeacherScenario(value)) throw new Error(`Unknown ad-hoc teacher scenario: ${value}`);
+    console.log(JSON.stringify(inspectAdhocTeacherReply(value, readFileSync(resolve(extra), "utf8")), null, 2));
     return;
   }
   if (command === "assessor-cases" && !value) {

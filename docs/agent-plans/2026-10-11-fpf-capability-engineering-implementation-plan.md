@@ -79,7 +79,7 @@ Review *all* material blockers in a single pass: wrong-model truth oracles, fake
 - **Mode:** lightweight orchestration; one sequential writer, two same-agent implementation missions and one independent review. No background sessions launched by writing this plan; the human explicitly launches Claude and GPT-6 chats.
 - **Dependency graph:** `A1 -> A2 -> R1 -> (A3 -> R2 only if blocking) -> integration`. A1 may finish with no code changes if 18 cases are already sound. A2 remains the principal executable improvement. No automatic expansion to the superseded nine-task scope.
 - **Known checkout:** `/home/hamza/repo/learning-os`, non-ARM WebHarness. **Shared receipt root:** `/home/hamza/.cache/agent-work-planner/learning-os-0690cec0fb1a/handoffs/`. Per-mission inbox: append `A1/`, `A2/`, or `R1/`. Each agent creates its own directory if needed and writes one timestamped finish/blocked receipt with frontmatter containing mission, repository, branch/HEAD, validation, blockers and downstream facts. No secrets or personal learner data. The planner verifies Git claims before advancing.
-- **Current frontier:** A1 is ready after reading latest HEAD/tree. A2 is blocked on A1. R1 is blocked on a stable A1+A2 candidate. No agents are known launched merely from this document.
+- **Completion (2026-10-12):** A1 `35f62cc`, A2 `bdedd96`, and A3 repair `365e2fb` are committed; R1 found one replay-provenance defect, and independent R2 passed that repair. `origin/main` was verified at `365e2fb`. The original launch instructions below remain historical, not an active frontier. Owner-judged trigonometry/meditation conversation replays remain outside this engineering gate.
 - **Review gate:** one independent R1 over the combined completed batch, with all material findings in one review. Planner can absorb trivial deterministic metadata repairs only if explicitly authorized; otherwise use A3. No parallel writers in this checkout.
 - **Strategic check:** after A1, ask whether the audit uncovered a higher-impact defect that supersedes the planned debugging content. Replan narrowly if so, otherwise proceed with A2. After R1, only change scope to discharge concrete blockers. Report a Progress Snapshot at each handoff.
 
@@ -89,12 +89,14 @@ Review *all* material blockers in a single pass: wrong-model truth oracles, fake
 
 **At A1 boundary:** Issue the same-chat A2 continuation with the exact pack path, objective, checks and handoff root from above. **At A2 boundary:** Open NEW independent GPT-6 Agent R chat with a read-only R1 assignment, actual commit range, tests and review receipt. R2, if required, goes into the same R chat after the repair batch.
 
-## Completion checklist (unchecked until execution)
+## Completion checklist (verified by the 2026-10-12 review and integration)
 
-- [ ] A1's 18-case/four-pack audit has explicit wrong-model contrasts, runnable oracles and honest verdicts.
-- [ ] A1's first-wave software verification and synthetic replays are recorded without claiming owner/learner results.
-- [ ] Prior-plan checkboxes are reconciled only to observed facts, not assumed completion.
-- [ ] A2's one real debugging scaffold and necessary loader/replay path changes are implemented without wider redesign.
-- [ ] Legacy scaffolds and new content pass authorized isolated verification and package checks.
-- [ ] R1 independent review passes, or exact blocking findings are fixed and passed by R2.
-- [ ] No `data/profiles/**` or protected learner-truth code was changed, and authorized integration state is verified.
+- [x] A1's 18-case/four-pack audit has explicit wrong-model contrasts, runnable oracles and honest verdicts.
+- [x] A1's first-wave software verification and synthetic replays are recorded without claiming owner/learner results.
+- [x] Prior-plan checkboxes are reconciled only to observed facts, not assumed completion.
+- [x] A2's one real debugging scaffold and necessary loader/replay path changes are implemented without wider redesign.
+- [x] Legacy scaffolds and new content pass authorized isolated verification and package checks.
+- [x] R1's exact blocking replay-provenance finding was repaired in A3 and independently passed by R2 (10/10 legacy artifacts; 260 tests).
+- [x] No `data/profiles/**` or protected learner-truth code was changed; `origin/main` integrated at `365e2fb`.
+
+**Separate unresolved outcome:** Owner-judged trigonometry/meditation teaching replays, fresh-agent behavior outside the executable kernel tests and delayed independent learner outcomes have not been established by this engineering checklist.
