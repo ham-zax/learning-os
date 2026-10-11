@@ -136,11 +136,13 @@ Read `src/evaluation/teacher-scenarios.ts` and `src/evaluation/cli.ts` first. If
 
 Larger ideas from `docs/research/pedagogy-priorities.md` (curated progressions for debugging and implementation, tracking help-dependence over time) are worth doing later but are separate work.
 
-## Done checklist
+## Done checklist (A1 reconciliation, 2026-10-11)
 
-- [ ] One skill copy; symlinks resolve; `skills-lock.json` removed.
-- [ ] Playbook, SKILL.md and both protocol copies carry the new rules and the same wording.
-- [ ] Two kernel strings and their two tests updated.
-- [ ] `docs/research/pack-variant-audit.md` written; failing variants fixed; pack tests pass.
-- [ ] Typecheck and full test suite pass.
-- [ ] Trig and meditation replays judged by the owner.
+- [x] One **in-repository** canonical skill copy; `.agents` and `.claude` symlinks resolve to `skills/learning-os-teacher`; `skills-lock.json` absent. Unrelated external skill snapshots are not certified by this repo-level check.
+- [x] Playbook, SKILL.md and both protocol copies carry aligned changed-question, causal-repair and ad-hoc knows-basics directions (inspected current source, not merely inferred from prior commits).
+- [x] Two kernel strings and their corresponding tests carry the intended first-wave edits (inspected current source; tests passed).
+- [x] `docs/research/pack-variant-audit.md` written; **18/18** calibrated sources and **8/8** scaffold check sources match Node execution, **30/30** declared wrong-model contrasts differ, and all six `variant` cases change a decision-bearing condition. No failing variant required repair. Existing pack tests passed.
+- [x] Typecheck and full test suite pass in the selected **non-ARM** WSL checkout (31 files / 239 tests). Also passed `npm run build`, `npm run check:package` (591 files; no learner state/unreviewed sources), and `npm run -s eval:teacher -- list` (16 scenarios).
+- [ ] Trig and meditation replays **judged by the owner**. A1 supplied explicitly hypothetical synthetic dialogue examples in `docs/research/fpf-teacher-replay-audit.md`, not owner judgment. A tool-disabled fresh Claude replay was attempted but blocked by its weekly limit; no model response was observed. This checkbox intentionally remains open.
+
+**Evidence / limitations:** Both A1 audit documents separate actual executable verification from A1-authored illustrative replies. The software suite checks kernel/exposure invariants; neither passing code tests nor synthetic text establishes human learning gains or delayed retention. Independent R1 review remains assigned to a separate agent after A2.
