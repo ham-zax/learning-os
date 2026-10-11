@@ -48,7 +48,8 @@ describe("kernel JSON CLI", () => {
     const result = run("listScaffoldPacks");
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout).map((pack: { packId: string }) => pack.packId)).toEqual([
-      "database-transactions-predict", "js-async-await-predict", "js-promises-predict", "retries-idempotency-predict",
+      "database-transactions-debug", "database-transactions-predict",
+      "js-async-await-predict", "js-promises-predict", "retries-idempotency-predict",
     ]);
   });
 

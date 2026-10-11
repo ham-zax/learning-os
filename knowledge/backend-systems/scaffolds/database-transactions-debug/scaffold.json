@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "title": "Debug capacity accounting across overlapping reservations",
+  "objective": {
+    "conceptId": "database-transactions-and-concurrent-correctness",
+    "capabilityId": "debug",
+    "taskForm": "debugging"
+  },
+  "scopeNote": "Deterministic in-memory Node.js reservation models. Diagnose a stale snapshot with a ledger invariant and a serial control, then investigate a partial fix. These are optional teaching artifacts, distinct from the frozen calibrated prediction cases; no database isolation guarantee or independent evidence is implied.",
+  "stages": {
+    "worked_example": {
+      "material": "worked-example.md",
+      "teacherNotes": "Use the invariant rather than final remaining capacity as the discriminator. Overlap reads both see 4; last stale write masks the first deduction, so 5 booked + 1 remaining differs from 4 available originally. Serial run sees 4 then 2, rejects the second, balances. The fix requires coupling admission and the actual update with a valid concurrency boundary; do not claim the Node example proves any PostgreSQL isolation level."
+    },
+    "completion": {
+      "material": "completion.md",
+      "teacherNotes": "Solution: faulty expression snapshot - quantity yields decisions:[true,true], remaining:3 booked:5, invariant:false. Correct FILL_WRITE = remaining - quantity for this Node script, yielding decisions:[true,true], remaining:1 booked:5, invariant:true. Both calls pass the fresh check: after C removes 2, current remaining 4 still allows D's 3; D must deduct from 4 rather than the original snapshot 6. No await occurs between fresh check and write, so this particular single-threaded Node segment is uninterrupted; an await inserted there reopens the race. For a real database require an atomic conditional update or transactionally protected check/update with verified database semantics. Do not reveal this teacher-only answer before the learner works through the completion."
+    }
+  },
+  "checks": [
+    {
+      "source": "worked-example.mjs",
+      "expectedOutput": [
+        "overlap A saw:4",
+        "overlap B saw:4",
+        "overlap decisions:[true,true]",
+        "overlap remaining:1 booked:5 invariant:false",
+        "serial A saw:4",
+        "serial B saw:2",
+        "serial decisions:[true,false]",
+        "serial remaining:2 booked:2 invariant:true"
+      ]
+    },
+    {
+      "source": "completion-buggy.mjs",
+      "expectedOutput": [
+        "decisions:[true,true]",
+        "remaining:3 booked:5",
+        "invariant:false"
+      ]
+    },
+    {
+      "source": "completion-solution.mjs",
+      "expectedOutput": [
+        "decisions:[true,true]",
+        "remaining:1 booked:5",
+        "invariant:true"
+      ]
+    }
+  ]
+}

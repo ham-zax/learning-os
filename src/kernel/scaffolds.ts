@@ -30,7 +30,7 @@ export function getSessionScaffoldPresentations(db: Database.Database, sessionId
     seq: number; source_ref: string | null; exposure_type: string; teaching_artifact_id: string; content: string;
   }>;
   return rows.filter((row) => row.source_ref &&
-    /^knowledge\/[^/]+\/challenges\/[^/]+\/scaffold\/[a-z0-9-]+\.md$/.test(row.source_ref) &&
+    /^knowledge\/[^/]+\/(?:challenges\/[^/]+\/scaffold|scaffolds\/[^/]+)\/[a-z0-9-]+\.md$/.test(row.source_ref) &&
     ["worked_example_shown", "explanation_shown"].includes(row.exposure_type))
     .map((row) => ({
       sessionId, attemptId: session.active_attempt_id,

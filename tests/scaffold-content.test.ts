@@ -19,6 +19,71 @@ function codeBlock(markdown: string): string {
   return match[1]!;
 }
 
+
+describe("standalone transaction-debug scaffold content", () => {
+  const root = new URL("../knowledge/backend-systems/scaffolds/database-transactions-debug/", import.meta.url);
+  const read = (name: string) => readFileSync(new URL(name, root), "utf8");
+  const manifest = JSON.parse(read("scaffold.json")) as {
+    objective: { conceptId: string; capabilityId: string; taskForm: string };
+    stages: { worked_example: { material: string; teacherNotes: string };
+      completion: { material: string; teacherNotes: string } };
+    checks: Array<{ source: string; expectedOutput: string[] }>;
+  };
+
+  it("verifies real buggy and corrected traces with the same decision-bearing inputs", () => {
+    expect(manifest.objective).toEqual({
+      conceptId: "database-transactions-and-concurrent-correctness",
+      capabilityId: "debug", taskForm: "debugging",
+    });
+    expect(manifest.checks.map((check) => check.source)).toEqual([
+      "worked-example.mjs", "completion-buggy.mjs", "completion-solution.mjs",
+    ]);
+    for (const check of manifest.checks) {
+      const actual = runFile(decodeURIComponent(new URL(check.source, root).pathname));
+      expect(actual).toEqual(check.expectedOutput);
+    }
+    expect(manifest.checks[1]!.expectedOutput).toEqual([
+      "decisions:[true,true]", "remaining:3 booked:5", "invariant:false",
+    ]);
+    expect(manifest.checks[2]!.expectedOutput).toEqual([
+      "decisions:[true,true]", "remaining:1 booked:5", "invariant:true",
+    ]);
+  });
+
+  it("matches the worked walkthrough to executable code and its displayed trace", () => {
+    const material = read(manifest.stages.worked_example.material);
+    const source = codeBlock(material);
+    expect(source.trim()).toBe(read("worked-example.mjs").trim());
+    expect(output(source)).toEqual(manifest.checks[0]!.expectedOutput);
+    expect(material.match(/```text\n([\s\S]*?)\n```/)?.[1]?.split("\n"))
+      .toEqual(manifest.checks[0]!.expectedOutput);
+    expect(material).toContain("Invariant:");
+    expect(material).toContain("serial control");
+  });
+
+  it("keeps the completion fix hidden and verifies both candidate expressions", () => {
+    const material = read(manifest.stages.completion.material);
+    const prompt = codeBlock(material);
+    expect(prompt).toContain("FILL_WRITE");
+    expect(prompt).not.toContain("remaining = remaining - quantity");
+    expect(prompt.replace("FILL_WRITE", "snapshot - quantity").trim())
+      .toBe(read("completion-buggy.mjs").trim());
+    expect(prompt.replace("FILL_WRITE", "remaining - quantity").trim())
+      .toBe(read("completion-solution.mjs").trim());
+    expect(output(prompt.replace("FILL_WRITE", "snapshot - quantity")))
+      .toEqual(manifest.checks[1]!.expectedOutput);
+    expect(output(prompt.replace("FILL_WRITE", "remaining - quantity")))
+      .toEqual(manifest.checks[2]!.expectedOutput);
+    expect(material).toContain("________");
+    for (const stage of [manifest.stages.worked_example, manifest.stages.completion]) {
+      const shown = read(stage.material);
+      expect(shown).not.toContain(stage.teacherNotes);
+      expect(shown).not.toMatch(/Solution:|teacher|answer key/i);
+    }
+    expect(read(manifest.stages.completion.material)).not.toContain("invariant:true");
+  });
+});
+
 describe("curated scaffold content", () => {
   for (const pack of packs) {
     const root = new URL(`../knowledge/${pack.directory}/`, import.meta.url);

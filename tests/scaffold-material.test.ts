@@ -13,6 +13,47 @@ import { runFile } from "./helpers/spawn.js";
 const knowledgeRoot = fileURLToPath(new URL("../knowledge", import.meta.url));
 const packId = "js-async-await-predict";
 const objectiveId = "imported-async-objective";
+const debugPackId = "database-transactions-debug";
+const debugConceptId = "database-transactions-and-concurrent-correctness";
+
+function debugFixture(options: {
+  path?: string; knowledgeRoot?: string; context?: "learn" | "interview" | "mock";
+  mismatch?: "concept" | "capability" | "taskForm";
+} = {}) {
+  const db = createDatabase(options.path ?? ":memory:");
+  const kernel = createTeacherKernel(db, { knowledgeRoot: options.knowledgeRoot ?? knowledgeRoot });
+  createTopic(db, { id: "debug-goal", name: "Synthetic debug goal" });
+  createConcept(db, { id: debugConceptId, topicId: "debug-goal", title: "Transactions" });
+  if (options.mismatch === "concept") {
+    createConcept(db, { id: "other-concurrency", topicId: "debug-goal", title: "Other concurrency" });
+  }
+  const conceptId = options.mismatch === "concept" ? "other-concurrency" : debugConceptId;
+  const capabilityId = options.mismatch === "capability" ? "predict" : "debug";
+  const objective = `${conceptId}:${capabilityId}`;
+  const context = options.context ?? "learn";
+  kernel.createLearningObjective({ id: objective, conceptId, capabilityId });
+  setGoalObjective(db, { goalId: "debug-goal", objectiveId: objective, importance: "core" });
+  kernel.registerChallenge({
+    id: "debug-target", version: 1,
+    publicPrompt: "Investigate the unrelated frozen reservation defect and justify a fix.",
+    taskForm: options.mismatch === "taskForm" ? "runtime_trace" : "debugging",
+    deliveryContext: context,
+    targets: [{ objectiveId: objective, novelty: "same", criterionIds: ["diagnosis"] }],
+    rubric: { id: "debug-rubric", version: 1,
+      criteria: [{ id: "diagnosis", objectiveId: objective, required: true,
+        description: "Localizes the defect, its invariant and a meaningful falsifier." }] },
+    verification: { required: false, basis: "frozen_rubric" },
+  });
+  const sessionId = kernel.createSession("debug-goal", context).id;
+  const attemptId = kernel.openAttempt("debug-target", 1, sessionId).attempt.id;
+  const assessIncorrect = () => {
+    kernel.submitAttempt(attemptId, { responseText: "The model still has a failed invariant." });
+    kernel.recordAssessment(attemptId, { evaluatorType: "agent", assessmentBasis: "frozen_rubric",
+      objectiveResults: [{ objectiveId: objective, result: "incorrect",
+        criteriaMet: [], criteriaUnmet: ["diagnosis"], rationale: "Synthetic gap for scaffold feedback." }] });
+  };
+  return { db, kernel, sessionId, attemptId, objective, assessIncorrect };
+}
 
 function fixture(path = ":memory:", deliveryContext: "learn" | "interview" | "mock" = "learn") {
   const db = createDatabase(path);
@@ -47,13 +88,21 @@ describe("curated scaffold presentation", () => {
   it("discovers optional packs through the workspace and separates teacher answers", () => {
     const workspace = createTeacherWorkspace({ knowledgeRoot });
     expect(workspace.listScaffoldPacks().map((pack) => pack.packId)).toEqual([
-      "database-transactions-predict", "js-async-await-predict", "js-promises-predict", "retries-idempotency-predict",
+      "database-transactions-debug", "database-transactions-predict",
+      "js-async-await-predict", "js-promises-predict", "retries-idempotency-predict",
     ]);
     const material = workspace.getScaffoldMaterial("async-predict", "completion");
     expect(material.packId).toBe(packId);
     expect(material.teacherOnly.notes).toContain("Solution:");
     expect(material.learnerMarkdown).not.toContain(material.teacherOnly.notes);
     expect(material.exposureType).toBe("explanation_shown");
+    const debug = workspace.getScaffoldMaterial(debugPackId, "completion");
+    expect(debug.objective).toEqual({ conceptId: debugConceptId, capabilityId: "debug", taskForm: "debugging" });
+    expect(debug.sourceRef).toBe(
+      "knowledge/backend-systems/scaffolds/database-transactions-debug/completion.md");
+    expect(debug.teacherOnly.notes).toContain("Solution:");
+    expect(debug.learnerMarkdown).not.toContain("remaining - quantity");
+    expect(debug.learnerMarkdown).not.toContain(debug.teacherOnly.notes);
   });
 
   it.each(["js-promises-predict", "database-transactions-predict"])("serves %s with teacher answers separated", (id) => {
@@ -139,6 +188,113 @@ describe("curated scaffold presentation", () => {
       expect(() => kernel.completeSessionFeedback(state.sessionId, {})).toThrow(/reconstruction/);
       expect(db.prepare("SELECT COUNT(*) AS count FROM evidence_events").get()).toEqual({ count: 1 });
     } finally { if (db?.open) db.close(); rmSync(root, { recursive: true, force: true }); }
+  });
+
+
+  it.each(["worked_example", "completion"] as const)(
+    "records standalone debug %s before display without evidence or review scheduling", (stage) => {
+      const state = debugFixture();
+      try {
+        const beforeCards = state.db.prepare("SELECT * FROM review_cards").all();
+        const response = state.kernel.prepareScaffoldPresentation(state.sessionId, { packId: debugPackId, stage });
+        expect(response.sourceRef).toBe(
+          `knowledge/backend-systems/scaffolds/database-transactions-debug/${stage === "worked_example" ? "worked-example" : "completion"}.md`);
+        expect(state.db.prepare("SELECT content FROM teaching_artifacts WHERE id = ?")
+          .get(response.teachingArtifactId)).toEqual({ content: response.markdown });
+        expect(state.db.prepare("SELECT objective_id, exposure_type, source_ref FROM exposure_events").all())
+          .toEqual([{ objective_id: state.objective,
+            exposure_type: stage === "worked_example" ? "worked_example_shown" : "explanation_shown",
+            source_ref: response.sourceRef }]);
+        expect(response).not.toHaveProperty("teacherOnly");
+        expect(response).not.toHaveProperty("expectedOutput");
+        expect(state.db.prepare("SELECT * FROM evidence_events").all()).toEqual([]);
+        expect(state.db.prepare("SELECT * FROM review_cards").all()).toEqual(beforeCards);
+        expect(state.kernel.getSessionScaffoldPresentations(state.sessionId)).toMatchObject([
+          { markdown: response.markdown, sourceRef: response.sourceRef, stage },
+        ]);
+      } finally { state.db.close(); }
+    });
+
+  it.each(["concept", "capability", "taskForm"] as const)(
+    "rejects standalone debug %s mismatch before exposure or artifact storage", (mismatch) => {
+      const state = debugFixture({ mismatch });
+      try {
+        expect(() => state.kernel.prepareScaffoldPresentation(state.sessionId,
+          { packId: debugPackId, stage: "completion" })).toThrow(/Scaffold/);
+        expect(state.db.prepare("SELECT * FROM exposure_events").all()).toEqual([]);
+        expect(state.db.prepare("SELECT * FROM teaching_artifacts").all()).toEqual([]);
+      } finally { state.db.close(); }
+    });
+
+  it.each(["interview", "mock"] as const)(
+    "keeps standalone debug %s instruction feedback-only and supports required reconstruction", (context) => {
+      const state = debugFixture({ context });
+      try {
+        expect(() => state.kernel.prepareScaffoldPresentation(state.sessionId,
+          { packId: debugPackId, stage: "worked_example" })).toThrow(/only during feedback/);
+        expect(state.db.prepare("SELECT * FROM exposure_events").all()).toEqual([]);
+        state.assessIncorrect();
+        const before = state.db.prepare("SELECT retrieval_valid FROM evidence_events").get();
+        const presented = state.kernel.prepareScaffoldPresentation(state.sessionId,
+          { packId: debugPackId, stage: "worked_example", requireReconstruction: true });
+        expect(presented.markdown).toContain("Debug a reservation ledger");
+        expect(state.kernel.resumeSession(state.sessionId).reconstructionRequired).toBe(true);
+        expect(state.db.prepare("SELECT retrieval_valid FROM evidence_events").get()).toEqual(before);
+        expect(() => state.kernel.completeSessionFeedback(state.sessionId)).toThrow(/reconstruction/);
+      } finally { state.db.close(); }
+    });
+
+  it("replays standalone debug bytes from the saved artifact after source mutation and deletion", () => {
+    const root = mkdtempSync(join(tmpdir(), "learning-os-standalone-replay-"));
+    let db: ReturnType<typeof createDatabase> | undefined;
+    try {
+      const curriculumRoot = join(root, "knowledge");
+      const clonedPack = join(curriculumRoot, "backend-systems/scaffolds/database-transactions-debug");
+      cpSync(join(knowledgeRoot, "backend-systems/scaffolds/database-transactions-debug"),
+        clonedPack, { recursive: true });
+      const path = join(root, "tutor.db");
+      const state = debugFixture({ path, knowledgeRoot: curriculumRoot });
+      db = state.db;
+      const response = state.kernel.prepareScaffoldPresentation(state.sessionId,
+        { packId: debugPackId, stage: "completion" });
+      writeFileSync(join(clonedPack, "completion.md"), "CORRUPTED REPLACEMENT");
+      rmSync(clonedPack, { recursive: true, force: true });
+      db.close();
+      db = createDatabase(path);
+      const resumed = createTeacherKernel(db, { knowledgeRoot: join(root, "unavailable") });
+      expect(resumed.getSessionScaffoldPresentations(state.sessionId)).toMatchObject([
+        { markdown: response.markdown, sourceRef: response.sourceRef, stage: "completion",
+          teachingArtifactId: response.teachingArtifactId },
+      ]);
+      expect(resumed.getSessionScaffoldPresentations(state.sessionId)[0]!.markdown)
+        .not.toContain("CORRUPTED REPLACEMENT");
+      expect(db.prepare("SELECT COUNT(*) AS n FROM exposure_events").get()).toEqual({ n: 1 });
+      expect(db.prepare("SELECT COUNT(*) AS n FROM attempts").get()).toEqual({ n: 1 });
+    } finally { if (db?.open) db.close(); rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("rejects invalid standalone manifest paths and duplicate IDs across courses", () => {
+    const root = mkdtempSync(join(tmpdir(), "learning-os-standalone-invalid-"));
+    try {
+      const source = join(knowledgeRoot, "backend-systems/scaffolds/database-transactions-debug");
+      const copy = join(root, "backend-systems/scaffolds/database-transactions-debug");
+      cpSync(source, copy, { recursive: true });
+      const manifestPath = join(copy, "scaffold.json");
+      const original = JSON.parse(readFileSync(manifestPath, "utf8"));
+      for (const mutation of [
+        { ...original, objective: { ...original.objective, capabilityId: "predict" } },
+        { ...original, objective: { ...original.objective, taskForm: "runtime_trace" } },
+        { ...original, stages: { ...original.stages, completion:
+          { ...original.stages.completion, material: "../private.md" } } },
+        { ...original, checks: [{ source: "missing-check.mjs", expectedOutput: ["none"] }] },
+      ]) {
+        writeFileSync(manifestPath, JSON.stringify(mutation));
+        expect(() => listScaffoldPacks(root)).toThrow();
+      }
+      writeFileSync(manifestPath, JSON.stringify(original));
+      cpSync(copy, join(root, "frontend-revision/scaffolds/database-transactions-debug"), { recursive: true });
+      expect(() => listScaffoldPacks(root)).toThrow(/Duplicate scaffold pack ID/);
+    } finally { rmSync(root, { recursive: true, force: true }); }
   });
 
   it("rejects malformed manifests, mismatched objectives and traversal", () => {
