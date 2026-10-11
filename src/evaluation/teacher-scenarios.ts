@@ -65,8 +65,8 @@ export const teacherScenarios: readonly TeacherScenario[] = [
   {
     id: "ambiguous_answer",
     title: "Clarify ambiguous wording",
-    learnerMessage: "Later.",
-    startingPoint: "A question is pending; the learner's new answer has an unclear referent.",
+    learnerMessage: "It happens later.",
+    startingPoint: "A question about which code runs before await is pending; the learner answers that something happens later, but the referent is unclear.",
     review: [
       "Asks one neutral clarification of the same criterion.",
       "Does not supply the async ordering or diagnose a misconception from ambiguous wording.",
@@ -457,7 +457,7 @@ export function inspectTeacherScenario(dbPath: string, prepared: PreparedTeacher
       case "ambiguous_answer":
         return [
           { label: "one follow-up question pending", passed: questions.length === 2 && activeQuestions.length === 1 },
-          { label: "original answer preserved", passed: initial?.response_text === "Later." },
+          { label: "original answer preserved", passed: initial?.response_text === "It happens later." },
           { label: "ambiguity did not create evidence or exposure", passed: evidenceCount === 0 && exposureCount === 0 },
         ];
       case "causal_model_error":

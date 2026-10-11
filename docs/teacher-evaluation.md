@@ -30,6 +30,8 @@ The sixteen scenarios cover sufficient success, ambiguous wording, a causal misc
 
 The repository integration test separately exercises selected intent → calibrated authoring → freeze → presentation → database close/reopen → answer → deterministic verification → assessment → evidence. That test checks kernel continuity, not the judgment or wording of an independent model teacher.
 
+A [four-case fresh-agent, kernel-connected pilot](research/2026-10-12-kernel-connected-teacher-probes.md) exercised actual public-kernel transitions in isolated synthetic databases. Its final cases passed 12/12 database assertions after correcting one ambiguous evaluation prompt and clarifying the resume instruction. It does **not** certify the other twelve scenarios, a provider-wide teacher, or learner retention. In a sandbox where `tsx` cannot open its IPC listener, the already-built `node dist/kernel-cli.js --db /absolute/synthetic/tutor.db METHOD [json-args]` is the same public teacher-kernel surface; use only isolated synthetic databases in evaluator runs.
+
 ## Fresh-agent ad-hoc dialogue probes
 
 The two ad-hoc probes test a changed trigonometry question and a meditation learner who already knows the basics. They are **synthetic prompts**, not private conversation transcripts or managed learner episodes. They test the teacher's conversational response to prior knowledge; they create no learner state or evidence.
