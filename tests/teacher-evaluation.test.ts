@@ -213,6 +213,76 @@ describe("teacher evaluation scenarios", () => {
     expect(inspectTeacherScenario(path, prepared).every((check) => check.passed)).toBe(true);
   });
 
+  it("persists repair exposure and reconstruction question in one final public kernel write", () => {
+    const { path, prepared } = prepare("causal_model_error");
+    const exactRepair = "The async function starts synchronously, prints A, then yields at await; end prints before B resumes.\n\nWhy is A not delayed, and why is B?";
+    const db = createDatabase(path);
+    try {
+      const kernel = createTeacherKernel(db);
+      const events = kernel.recordExposure(prepared.sessionId, {
+        attemptId: prepared.attemptId, objectiveIds: [prepared.objectiveId],
+        exposureType: "corrective_feedback_shown",
+        teachingMaterial: { content: exactRepair },
+        requireReconstruction: true,
+        reconstructionQuestion: {
+          contextText: "The earlier explanation deferred the whole async call.",
+          promptText: "Which part runs before await, and what causes the remainder to run later?",
+          questionChunking: "default",
+        },
+      });
+      expect(events).toHaveLength(1);
+      const saved = db.prepare("SELECT content FROM teaching_artifacts WHERE id = ?")
+        .get(events[0]!.teaching_artifact_id) as { content: string };
+      expect(saved.content).toBe(exactRepair);
+      expect(db.prepare("SELECT COUNT(*) AS n FROM exposure_events").get()).toEqual({ n: 1 });
+      expect(kernel.getSessionQuestionPresentation(prepared.sessionId)).toMatchObject({
+        kind: "question", purpose: "reconstruction",
+        promptText: "Which part runs before await, and what causes the remainder to run later?",
+      });
+    } finally {
+      db.close();
+    }
+    expect(inspectTeacherScenario(path, prepared).every((check) => check.passed)).toBe(true);
+  });
+
+  it("rolls back a reconstruction exposure if its atomic question is invalid", () => {
+    const { path, prepared } = prepare("causal_model_error");
+    const db = createDatabase(path);
+    try {
+      const kernel = createTeacherKernel(db);
+      expect(() => kernel.recordExposure(prepared.sessionId, {
+        attemptId: prepared.attemptId, objectiveIds: [prepared.objectiveId],
+        exposureType: "corrective_feedback_shown",
+        teachingMaterial: { content: "Do not reveal on failure." },
+        requireReconstruction: true,
+        reconstructionQuestion: { contextText: "Context", promptText: " ", questionChunking: "default" },
+      })).toThrow("Subquestion prompt must not be empty");
+      expect(db.prepare("SELECT COUNT(*) AS n FROM exposure_events").get()).toEqual({ n: 0 });
+      expect(db.prepare("SELECT COUNT(*) AS n FROM teaching_artifacts").get()).toEqual({ n: 0 });
+      // The valid question would have been inserted before content validation:
+      // failure must still undo the whole outer transaction/savepoint.
+      expect(() => kernel.recordExposure(prepared.sessionId, {
+        attemptId: prepared.attemptId, objectiveIds: [prepared.objectiveId],
+        exposureType: "corrective_feedback_shown",
+        teachingMaterial: { content: " " }, requireReconstruction: true,
+        reconstructionQuestion: { contextText: "Context", promptText: "Why?", questionChunking: "default" },
+      })).toThrow("Teaching artifact content must not be empty");
+      expect(db.prepare("SELECT COUNT(*) AS n FROM exposure_events").get()).toEqual({ n: 0 });
+      expect(db.prepare("SELECT COUNT(*) AS n FROM attempt_subquestions").get()).toEqual({ n: 0 });
+      expect(kernel.getSessionFeedback(prepared.sessionId).nextAction).toBe("review_gap");
+      expect(kernel.getSessionQuestionPresentation(prepared.sessionId)).toMatchObject({ kind: "not_waiting" });
+      expect(() => kernel.recordExposure(prepared.sessionId, {
+        attemptId: prepared.attemptId, objectiveIds: [prepared.objectiveId],
+        exposureType: "corrective_feedback_shown",
+        teachingMaterial: { content: "No incomplete marker may escape." },
+        reconstructionQuestion: { contextText: "Context", promptText: "Why?", questionChunking: "default" },
+      })).toThrow("Reconstruction question requires reconstruction-required exposure");
+      expect(db.prepare("SELECT COUNT(*) AS n FROM exposure_events").get()).toEqual({ n: 0 });
+    } finally {
+      db.close();
+    }
+  });
+
   it("checks a resumed retry prediction with correct output and faulty reasoning", () => {
     const { path, prepared } = prepare("calibrated_idempotency_model_error");
     const response = teacherScenarios.find((item) => item.id === prepared.id)!.learnerMessage;

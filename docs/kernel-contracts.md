@@ -1047,12 +1047,14 @@ recordExposure(
     objectiveIds: [...],
     exposureType,
     sourceRef?,
-    teachingMaterial: { content, format? }
+    teachingMaterial: { content, format? },
+    requireReconstruction?,
+    reconstructionQuestion?: { promptText, contextText, questionChunking, scopeCriterionId?, scopeNote? }
   }
 )
 ```
 
-Prepare the exact learner-visible material first, then call this immediately before showing it. In one transaction the kernel stores one immutable `teaching_artifact` and links every objective-specific `exposure_event` to it. The kernel assigns `occurred_at` from its own clock. If `attemptId` is present, the kernel validates that the scoped objectives belong to the frozen challenge targets. Set `requireReconstruction: true` only when this answer-bearing feedback is repairing a causal/foundational gap that must remain open for learner reconstruction; the kernel persists that session checkpoint atomically. Post-attempt feedback resets future durability delay without changing retrieval validity of the already-submitted attempt.
+Prepare the exact learner-visible material first, then call this immediately before showing it. In one transaction the kernel stores one immutable `teaching_artifact` and links every objective-specific `exposure_event` to it. The kernel assigns `occurred_at` from its own clock. If `attemptId` is present, the kernel validates that the scoped objectives belong to the frozen challenge targets. Set `requireReconstruction: true` only when this answer-bearing feedback is repairing a causal/foundational gap that must remain open for learner reconstruction. For a **single final pre-display state write**, pass `reconstructionQuestion` alongside `requireReconstruction: true`: the kernel atomically persists the reconstruction checkpoint, pending question, exact teaching artifact, and exposure, or rolls back all of them on error. Call `recordExposure` last, then immediately emit exactly the stored teaching markdown and question without another state-changing operation. Omitting `reconstructionQuestion` retains the historical separate-question API for compatibility, but it requires a second state write after exposure and should not be used for a newly authored learner-visible repair turn. Post-attempt feedback resets future durability delay without changing retrieval validity of the already-submitted attempt.
 
 Old exposure rows may have no teaching artifact. Treat them as proof that an exposure occurred, not proof of the exact wording/content that was shown.
 

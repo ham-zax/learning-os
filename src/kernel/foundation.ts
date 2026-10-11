@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
-import { answerAttemptSubquestion, getAttemptSubquestions } from "./questions.js";
+import { answerAttemptSubquestion, getAttemptSubquestions, openAttemptSubquestion } from "./questions.js";
+import type { OpenAttemptSubquestionInput } from "./questions.js";
 import {
   AttemptSchema,
   CapabilitySchema,
@@ -95,6 +96,8 @@ export interface RecordExposureInput {
   };
   /** Mark answer-bearing causal/foundational repair as requiring reconstruction before closure. */
   requireReconstruction?: boolean;
+  /** Optionally save the reconstruction question atomically with the exposure, so the exposure call is the final state operation before display. */
+  reconstructionQuestion?: OpenAttemptSubquestionInput;
 }
 
 export interface CompleteSessionFeedbackInput {
@@ -939,6 +942,9 @@ export function recordExposure(
   if (input.requireReconstruction && (sessionId === null || input.attemptId === undefined)) {
     throw new Error("Reconstruction-required exposure must identify its session and attempt");
   }
+  if (input.reconstructionQuestion && !input.requireReconstruction) {
+    throw new Error("Reconstruction question requires reconstruction-required exposure");
+  }
 
   return db.transaction(() => {
     const objectiveExists = db.prepare(`SELECT 1 FROM learning_objectives WHERE id = ?`);
@@ -985,6 +991,21 @@ export function recordExposure(
       }
     }
 
+    if (input.requireReconstruction) {
+      const update = db.prepare(
+        `UPDATE sessions SET reconstruction_status = 'required'
+         WHERE id = ? AND phase = 'feedback' AND active_attempt_id = ?`,
+      ).run(sessionId!, input.attemptId!);
+      if (update.changes !== 1) {
+        throw new Error("Could not persist reconstruction requirement for feedback episode");
+      }
+      // Nested transaction/savepoint: an invalid or already-pending question rolls
+      // back the checkpoint and the entire exposure; no partial teaching record.
+      if (input.reconstructionQuestion) {
+        openAttemptSubquestion(db, input.attemptId!, input.reconstructionQuestion);
+      }
+    }
+
     const occurredAt = new Date().toISOString();
     const content = requireNonEmpty(input.teachingMaterial.content, "Teaching artifact content");
     const format = TeachingArtifactFormat.parse(input.teachingMaterial.format ?? "markdown");
@@ -1025,15 +1046,6 @@ export function recordExposure(
         .prepare(`SELECT * FROM exposure_events WHERE seq = ?`)
         .get(Number(info.lastInsertRowid));
       events.push(ExposureEventSchema.parse(row));
-    }
-    if (input.requireReconstruction) {
-      const update = db.prepare(
-        `UPDATE sessions SET reconstruction_status = 'required'
-         WHERE id = ? AND phase = 'feedback' AND active_attempt_id = ?`,
-      ).run(sessionId!, input.attemptId!);
-      if (update.changes !== 1) {
-        throw new Error("Could not persist reconstruction requirement for feedback episode");
-      }
     }
     return events;
   })();
