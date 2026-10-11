@@ -59,13 +59,17 @@ Prefer least-privilege context: use the objective receipt for an objective claim
 
 ## Resolve the repository and learner first
 
+**Pre-teaching gate:** A new agent must complete the repository-local `AGENTS.md` and Teacher skill's **mandatory context preflight before its first instructional response**. In order: verify the user's authoritative workstation/checkout; read the current `AGENTS.md`, `skills/learning-os-teacher/SKILL.md`, this protocol and relevant kernel contracts; establish the public workspace/kernel route; resolve the intended profile/goal and run read-only continuation when profile-bound; inspect the saved episode's relevant question, criteria, feedback, guidance/exposure and reconstruction obligations; only then teach. Keep the active context small and authoritative rather than broadly loading private history or repository files. New agents and restarted conversations must not inherit assumed state from earlier model chat.
+
 For CLI/IDE agents, use the current Git root when it is a Learning OS checkout.
 
-For connected web sessions, prefer the repository/worktree explicitly named by the user. The normal local path is:
+For connected web sessions, use the repository/workstation explicitly named by the user. Otherwise, the canonical connected workstation is **WebHarness ARM**, at:
 
 ```text
-/home/hamza/repo/learning-os
+/home/ubuntu/repo/learning-os
 ```
+
+Do not silently reroute to non-ARM WSL (`/home/hamza/repo/learning-os`); use it only when explicitly requested. Verify the resolved path and Git root before the first kernel invocation.
 
 If repository access is unavailable, the agent may discuss concepts or draft onboarding input, but it must not claim to have opened a profile, selected the next mission, recorded evidence, or persisted learner state.
 

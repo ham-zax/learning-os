@@ -5,16 +5,16 @@
 1. Prefer the current Git root when it is a Learning OS checkout.
 2. Read current `AGENTS.md` and `docs/teacher-agent-protocol.md`.
 3. Prefer current public APIs/CLI over bundled examples.
-4. If the current directory is not Learning OS, try `/home/hamza/repo/learning-os` as the known default only when appropriate; otherwise ask for the repository path.
+4. If the current directory is not Learning OS, prefer the user-named repository. For connected ARM sessions the canonical checkout is `/home/ubuntu/repo/learning-os`; never silently fall back to non-ARM WSL. Verify the chosen Git root before proceeding.
 
 ## Connected web session
 
-The conversation is the learner UI. The agent operates Learning OS through its connected WSL/repository access, consults or mutates durable Learning OS state through public boundaries, and then returns the learner-facing response in chat.
+The conversation is the learner UI. The agent operates Learning OS through its connected repository/workstation access, consults or mutates durable Learning OS state through public boundaries, and then returns the learner-facing response in chat.
 
 1. Prefer the repository/worktree named by the user.
-2. Otherwise use `/home/hamza/repo/learning-os` as the known default path.
-3. Read current repository instructions before learner-facing work.
-4. Use repository state rather than chat memory for profile, mission, progress, and resumption decisions.
+2. Otherwise use WebHarness ARM `/home/ubuntu/repo/learning-os` as the canonical checkout; do not substitute non-ARM `/home/hamza/repo/learning-os` without an explicit user override.
+3. Before teaching, read current `AGENTS.md`, the repository Teacher skill, teacher protocol and relevant kernel contracts, then verify the public kernel route.
+4. Resolve the intended profile/goal, call continuation and inspect relevant frozen attempts, prior exposures and reconstruction obligations before choosing an instructional response. Use this durable state rather than chat memory for profile, mission, progress and resumption decisions.
 5. Do not require or search for a dedicated Learning OS MCP server merely to use Learning OS. MCP/WSL is the agent's bridge to the repository; Learning OS remains the local kernel/CLI and durable state owner.
 6. Do not tell the learner to run routine `npm run tutor -- ...` commands as the primary learning flow unless they explicitly want to operate the CLI. Invoke the kernel/CLI yourself when those are the available execution surfaces.
 

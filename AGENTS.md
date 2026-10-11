@@ -98,6 +98,18 @@ Do not require or design a dedicated Learning OS MCP server for this workflow. M
 
 When an agent is acting as the learner-facing teacher, interviewer, onboarding guide, study coach, or session-resume agent, read and follow `docs/teacher-agent-protocol.md`.
 
+### Required pre-teaching readiness (every new teacher instance)
+
+**Before the first learner-facing instructional question, explanation, hint, feedback, assessment, or study recommendation**, complete the following in order; a fresh agent must not assume prior chat context or a previous agent's setup is still valid:
+
+1. **Verify the authoritative checkout.** Resolve the user's named repository/workstation first (the user-specified canonical checkout outranks example paths), confirm the working directory is a Learning OS Git root and inspect `AGENTS.md` there. Never silently fall back to a different workstation or checkout; if access fails, do not claim kernel-connected teaching.
+2. **Load current operating instructions.** Read the checkout's `skills/learning-os-teacher/SKILL.md`, `docs/teacher-agent-protocol.md`, and the **relevant** parts of `docs/kernel-contracts.md`; follow their authority/order rather than remembered summaries or stale bundled skill copies. Load the one or two matching skill references and selected curriculum/source material when the actual episode calls for them. Do not dump every repo file, hidden solution or unrelated learner history into context.
+3. **Resolve authority and check the public boundary.** Identify whether this is harmless conversation, ad-hoc teaching, pre-profile onboarding, or profile-bound Learning OS work. For profile-bound work, resolve the **intended** profile and goal without guessing, verify the actual public teacher-kernel/CLI surface for this checkout, and perform a read-only state/resumption call before generating assessment-bearing content. Use workspace/onboarding APIs before a profile exists. Do not access another learner's data or write directly to SQLite.
+4. **Load the active episode's actual state.** For an existing learner/goal, call `getStudyContinuation(...)` before ordinary teaching, resumption or next-action selection. Read the returned branch plus relevant preparation context, study focus/preferences, pending question, frozen criteria/challenge, assessment/feedback, reconstruction obligation, and prior hint/scaffold/exposure provenance **as applicable**. Fetch only missing details with the corresponding public read APIs. Reconcile the latest learner message against that saved state **before** teaching or grading; no chat-based parallel learner model.
+5. **Only then teach.** Apply the kernel-selected intent and episode rules, record answer-bearing exposure before display, and never promote ad-hoc learning or change durable curriculum/state without the learner's authorization. Reuse verified repo/skill orientation during the session, but refresh continuation and active state on later learner turns and after interruptions; recheck instructions when the checkout/skill revision changes.
+
+**Exceptions:** A harmless general/product question needs no profile or kernel call. Ad-hoc conceptual learning can remain ephemeral and must not invent a learner DB, goal or assessment. If repository/kernel access is blocked, say which part is unavailable and offer non-authoritative conceptual help rather than pretending the preflight passed. *Context-complete* means authoritative instructions and the **current episode's relevant state**, not loading the whole repository or all private history.
+
 Use the **semi-strict** policy:
 
 - answer ordinary product/help questions and harmless factual clarifications directly;
@@ -111,7 +123,7 @@ Presentation is an agent-owned, capability-aware layer: when it helps explain th
 Environment routing:
 
 - CLI/IDE agents should use the current Learning OS Git root.
-- Connected web sessions should use the user-named repository/worktree; the normal local path is `/home/hamza/repo/learning-os`.
+- Connected web sessions must use the user-named workstation/repository if specified; otherwise the canonical connected Learning OS workstation is **WebHarness ARM**, `/home/ubuntu/repo/learning-os`. Do not silently use non-ARM WSL `/home/hamza/repo/learning-os` unless the user explicitly chooses that environment.
 - If repository access is unavailable, do not claim to have read or changed learner state.
 
 The portable skill source is `skills/learning-os-teacher/`; provider-specific repository wrappers are intentionally not maintained.

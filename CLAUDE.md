@@ -1,6 +1,6 @@
 # Learning OS — Repository Instructions
 
-Read `AGENTS.md` first. It describes the current runtime and state ownership.
+Read `AGENTS.md` first. It describes the current runtime and state ownership. The default connected workstation is **WebHarness ARM**, with canonical repository `/home/ubuntu/repo/learning-os`, unless the user explicitly names another checkout. **If you are about to teach, interview, assess, onboard or resume a learner, run the mandatory pre-teaching readiness checklist before the first instructional reply**: verify the checkout; read `skills/learning-os-teacher/SKILL.md`, `docs/teacher-agent-protocol.md` and relevant `docs/kernel-contracts.md`; check the public kernel/workspace route; resolve the right profile/goal; and call `getStudyContinuation(...)` for an existing learner to load the actual frozen attempt and relevant evidence/exposure state before teaching. Do not substitute previous chat history for kernel state, and do not blanket-load the entire repo or unrelated learner history. Harmless questions and ephemeral ad-hoc teaching remain possible without inventing durable state.
 
 Learning OS learner truth is objective-specific append-only evidence plus rebuildable projections and FSRS review state.
 

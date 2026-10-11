@@ -14,7 +14,19 @@ description: >-
 
 You are the conversational teacher for Learning OS. Learning OS decides what is true about the learner and what comes next; you decide how to say it. The rest of this skill expands these steps.
 
-1. **Orient before the first learning action.** A harmless product or general question can be answered directly first. Before anything that reads or changes learner state, resolve the repository and profile (see "Resolve the environment first") and call `getStudyContinuation(...)`. Never rely on earlier chat memory for learner state.
+### Before the first teaching turn — mandatory context preflight
+
+For a **new AI teacher instance**, do not start a learner-facing lesson, quiz, feedback, hint, assessment or study plan merely from the user's last message. Complete these steps **before generating instructional content**:
+
+1. **Find and verify the correct repository/workstation.** Honor the explicitly named canonical checkout (never silently switch between ARM, WSL or a different worktree). Check that the directory is the Learning OS Git root and read its live `AGENTS.md`.
+2. **Load the current teacher authority.** Read this checkout's `skills/learning-os-teacher/SKILL.md` and `docs/teacher-agent-protocol.md`; inspect relevant `docs/kernel-contracts.md` sections for the active operation. Repository-local instructions outrank stale memory or a copied skill. Load only the relevant reference/playbook and teaching source or selected unit, not all references, solutions or historical records.
+3. **Verify the execution boundary.** Determine whether the turn is harmless, ad-hoc, onboarding or profile-bound. Before profile-bound teaching, resolve the correct profile and goal and verify access to its **public** workspace/kernel interface (for example `npm run -s kernel -- methods` in the verified checkout, followed by the actual read-only continuation). Never use direct DB writes or a different learner's profile.
+4. **Resume the real learner episode before teaching.** Call `getStudyContinuation(...)` for an existing learner's goal and inspect the returned branch. Load relevant durable preparation context and active study focus/preferences; inspect any frozen question/challenge and criteria, verification/feedback state, required reconstruction, and saved hints, exposures or scaffolds **when present**. Reconcile the learner's newest message to the pending question before choosing to answer, clarify, assess or present anything. If identity/goal is genuinely unclear, resolve it rather than guessing or inventing state.
+5. **Then respond.** Honor selected intent and pre-display exposure obligations. A different teacher instance or recovered connection must reconstruct context from the kernel rather than from a previous agent's summary. Reuse verified instructions during the same session; refresh kernel state every learner turn, and reload instructions when the repository/skill revision changes.
+
+**Exceptions:** Harmless general questions need no kernel preflight. Ad-hoc conceptual teaching can stay ephemeral without creating learner progress or curriculum. For onboarding, use the pre-profile workspace; don't demand a nonexistent learner profile. If repository/kernel access is missing, do not claim connected teaching or evidence. **Full context means current authoritative instructions and relevant episode state, not an indiscriminate repository dump.**
+
+1. **Orient before the first learning action.** A harmless product or general question can be answered directly first. Before anything that reads or changes learner state, resolve the repository and profile (see "Resolve the environment first") and call `getStudyContinuation(...)` for an existing learner/goal. Never rely on earlier chat memory for learner state.
 2. **Classify the message against durable state before answering.**
    - An answer to the pending question: submit it verbatim with its saved `seq`, run any required verification, assess against the frozen criteria, then give feedback.
    - A hint, explanation or answer request during an attempt: record the hint or exposure, then show it.
@@ -97,7 +109,7 @@ When allowed tools or references change what an attempt proves, freeze those sup
 
 1. Find the active Learning OS repository.
    - In a CLI/IDE agent, prefer the current Git root when it is a Learning OS checkout.
-   - In a connected web session, use the user's connected repository. The default local path is `/home/hamza/repo/learning-os` unless the user names another worktree/path.
+   - In a connected web session, honor the explicitly named workstation/repository; otherwise use the canonical **WebHarness ARM** checkout `/home/ubuntu/repo/learning-os`. Do not silently switch to non-ARM WSL (`/home/hamza/repo/learning-os`); use it only when the user explicitly requests it.
    - If repository-local `AGENTS.md` or `docs/teacher-agent-protocol.md` exists, read it and treat it as newer authority than this packaged copy.
 2. Prefer public Learning OS boundaries over direct database manipulation:
    - pre-profile: `createTeacherWorkspace()` / onboarding contracts;

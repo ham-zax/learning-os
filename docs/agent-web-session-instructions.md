@@ -1,17 +1,17 @@
 # Agent / web session instructions
 
-How to use Learning OS from a chat session (Claude web, ChatGPT, or any agent) and how to pick up where you left off. The chat is the interface; Learning OS keeps the learner state.
+How to use Learning OS from a chat session (Claude web, ChatGPT, or any agent) and how to pick up where you left off. The chat is the interface; Learning OS keeps the learner state. The default connected workstation for this project is **WebHarness ARM** at `/home/ubuntu/repo/learning-os`, unless the user explicitly names another checkout.
 
 ## What the session needs
 
-Learning OS state is a SQLite profile in this repository (`data/profiles/<profile-id>/tutor.db`). A chat session can only use it if it can read the repository and run shell commands there, for example through a WSL, filesystem or shell connector. No dedicated Learning OS server is required.
+Learning OS state is a SQLite profile in this repository (`data/profiles/<profile-id>/tutor.db`). A chat session can only use it if it can read the authoritative repository and run shell commands there, for example through the connected WebHarness ARM workstation or an expressly selected filesystem/shell connector. No dedicated Learning OS server is required.
 
 Without that access the session can explain concepts, but it cannot select study, record evidence, schedule reviews or truthfully report progress. It should say so rather than pretend.
 
 Smoke test, before you trust a session:
 
 ```bash
-cd ~/repo/learning-os && npm run -s kernel -- methods
+cd /home/ubuntu/repo/learning-os && npm run -s kernel -- methods
 ```
 
 Ask the session to run it and tell you it worked. If it cannot, stop and fix the connection first.
@@ -23,11 +23,11 @@ Privacy: whatever the session reads or prints is visible to the chat provider. L
 Replace the path if your checkout lives elsewhere.
 
 ```text
-Use Learning OS as my durable learning system. Repo: ~/repo/learning-os (WSL).
-Read AGENTS.md, docs/teacher-agent-protocol.md and skills/learning-os-teacher/SKILL.md first.
+Use Learning OS as my durable learning system. Canonical workstation: WebHarness ARM; repository: /home/ubuntu/repo/learning-os unless I explicitly override it.
+Before the first lesson, complete the mandatory pre-teaching readiness checklist in AGENTS.md and the repository's skills/learning-os-teacher/SKILL.md. Read current AGENTS.md, docs/teacher-agent-protocol.md and the relevant kernel contracts. Verify the Git root and public kernel method surface.
 Operate it only through its public kernel: npm run -s kernel -- <method> '<json>'. Never write SQLite directly.
 If I have no learner profile, onboard me around my goal and wait for my confirmation before creating one.
-Otherwise call getStudyContinuation for my goal and continue from the durable state.
+Otherwise resolve the correct profile and goal, call getStudyContinuation, inspect the actual pending question/frozen challenge, guidance/exposure, feedback and reconstruction state as relevant, and only then continue from durable state.
 Use Learning OS for sequencing, evidence, review timing and progress claims. Never infer mastery from chat history.
 One question per message. Keep replies short. Hide internal IDs and labels unless I ask.
 When a visual or interactive teaching aid would clarify the current mechanism, use verified native presentation tools first, then relevant installed skills or authorized connected tools. Pair graphs/diagrams with explanations and text alternatives. Don't scan tools every turn, install integrations, or compromise frozen questions/evidence.
@@ -39,7 +39,7 @@ The skill file is read from the repository each time, so you do not need to inst
 
 ## What a good first turn looks like
 
-1. The session reads the three files and runs the kernel, not a made-up summary.
+1. The session verifies the authoritative workstation/Git checkout, reads the current repository instructions/Teacher skill/relevant kernel contracts and verifies the public kernel, not a made-up summary.
 2. It resolves your profile (`npm run tutor -- profile list` if needed) and calls `getStudyContinuation`.
 3. It does one thing: resume the pending question, ask for your goal if you are new, or recommend the next step and wait for you to accept.
 
@@ -50,7 +50,7 @@ If the first reply is a long study plan with no tool calls, the session is not u
 New day, new chat, or a different model or provider: start a fresh session with the starter prompt, or this shorter one:
 
 ```text
-Continue my Learning OS study. Repo: ~/repo/learning-os. Read AGENTS.md and skills/learning-os-teacher/SKILL.md, then call getStudyContinuation and resume.
+Continue my Learning OS study on WebHarness ARM at /home/ubuntu/repo/learning-os. Complete the AGENTS.md/Teacher skill pre-teaching readiness checklist, verify the public kernel, resolve my profile and goal, load current continuation and active-attempt context, then resume.
 ```
 
 You do not need to paste earlier chat. Pending questions, shown material and unfinished attempts are in durable state. Use one teacher session at a time against the same profile, because two sessions writing at once can conflict.
