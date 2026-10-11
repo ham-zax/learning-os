@@ -70,9 +70,7 @@ standing — its evidence, rationale and review card are already durable — whe
 step open makes the next continuation return that same session with `review_gap`, which obliges
 you to teach what the learner just declined.
 
-Before final submission, an ambiguous answer gets one neutral clarification of
-the same criterion through the subquestion lifecycle. Preserve the actual answer
-and its clarification. A context/wording complaint is not an assessed answer.
+**Distinguish underspecification from a wrong model before doing anything answer-bearing.** A statement like “it runs again” does not say *what* runs, which effect occurs, or the predicted result: save the exact partial response on the pending question using `answerAttemptSubquestion`, open ONE neutral focused follow-up under the same frozen criteria, and stop. Do not run the decisive example, reveal its output/identity rule, assess it, or record corrective exposure yet. Conversely, a learner who provides a complete predicted output **and** a coherent causal explanation has given an assessable answer even when the explanation contradicts the output or code: use `submitAttempt` verbatim, perform required deterministic verification, grade the causal criteria honestly, and use the normal recorded repair/reconstruction path if the wrong model is demonstrated. Do not prolong that fully specified wrong answer with a clarification to avoid grading it. A context/wording complaint is neither a response nor a misconception.
 Read the complete workflow in the repository protocol's “Adapt feedback to the
 actual answer” section, or the portable reference when the repository doc is absent.
 
