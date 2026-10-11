@@ -235,7 +235,7 @@ export function getSessionQuestionPresentation(db: Database.Database, sessionId:
     const question = AttemptSubquestionSchema.parse(latest);
     if (question.response_text !== null) return { kind: "answered", purpose, seq: question.seq };
     const orientation = purpose === "reconstruction"
-      ? "We looked at this earlier. Explain it in your own words. If anything is still unclear, we can go over it again."
+      ? "We looked at this earlier. Try it from memory. If anything is still unclear, say so and we can go over it again."
       : "Here's the question.";
     return {
       kind: "question", purpose, seq: question.seq,

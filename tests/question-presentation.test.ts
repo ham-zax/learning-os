@@ -58,7 +58,7 @@ describe("question presentation", () => {
       seq: replacement.seq, contextText, questionChunking: "atomic",
       scopeCriterionId: "mechanism" });
     expect(before).toMatchObject({
-      markdown: `We looked at this earlier. Explain it in your own words. If anything is still unclear, we can go over it again.\n\n${contextText}\n\nWhy does "end" appear before "B"?`,
+      markdown: `We looked at this earlier. Try it from memory. If anything is still unclear, say so and we can go over it again.\n\n${contextText}\n\nWhy does "end" appear before "B"?`,
     });
     expect(before.markdown).not.toContain("reconstruction");
     expect(JSON.stringify(before)).not.toContain("SOLUTION");
