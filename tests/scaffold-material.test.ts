@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -191,6 +192,145 @@ describe("curated scaffold presentation", () => {
   });
 
 
+  it("does not replay ordinary exposure with a scaffold-shaped source path", () => {
+    const state = debugFixture();
+    try {
+      state.kernel.recordExposure(state.sessionId, {
+        attemptId: state.attemptId, objectiveIds: [state.objective],
+        exposureType: "explanation_shown",
+        sourceRef: "knowledge/backend-systems/scaffolds/unrelated-notes/background.md",
+        teachingMaterial: { content: "Unrelated explanation", format: "markdown" },
+      });
+      expect(state.db.prepare("SELECT COUNT(*) AS n FROM exposure_events").get()).toEqual({ n: 1 });
+      expect(state.kernel.getSessionScaffoldPresentations(state.sessionId)).toEqual([]);
+    } finally { state.db.close(); }
+  });
+
+  it("rejects unrelated content borrowing an exact published legacy stage path", () => {
+    const state = fixture();
+    try {
+      const legacy = getScaffoldMaterial(knowledgeRoot, packId, "completion");
+      state.kernel.recordExposure(state.sessionId, {
+        attemptId: state.attemptId, objectiveIds: [objectiveId],
+        exposureType: "explanation_shown", sourceRef: legacy.sourceRef,
+        teachingMaterial: { content: "This is a different ordinary explanation.", format: "markdown" },
+      });
+      expect(state.kernel.getSessionScaffoldPresentations(state.sessionId)).toEqual([]);
+    } finally { state.db.close(); }
+  });
+
+  it("rejects a tagged scaffold claim whose saved material differs from its fingerprint", () => {
+    const state = debugFixture();
+    try {
+      const legitimate = getScaffoldMaterial(knowledgeRoot, debugPackId, "completion");
+      const checksum = createHash("sha256").update(legitimate.learnerMarkdown).digest("hex");
+      const ref = `scaffold:v1:${debugPackId}:completion:${debugConceptId}:debug:debugging:${checksum}:${legitimate.sourceRef}`;
+      state.kernel.recordExposure(state.sessionId, {
+        attemptId: state.attemptId, objectiveIds: [state.objective],
+        exposureType: "explanation_shown", sourceRef: ref,
+        teachingMaterial: { content: "This is not the tagged lesson.", format: "markdown" },
+      });
+      expect(state.kernel.getSessionScaffoldPresentations(state.sessionId)).toEqual([]);
+    } finally { state.db.close(); }
+  });
+
+  it.each(["worked_example", "completion"] as const)(
+    "replays a pre-v1 attached %s record only with its exact published path", (stage) => {
+      const root = mkdtempSync(join(tmpdir(), "learning-os-legacy-scaffold-"));
+      let db: ReturnType<typeof createDatabase> | undefined;
+      try {
+        const path = join(root, "tutor.db");
+        const state = fixture(path);
+        db = state.db;
+        const historical = getScaffoldMaterial(knowledgeRoot, packId, stage);
+        const originalBytes = historical.learnerMarkdown;
+        state.kernel.recordExposure(state.sessionId, {
+          attemptId: state.attemptId, objectiveIds: [objectiveId],
+          exposureType: historical.exposureType, sourceRef: historical.sourceRef,
+          teachingMaterial: { content: originalBytes, format: "markdown" },
+        });
+        db.close();
+        db = createDatabase(path);
+        const resumed = createTeacherKernel(db, { knowledgeRoot: join(root, "missing-curriculum") });
+        expect(resumed.getSessionScaffoldPresentations(state.sessionId)).toMatchObject([
+          { stage, sourceRef: historical.sourceRef, markdown: originalBytes },
+        ]);
+      } finally { if (db?.open) db.close(); rmSync(root, { recursive: true, force: true }); }
+    });
+
+  it.each(["worked_example", "completion"] as const)(
+    "replays a pre-v1 standalone %s record after curriculum deletion", (stage) => {
+      const root = mkdtempSync(join(tmpdir(), "learning-os-legacy-standalone-"));
+      let db: ReturnType<typeof createDatabase> | undefined;
+      try {
+        const path = join(root, "tutor.db");
+        const state = debugFixture({ path });
+        db = state.db;
+        const historical = getScaffoldMaterial(knowledgeRoot, debugPackId, stage);
+        const originalBytes = historical.learnerMarkdown;
+        state.kernel.recordExposure(state.sessionId, {
+          attemptId: state.attemptId, objectiveIds: [state.objective],
+          exposureType: historical.exposureType, sourceRef: historical.sourceRef,
+          teachingMaterial: { content: originalBytes, format: "markdown" },
+        });
+        db.close();
+        db = createDatabase(path);
+        const resumed = createTeacherKernel(db, { knowledgeRoot: join(root, "missing-curriculum") });
+        expect(resumed.getSessionScaffoldPresentations(state.sessionId)).toMatchObject([
+          { stage, sourceRef: historical.sourceRef, markdown: originalBytes },
+        ]);
+      } finally { if (db?.open) db.close(); rmSync(root, { recursive: true, force: true }); }
+    });
+
+  it("rejects mismatched stage identity, path, objective and unsupported provenance versions", () => {
+    const state = debugFixture();
+    try {
+      const stagePath = "knowledge/backend-systems/scaffolds/database-transactions-debug/completion.md";
+      const content = "Not a valid scaffold";
+      const digest = createHash("sha256").update(content).digest("hex");
+      const prefix = `scaffold:v1:${debugPackId}:completion:${debugConceptId}:debug:debugging:${digest}:`;
+      const forged = [
+        { sourceRef: prefix + stagePath, exposureType: "worked_example_shown" as const },
+        { sourceRef: prefix + stagePath.replace("completion.md", "worked-example.md"),
+          exposureType: "explanation_shown" as const },
+        { sourceRef: prefix.replace(`:${debugPackId}:`, ":unrelated-notes:") + stagePath,
+          exposureType: "explanation_shown" as const },
+        { sourceRef: prefix.replace(`:${debugConceptId}:`, ":unrelated-concept:") + stagePath,
+          exposureType: "explanation_shown" as const },
+        { sourceRef: prefix.replace(":debug:debugging:", ":predict:runtime_trace:") + stagePath,
+          exposureType: "explanation_shown" as const },
+        { sourceRef: (prefix + stagePath).replace("scaffold:v1:", "scaffold:v2:"),
+          exposureType: "explanation_shown" as const },
+        { sourceRef: stagePath.replace("completion.md", "background.md"),
+          exposureType: "explanation_shown" as const },
+        { sourceRef: stagePath, exposureType: "worked_example_shown" as const },
+      ];
+      for (const candidate of forged) {
+        state.kernel.recordExposure(state.sessionId, {
+          attemptId: state.attemptId, objectiveIds: [state.objective],
+          exposureType: candidate.exposureType, sourceRef: candidate.sourceRef,
+          teachingMaterial: { content, format: "markdown" },
+        });
+        expect(state.kernel.getSessionScaffoldPresentations(state.sessionId)).toEqual([]);
+      }
+      expect(state.db.prepare("SELECT COUNT(*) AS n FROM exposure_events").get())
+        .toEqual({ n: forged.length });
+    } finally { state.db.close(); }
+  });
+
+  it("rejects historical debug source paths on a mismatched frozen concept", () => {
+    const state = debugFixture({ mismatch: "concept" });
+    try {
+      state.kernel.recordExposure(state.sessionId, {
+        attemptId: state.attemptId, objectiveIds: [state.objective],
+        exposureType: "explanation_shown",
+        sourceRef: "knowledge/backend-systems/scaffolds/database-transactions-debug/completion.md",
+        teachingMaterial: { content: "Mismatch despite exact legacy source", format: "markdown" },
+      });
+      expect(state.kernel.getSessionScaffoldPresentations(state.sessionId)).toEqual([]);
+    } finally { state.db.close(); }
+  });
+
   it.each(["worked_example", "completion"] as const)(
     "records standalone debug %s before display without evidence or review scheduling", (stage) => {
       const state = debugFixture();
@@ -204,7 +344,7 @@ describe("curated scaffold presentation", () => {
         expect(state.db.prepare("SELECT objective_id, exposure_type, source_ref FROM exposure_events").all())
           .toEqual([{ objective_id: state.objective,
             exposure_type: stage === "worked_example" ? "worked_example_shown" : "explanation_shown",
-            source_ref: response.sourceRef }]);
+            source_ref: `scaffold:v1:${debugPackId}:${stage}:${debugConceptId}:debug:debugging:${createHash("sha256").update(response.markdown).digest("hex")}:${response.sourceRef}` }]);
         expect(response).not.toHaveProperty("teacherOnly");
         expect(response).not.toHaveProperty("expectedOutput");
         expect(state.db.prepare("SELECT * FROM evidence_events").all()).toEqual([]);

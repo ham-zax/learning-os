@@ -376,11 +376,17 @@ function sha256(content: string): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
-function scaffoldExposureRows(db: Database.Database) {
-  return db.prepare(`SELECT exposure.teaching_artifact_id, artifact.content
-    FROM exposure_events exposure JOIN teaching_artifacts artifact ON artifact.id = exposure.teaching_artifact_id
-    WHERE exposure.source_ref LIKE 'knowledge/%/scaffold/%.md' ORDER BY exposure.seq`)
-    .all() as Array<{ teaching_artifact_id: string; content: string }>;
+function scaffoldExposureRows(db: Database.Database, prepared: PreparedTeacherScenario) {
+  // The evaluator knows the exact artifacts returned by prepareScaffoldPresentation.
+  // After feedback closes, active-session replay intentionally returns no material.
+  const expected = new Set(prepared.scaffolds?.map((item) => item.teachingArtifactId) ?? []);
+  if (expected.size === 0) return [];
+  const rows = db.prepare(`SELECT exposure.teaching_artifact_id, artifact.content
+    FROM exposure_events exposure JOIN teaching_artifacts artifact
+      ON artifact.id = exposure.teaching_artifact_id
+    WHERE exposure.session_id = ? AND exposure.attempt_id = ? ORDER BY exposure.seq`)
+    .all(prepared.sessionId, prepared.attemptId) as Array<{ teaching_artifact_id: string; content: string }>;
+  return rows.filter((row) => expected.has(row.teaching_artifact_id));
 }
 
 export function inspectTeacherScenario(dbPath: string, prepared: PreparedTeacherScenario): ScenarioCheck[] {
@@ -498,7 +504,7 @@ export function inspectTeacherScenario(dbPath: string, prepared: PreparedTeacher
       case "scaffold_interrupted_after_presentation":
       case "scaffold_completion_return_to_frozen": {
         const shown = prepared.scaffolds ?? [];
-        const scaffoldExposures = scaffoldExposureRows(db);
+        const scaffoldExposures = scaffoldExposureRows(db, prepared);
         const interrupted = prepared.id === "scaffold_interrupted_after_presentation";
         return [
           { label: "recorded scaffold material preserved exactly",
@@ -531,7 +537,7 @@ export function inspectTeacherScenario(dbPath: string, prepared: PreparedTeacher
             passed: count(db, "review_cards") === (prepared.initialReviewCardCount ?? 0) },
           { label: "closed without bonus question, extra attempt or repeated presentation",
             passed: session.phase === "complete" && questions.length === 1 &&
-              count(db, "attempts") === prepared.initialAttemptCount && scaffoldExposureRows(db).length === 1 &&
+              count(db, "attempts") === prepared.initialAttemptCount && scaffoldExposureRows(db, prepared).length === 1 &&
               exposureCount === prepared.initialExposureCount },
         ];
       }
@@ -584,7 +590,7 @@ export function adviseOnReply(dbPath: string, prepared: PreparedTeacherScenario,
       .map((row) => row.content);
     const recorded = bodies.join(" ").replace(/\s+/g, " ").toLowerCase();
 
-    const scaffoldLines = scaffoldExposureRows(db).flatMap((row) => row.content.split("\n"))
+    const scaffoldLines = scaffoldExposureRows(db, prepared).flatMap((row) => row.content.split("\n"))
       .map((line) => line.trim().toLowerCase()).filter((line) => line.length >= 40);
     const echoed = scaffoldLines.filter((line) => normalized.includes(line.replace(/\s+/g, " ")));
     if (echoed.length >= 2) flags.push({ flag: "recorded_material_echoed", detail: `${echoed.length} long lines of the recorded scaffold appear verbatim` });
