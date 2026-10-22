@@ -35,8 +35,11 @@ function prepare(id: Parameters<typeof prepareTeacherScenario>[0]) {
 }
 
 describe("teacher evaluation scenarios", () => {
-  it("provides two DB-free ad-hoc probes without pretending to grade model text", () => {
-    expect(adhocTeacherScenarios.map((s) => s.id)).toEqual(["changed_question", "knows_basics"]);
+  it("provides DB-free ad-hoc introduction and adaptation probes without pretending to grade model text", () => {
+    expect(adhocTeacherScenarios.map((s) => s.id)).toEqual([
+      "changed_question", "broad_framework_intro", "framework_understood_continue",
+      "framework_confused_checkpoint", "knows_basics",
+    ]);
     for (const scenario of adhocTeacherScenarios) {
       expect(scenario.priorContext.length).toBeGreaterThan(50);
       expect(scenario.learnerMessage.length).toBeGreaterThan(30);
@@ -132,9 +135,11 @@ describe("teacher evaluation scenarios", () => {
     const listed = runSync(tsx, [cli, "adhoc-cases"], { cwd: repo, encoding: "utf8" });
     const cases = JSON.parse(listed.stdout as string);
     expect(cases.scenarios.map((item: { id: string }) => item.id))
-      .toEqual(["changed_question", "knows_basics"]);
+      .toEqual(["changed_question", "broad_framework_intro", "framework_understood_continue",
+        "framework_confused_checkpoint", "knows_basics"]);
     expect(JSON.stringify(cases)).not.toContain("reviewCriteria");
-    expect(cases.scenarios[0]).not.toHaveProperty("review");
+    for (const scenario of cases.scenarios) expect(scenario).not.toHaveProperty("review");
+    expect(cases.scenarios[1].learnerMessage).toMatch(/checkpoints/);
     const dir = mkdtempSync(join(tmpdir(), "learning-os-adhoc-review-test-"));
     dirs.push(dir);
     const replyFile = join(dir, "reply.txt");
@@ -144,6 +149,7 @@ describe("teacher evaluation scenarios", () => {
     const output = JSON.parse(inspected.stdout as string);
     expect(output).toMatchObject({ scenarioId: "changed_question", evaluationStatus: "human_review_required" });
     expect(output.reviewCriteria).toHaveLength(4);
+    expect(inspectAdhocTeacherReply("broad_framework_intro", "One focused teaching response.").reviewCriteria).toHaveLength(6);
     expect(output.replySha256).toBe(createHash("sha256").update("Brief answer with a usable example.\n").digest("hex"));
   });
 

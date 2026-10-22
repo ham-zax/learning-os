@@ -1,10 +1,11 @@
 # Reasoning and retrieval playbook
 
-Use this reference only when the current Learning OS-selected episode needs specialized concept construction, retrieval repair, discrimination, transfer, or learner-requested depth. Do not load or execute it merely because the techniques are available. The exception is "Read what the last message did" and the "already know the basics" routing row: they apply to any teaching turn, including ad-hoc exploration where Learning OS has selected nothing.
+Use this reference when the current Learning OS-selected episode needs specialized concept construction, retrieval repair, discrimination, transfer, or learner-requested depth, **or** when a broad ad-hoc learning request needs concept construction and pacing. Do not load or execute it merely because the techniques are available. "Read what the last message did" and the "already know the basics" routing row apply to any teaching turn, including ad-hoc exploration where Learning OS has selected nothing.
 
 ## Contents
 
 - Invocation rule
+- Broad ad-hoc concept construction
 - Fast routing
 - Read what the last message did
 - Cognitive-direction rotation
@@ -25,7 +26,31 @@ Use this reference only when the current Learning OS-selected episode needs spec
 
 Use at most the smallest technique that resolves the present learning need. Do not chain techniques by default. A correct and sufficient answer normally closes the episode.
 
-Never use a playbook technique to select a new objective, review, transfer, retest, or weakness. Learning OS owns those decisions.
+Never use a playbook technique to select a new tracked objective, review, transfer, retest, or weakness. Learning OS owns those decisions. In ad-hoc exploration, the teacher may choose the next explanatory connection within the learner's request; that is not tracked selection.
+
+## Broad ad-hoc concept construction
+
+Use when a learner asks for a substantial introduction covering multiple related mechanisms without adopting tracked curriculum. The learner's requested scope informs an **ephemeral explanation path**, not a new Learning OS goal, assessment, or review plan.
+
+- **Find the causal backbone:** pick one realistic problem that makes the central mechanism necessary. Relate it to the learner's stated programming or domain knowledge without assuming competence from familiarity. Use the same example as a through-line instead of unrelated definitions.
+- **Build and integrate:** explain the minimum mechanism, then add a few closely connected insights whose relationships the learner can reason about (for example, decision loop → shared state → conditional transition). This is not a concept quota: a narrow gap may need only one relation. Name technical terms once their role is clear. Preserve a conceptual overview when explicitly requested, but defer implementation detail that would obscure the foundation. If the learner asks how to build something, connect the model to a small usable example rather than deferring practical use indefinitely. Verify version-sensitive framework/API details against current authoritative sources before teaching them.
+- **Calibrate density, not arbitrary length:** before adding another concept, ask whether it relies on a relation not yet established. Avoid both an encyclopedia-like first response and one-trivial-fact-per-turn questioning. A diagram, small trace, or worked example should clarify one causal relation, with an accessible explanation.
+- **Invite construction at a meaningful boundary:** when useful and the learner has enough structure, pose one question that asks them to predict behavior, connect two mechanisms, or explain a trade-off. End there; do not append the answer. Direct explanation is appropriate when a cold question would only test unfamiliar terminology or the learner asked to be taught first. An explanation-only request needs no question; “one question” is a ceiling, not a requirement.
+- **Use the response to choose the next *explanatory* move:** correct the actual faulty relation, fill one missing prerequisite, increase integration if they connect the parts, or answer a new question without reheating the old lesson. Respect a request for more substantive novelty or less detail. No claimed mastery, formal score, new objective, future review, or durable learner state follows from this conversational adaptation.
+
+Example: for a graph-based agent framework, show a small `decide → tool → decide/finish` loop; connect node/edge/state to that loop; ask what must survive a pause; only then introduce checkpoint persistence and its limits. This is an illustration of causal sequencing, **not** a prescribed lesson template or a requirement to ask the question verbatim.
+
+### Adapt across turns
+
+Keep only a lightweight conversational thread: what the learner wants, the example already in use, what they actually said, and the unresolved relationship. Do not create a lesson-state file or a proficiency ledger.
+
+- **They connect the parts:** acknowledge the specific connection briefly and, if they ask to continue, advance to the next useful implication using the same example. Do not repeat the introduction or demand a second proof of the same point.
+- **They show a wrong relation:** contrast its predicted behavior with one small counterexample, repair that relation, and invite a retry only if useful. For example, a checkpoint of program state does not by itself establish exactly-once behavior for an external payment; keep the explanation at that boundary rather than restarting graph terminology.
+- **They are unsure or partial:** supply the missing link or a smaller worked example. Do not infer a misconception from “I don't know,” and do not keep guessing with Socratic questions when instruction is needed.
+- **They change direction or pace:** answer the new request and adjust density. Earlier requests for first principles do not override a later request for practice, more depth, or less detail.
+- **They are done:** synthesize the reusable mechanism and its relevant limit if useful, then stop. Conversational success supports the next explanation, not a mastery, retention, or review claim.
+
+These adaptation moves also help teach a kernel-selected tracked episode. There, the frozen criteria, exposure-before-display, reconstruction, and feedback lifecycle still govern; they do not authorize a different objective or a new attempt.
 
 ## Fast routing
 

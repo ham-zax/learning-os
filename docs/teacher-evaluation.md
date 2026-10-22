@@ -36,17 +36,22 @@ A subsequent [B4 multi-turn and crash-recovery pilot](research/2026-10-12-multit
 
 ## Fresh-agent ad-hoc dialogue probes
 
-The two ad-hoc probes test a changed trigonometry question and a meditation learner who already knows the basics. They are **synthetic prompts**, not private conversation transcripts or managed learner episodes. They test the teacher's conversational response to prior knowledge; they create no learner state or evidence.
+The five ad-hoc probes test a changed trigonometry question, a broad technical-framework introduction, two follow-up branches (demonstrated understanding and a specific misconception with an explanation-only request), and a meditation learner who already knows the basics. They are **synthetic prompts**, not private conversation transcripts or managed learner episodes. They test conversational focus, conceptual density/scaffolding, and adaptation; they create no learner state or evidence. The follow-up probes supply a fixed prior context so different teacher versions can face the same situation; they are not a live multi-turn rollout.
 
 ```bash
 npm run eval:teacher -- adhoc-cases
 npm run eval:teacher -- adhoc-inspect changed_question /absolute/path/to/fresh-reply.txt
+npm run eval:teacher -- adhoc-inspect broad_framework_intro /absolute/path/to/fresh-reply.txt
+npm run eval:teacher -- adhoc-inspect framework_understood_continue /absolute/path/to/fresh-reply.txt
+npm run eval:teacher -- adhoc-inspect framework_confused_checkpoint /absolute/path/to/fresh-reply.txt
 npm run eval:teacher -- adhoc-inspect knows_basics /absolute/path/to/fresh-reply.txt
 ```
 
 For each probe, start a **fresh teacher instance** with the current `skills/learning-os-teacher/SKILL.md` and its required references, provide the exported `priorContext` before the separate `learnerMessage`, and save its **actual learner-facing reply** outside the repository. Do not give the model the `review` criteria before it responds; give those only to the independent reviewer. Keep model name, date, invocation/tool permissions and failures in a separate evaluation receipt; an offline response or an unavailable provider must not be reported as a fresh run. The `adhoc-inspect` output provides reply SHA-256, word count and a human rubric, **not an automated quality score or provenance attestation**. Reviewers read the reply and record an evidence-backed verdict for each criterion. Do not copy raw user transcripts or model output into the committed repository.
 
-These probes supplement, rather than replace, the 16 durable-state teacher episodes above. The ad-hoc cases test wording and pace; the tracked episodes exercise actual public-kernel actions and exposure ordering. Neither kind of test proves delayed independent learning gains. The owner-judged replay in the first-wave checklist is a separate gate and stays open until the owner actually judges the replies.
+For an instruction-discovery check, give a repository-connected teacher only the scenario context and learner message, pointing it to the canonical checkout rather than preloading the pedagogical references. Inspect its actual tool trace to verify the mandatory instruction reads and relevant playbook loading before teaching; a reply claiming “I read the skill” is insufficient. Check no learner-state writes were made. Keep this result separate from a reply-quality review with preloaded instructions. For before/after comparisons, hold the scenario, model, permissions and source availability constant. Passing the export/inspection unit tests proves harness behavior only; fresh-teacher compliance and teaching quality still need observed replies and review.
+
+These probes supplement, rather than replace, the 16 durable-state teacher episodes above. The ad-hoc cases test wording, pace and connected concept construction; the tracked episodes exercise actual public-kernel actions and exposure ordering. Neither kind of test proves delayed independent learning gains. The owner-judged replay in the first-wave checklist is a separate gate and stays open until the owner actually judges the replies.
 
 ## Assessor calibration
 

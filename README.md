@@ -33,6 +33,14 @@ Learning OS
 
 The agent is responsible for conversation, explanation style, challenge wording, and qualitative feedback. Learning OS owns durable learner truth, sequencing, evidence, scheduling, and continuation. A different compatible agent can resume from the same repository without needing the old provider conversation.
 
+### Two ways to learn
+
+**Tracked learning** keeps an isolated profile, confirmed goals and objectives, attempts, evidence, and review timing in the local database. The flow is intake → review and confirm a proposal → diagnostics → evidence-driven study. Returning teachers resume unfinished work before selecting the next task. Plans and practical files support this path, but the database is the authoritative learning history.
+
+**Ad-hoc learning** starts with a request such as “Use Learning OS and teach me LangGraph.” The teacher reads the same teaching guidance, builds a temporary path through connected examples and reasoning, and adapts to your replies. It does not need onboarding or create a profile, plan file, progress record, or review schedule. Its continuity comes from the conversation; a fresh conversation without that context cannot recover it from Learning OS. You can explicitly choose tracked learning later; earlier informal answers do not become mastery evidence.
+
+Both paths use the same teaching methods. You do not need to specify the pedagogy each time. See the [teacher skill](skills/learning-os-teacher/SKILL.md#teach-broad-ad-hoc-topics-without-a-shadow-curriculum) for the agent's execution rules.
+
 ### Capability-aware teaching across agents
 
 Agents can now follow a portable presentation playbook: inspect actual native rendering/execution affordances, load relevant installed skills only as needed, consider already-authorized connected tools, and choose a diagram, graph, simulation, executable example or plain-text fallback that best clarifies the current concept. This includes ad-hoc conceptual lessons without creating a curriculum or learner progress. Visual aids never count as mastery or bypass hint/exposure recording for active attempts. See [the design](docs/capability-aware-teaching.md) and [the teacher-skill reference](skills/learning-os-teacher/references/presentation-capabilities.md).

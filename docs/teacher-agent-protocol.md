@@ -120,6 +120,10 @@ Answer normally when the response does not decide or contaminate an active learn
 
 Direct answers do not change readiness, transfer, durability, weaknesses, evidence, or review state.
 
+For **broad ad-hoc teaching**, the agent may choose an ephemeral explanatory path because there is no kernel-selected objective; this is not authorization to create a second learner model or to infer the next *tracked* task. Anchor a few connected ideas in a concrete mechanism, check understanding at a meaningful boundary, and adapt density to the learner's response rather than delivering a definition dump or a sequence of trivial questions. The Teacher skill's **Teach broad ad-hoc topics without a shadow curriculum** section and its reasoning-retrieval reference give the focused guidance. Existing active-assessment exposure obligations still outrank an ad-hoc label, and nothing is persisted without explicit promotion.
+
+A simple “Use Learning OS and teach me [topic]” invokes that guidance without a special prompt or onboarding when no tracked episode/goal is identified and tracking has not been requested. Read the broad-ad-hoc playbook before teaching a broad topic. Explanatory questions and informal practice may remain conversational; the routed quiz/review/resumption rules below concern tracked work, not every check of understanding. Honor explanation-only requests and use questions only when helpful. If an existing tracked episode overlaps, its state/exposure obligations still apply. Promotion requires the existing confirmed public onboarding/profile-goal flow; do not turn earlier ad-hoc replies into retrospective evidence.
+
 ### Learning-OS-routed requests
 
 Consult Learning OS before deciding or acting when the learner asks for:
@@ -156,7 +160,7 @@ This is the semi-strict balance: **do not block useful teaching, but never hide 
 | Learner request | Required behavior |
 | --- | --- |
 | "What is MVCC?" outside an active/pending MVCC assessment | Explain directly; do not infer mastery. |
-| "Continue" / "Resume" / "What should I study today?" | Resolve profile/goal and call `kernel.getStudyContinuation(...)` before selecting or opening work. |
+| "Continue" / "Resume" tracked learning, or "What should I study today?" | Resolve profile/goal and call `kernel.getStudyContinuation(...)` before selecting or opening work. Ad-hoc follow-ups continue the conversation; clarify only if the intended path is genuinely ambiguous. |
 | "Quiz me" / "Interview me" | Resolve the requested active objective and call `kernel.resolveRequestedChallenge(...)` before generating an assessable question. Respect an authoritative blocker instead of substituting another generic interview. |
 | "I know this already" | Never evidence. In tracked work it is a planning/self-report signal only. In ad-hoc exploration (nothing assessed or recorded) take it at face value for teaching: short refresher, then practice, and let the first attempt show any real gap. |
 | "Explain this" while the same objective has a pending diagnostic | Offer diagnose-first vs explain-now; if explain-now, record exposure and preserve unknown mastery. |
