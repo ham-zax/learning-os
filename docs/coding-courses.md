@@ -17,6 +17,8 @@ const sources = workspace.listCourseResources('frontend-revision');
 
 Discovery is read-only and creates no profile or database. Course JSON and Markdown are reusable repository content. Sources have a role, URL and/or local locator. The existing sibling `js/resources.json` and `frontend-framework/resources.json` remain their source registries; no parallel resource database is created. Check `localAvailable` before using a local resource. Follow its official URL or report absence instead of pretending an unavailable file was read.
 
+A resource locator is **curriculum metadata, not evidence of current correctness**: the schema records a role and a URL/local path, with no freshness, version or verification field. Start source lookup from `listCourseResources()` and actual local availability, then treat a version-sensitive fact as unverified until you have inspected the applicable source content — including the installed/resolved version for a project task. Do not infer currency from a filename, download date, registry entry or page copyright year. Procedure: [research grounding](../skills/learning-os-teacher/references/research-grounding.md).
+
 `knowledge/frontend-revision/INDEX.md` recommends the JavaScript/browser core. React, Angular and internals are independent branches, not three mandatory passes through the same idea. `knowledge/backend-systems/INDEX.md` provides seven phases, not seven calendar days. Both packs preserve the existing concept IDs.
 
 ## New learner: existing onboarding, exact scope
