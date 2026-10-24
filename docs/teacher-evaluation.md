@@ -2,6 +2,45 @@
 
 This pilot checks the replaceable teacher layer separately from kernel lifecycle tests. All learner state it creates is synthetic and isolated in a temporary SQLite database. It never opens a managed profile. The evaluator checks durable actions mechanically; a reviewer still checks whether the learner-facing text actually teaches well.
 
+## Optional reply review
+
+When the learner asks for a second review, the agent can invoke:
+
+```bash
+npm run -s eval:teacher -- review-reply /absolute/path/review-input.json
+```
+
+The input has three required text fields:
+
+```json
+{
+  "learnerMessage": "Explain the crash window. No quiz.",
+  "draft": "The proposed reply to review.",
+  "context": "Ad-hoc explanation. A crash window is the gap between the external charge and checkpoint write. The learner knows what a checkpoint saves. No tracked episode is active."
+}
+```
+
+The agent supplies only relevant context: learner knowledge, unfamiliar term
+definitions, actual pending obligations, and source excerpts with their version
+when a claim needs them. Use current public kernel reads for tracked context.
+The reviewer reads no learner database and fetches no source files itself.
+
+The command sends the selected text to Jev using `TYPESAFE_API_KEY` or
+`JEV_API_KEY`. An installed key does not authorize sending unrelated private
+data. Keep the temporary input outside the repository. No review runs during
+ordinary teaching unless requested.
+
+One request checks request fit, clarity, and evidence support. Each judgment is
+`concern`, `no_concern`, `uncertain`, or `not_applicable`, with model-reported
+confidence when available. Missing or malformed judgments stay uncertain.
+The agent checks the findings against the supplied text and explains any useful
+changes. Jev does not generate explanations or certify correctness.
+
+Input is limited to 64 KiB and 20,000 characters per field. The request has a
+15-second deadline and no retries. Exit 0 means all three judgments were read,
+including concerns or uncertainty. Exit 1 means invalid input or incomplete or
+unavailable review. The report never approves delivery or changes learner state.
+
 ## Episode scenarios
 
 List cases:

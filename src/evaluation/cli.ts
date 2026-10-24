@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, existsSync, openSync, readSync, closeSync } from "node:fs";
 import { adhocTeacherScenarios, getAdhocTeacherScenario, inspectAdhocTeacherReply } from "./adhoc-teacher.js";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { publicAssessorCases, scoreAssessorSubmission } from "./assessment-calibration.js";
 import { summarizeDogfoodMetrics } from "./dogfood-metrics.js";
+import { MAX_REVIEW_INPUT_BYTES, reviewTeacherReply } from "./jev-review.js";
 import { loadOutcomeManifest, summarizeLearningOutcomes } from "./learning-outcomes.js";
 import {
   adviseOnReply,
@@ -17,11 +18,32 @@ import {
 } from "./teacher-scenarios.js";
 
 function usage(): never {
-  throw new Error("Usage: npm run eval:teacher -- <list | prepare CASE_ID [DIRECTORY] | inspect DIRECTORY [REPLY_FILE] | adhoc-cases | adhoc-inspect CASE_ID REPLY_FILE | assessor-cases | grade-assessments FILE | metrics DATABASE GOAL_ID | outcomes MANIFEST [AS_OF]>");
+  throw new Error("Usage: npm run eval:teacher -- <list | prepare CASE_ID [DIRECTORY] | inspect DIRECTORY [REPLY_FILE] | adhoc-cases | adhoc-inspect CASE_ID REPLY_FILE | assessor-cases | grade-assessments FILE | metrics DATABASE GOAL_ID | outcomes MANIFEST [AS_OF] | review-reply FILE>");
 }
 
-function main(args: string[]): void {
+async function main(args: string[]): Promise<void> {
   const [command, value, extra] = args;
+  if (command === "review-reply" && value && args.length === 2) {
+    const fd = openSync(resolve(value), "r");
+    let input: unknown;
+    try {
+      const buffer = Buffer.alloc(MAX_REVIEW_INPUT_BYTES + 1);
+      let length = 0;
+      while (length < buffer.length) {
+        const count = readSync(fd, buffer, length, buffer.length - length, null);
+        if (count === 0) break;
+        length += count;
+      }
+      if (length > MAX_REVIEW_INPUT_BYTES) throw new Error("Review input exceeds 64 KiB.");
+      input = JSON.parse(buffer.toString("utf8", 0, length)) as unknown;
+    } finally {
+      closeSync(fd);
+    }
+    const report = await reviewTeacherReply(input);
+    console.log(JSON.stringify(report, null, 2));
+    if (report.status !== "reviewed") process.exitCode = 1;
+    return;
+  }
   if (command === "list" && !value) {
     for (const scenario of teacherScenarios) console.log(`${scenario.id}\t${scenario.title}`);
     return;
@@ -102,9 +124,7 @@ function main(args: string[]): void {
   usage();
 }
 
-try {
-  main(process.argv.slice(2));
-} catch (error) {
+main(process.argv.slice(2)).catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
-}
+});
