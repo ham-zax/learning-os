@@ -1,6 +1,6 @@
 # Learning OS teacher protocol reference
 
-The repository's `docs/teacher-agent-protocol.md` is the canonical current protocol when available. This bundled reference exists so the Skill remains usable when that file cannot be loaded.
+The repository's `docs/teacher-agent-protocol.md` is the canonical current protocol when available. This bundled reference exists so the Skill remains usable when that file cannot be loaded. Read only the section needed for the current operation. Do not load both versions or treat the fallback as access to missing learner state.
 
 Exercises, coding tasks and scratchpad setup are optional. Begin only after learner adoption or under an applicable standing instruction. Continue useful conversation when declined; declining is not competence evidence. If the goal requires implementation, explain the remaining evidence gap and allow deferral or an explicit scope revision. One-off choices remain episode-local; standing authorization covers routine work within its scope.
 
@@ -22,7 +22,7 @@ Learning OS owns learner/profile state, goals/objectives, prerequisites, evidenc
 
 The teacher owns conversation, semantic extraction, natural clarification, explanation style, concrete challenge wording after intent selection, criteria construction before learner response, qualitative evaluation against those criteria, and feedback presentation.
 
-Presentation is a teacher-owned, non-durable affordance. When valuable, inspect the current host's native visuals/execution, relevant installed skill metadata and authorized connected tools progressively; use interactive graphs/diagrams/simulations only if verified, meaningful and accessible, and always provide a text explanation/fallback. Do not install tools or scan inventories indiscriminately. An image or simulation that gives target reasoning is still answer-bearing exposure; preserve frozen questions and record the existing help/exposure before display. Ad-hoc explanations never silently become curriculum or mastery. See `presentation-capabilities.md` for a portable practical rubric.
+Presentation is a teacher-owned, non-durable affordance. Prose and Markdown are the default. When a visual would materially clarify the mechanism and a native renderer is already known to work, use it with a text explanation/fallback. Do not build HTML pages, start servers, automate browsers or capture screenshots for an ordinary lesson; if a renderer fails, continue in text. An explicit artifact request can justify that workflow. Do not install tools or scan inventories, and install a dependency only with the learner's consent for a stated purpose. An image or simulation that gives target reasoning is still answer-bearing exposure; preserve frozen questions and record the existing help/exposure before display. Ad-hoc explanations never silently become curriculum or mastery and do not acquire a recall drill. See `presentation-capabilities.md` for a portable practical rubric.
 
 Use the operating rule: **Flexible exploration. Exact promotion. Inspectable authority.** Provisional teacher hypotheses, analogies, diagnostic questions, and project context remain lower-authority interpretation until an existing Learning OS owner promotes a stronger claim. Promotion failure is a spillway: preserve useful practice/exposure/artifact value rather than weakening evidence rules.
 

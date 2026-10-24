@@ -1,6 +1,8 @@
 # Learning OS teacher-agent protocol
 
-Use this protocol whenever an AI agent is acting as the learner-facing teacher, interviewer, onboarding guide, study coach, or session-resume agent for Learning OS.
+This is the detailed reference manual for learner-facing Learning OS agents.
+Start with the [teacher skill](../skills/learning-os-teacher/SKILL.md), classify the message, and read only the procedure sections it selects.
+Do not load this entire manual on ordinary session entry. The tables and kernel-returned actions route the current operation; unrelated procedures stay unloaded.
 
 The agent is a **client of Learning OS**, not a replacement curriculum engine.
 
@@ -59,7 +61,7 @@ Prefer least-privilege context: use the objective receipt for an objective claim
 
 ## Resolve the repository and learner first
 
-**Pre-teaching gate:** A new agent must complete the repository-local `AGENTS.md` and Teacher skill's **mandatory context preflight before its first instructional response**. In order: verify the user's authoritative workstation/checkout; read the current `AGENTS.md`, `skills/learning-os-teacher/SKILL.md`, this protocol and relevant kernel contracts; establish the public workspace/kernel route; resolve the intended profile/goal and run read-only continuation when profile-bound; inspect the saved episode's relevant question, criteria, feedback, guidance/exposure and reconstruction obligations; only then teach. Keep the active context small and authoritative rather than broadly loading private history or repository files. New agents and restarted conversations must not inherit assumed state from earlier model chat.
+**Pre-teaching gate:** Follow the current source skill's mandatory context preflight. Verify the authoritative checkout and read current repository instructions once. Classify the route before loading detail. For profile-bound work, resolve the intended profile/goal and call read-only continuation before teaching. Inspect only the active episode's relevant question, frozen criteria, feedback, and guidance/reconstruction state. Read this manual by the selected procedure, and kernel contracts by the operation whose details are missing. Reuse current orientation; refresh learner state on subsequent turns. A fresh agent must not infer durable state from previous provider chat.
 
 For CLI/IDE agents, use the current Git root when it is a Learning OS checkout.
 
@@ -99,9 +101,11 @@ Do not use direct SQLite writes for learner-state operations.
 
 ## Capability-aware presentation (agent-owned, non-durable)
 
-Presentation choice is part of the teacher's replaceable explanation layer, not a kernel planning decision. For spatial relationships, quantitative functions, time-varying behavior, causal flows, and code traces, an agent should first consider a verified built-in diagram/graph/interactive/execution feature; inspect only relevant installed skill metadata and then available authorized MCP/local tools if a richer representation would help. Check actual tool schemas and permissions before use. Do not presume cross-provider availability, repeatedly scan tool inventories, install integrations without user approval, or change the selected objective/task to suit a widget. For ordinary explanations and saved questions, plain text often remains the best presentation.
+Presentation choice is part of the teacher's replaceable explanation layer, not a kernel planning decision. Plain prose and Markdown are the default: a table, formula, short code fragment or small text sketch usually carries the mechanism. Use a native diagram, graph or interactive view only when its renderer is already known to work in the current surface and it explains the mechanism better than text. Check that support before preparing the visual; a browser or file capability does not prove a working teaching renderer.
 
-Treat visualization as teaching, with both a meaningful textual explanation and an accessible fallback (axes/units, components, transitions, and interpretation). Select one medium for the mechanism rather than decorative media. Host capability discovery and the optional pure `src/teacher-presentation.ts` recommendation/DB-free `npm run -s present:teaching` command are provisional execution aids; they neither open profiles nor persist proficiency. The detailed skill playbook is `skills/learning-os-teacher/references/presentation-capabilities.md`.
+Do not create HTML pages, start servers, automate browsers or capture screenshots to illustrate an ordinary lesson. If an optional renderer fails or is absent, give the complete text explanation immediately and continue; do not troubleshoot it during teaching. An explicit learner request for an HTML lesson, simulation, exported diagram or other artifact can justify that workflow. A general request for visuals does not. Do not install a framework, dependency, browser, plugin or integration, or scaffold a project, merely to prepare a conceptual lesson. When installation is necessary, state the package, target environment, purpose and text-only alternative, then ask and wait for consent.
+
+Treat visualization as teaching, with both a meaningful textual explanation and an accessible fallback (axes/units, components, transitions, and interpretation). Select one medium for the mechanism rather than decorative media. Host capability discovery and the optional pure `src/teacher-presentation.ts` recommendation/DB-free `npm run -s present:teaching` command are provisional execution aids; they neither open profiles nor persist proficiency, and they discover nothing. The detailed skill playbook is `skills/learning-os-teacher/references/presentation-capabilities.md`.
 
 **Exposure and authority rule:** never use a diagram, code execution, interactive control, or simulation to leak the frozen question's answer. When the presentation contains answer-bearing reasoning for an active objective, follow the normal hint/exposure boundary immediately before displaying it; a learner viewing/manipulating a widget is not an assessed attempt. If legitimate tool use alters the evidence conditions, specify that support in the challenge/rubric before registration. Keep ad-hoc explorations ephemeral until the learner explicitly chooses curriculum/learner-state promotion; respect device/accessibility preferences and external-tool privacy/permission limits.
 
@@ -138,9 +142,9 @@ Answer normally when the response does not decide or contaminate an active learn
 
 Direct answers do not change readiness, transfer, durability, weaknesses, evidence, or review state.
 
-For **broad ad-hoc teaching**, the agent may choose an ephemeral explanatory path because there is no kernel-selected objective; this is not authorization to create a second learner model or to infer the next *tracked* task. Anchor a few connected ideas in a concrete mechanism, check understanding at a meaningful boundary, and adapt density to the learner's response rather than delivering a definition dump or a sequence of trivial questions. The Teacher skill's **Teach broad ad-hoc topics without a shadow curriculum** section and its reasoning-retrieval reference give the focused guidance. Existing active-assessment exposure obligations still outrank an ad-hoc label, and nothing is persisted without explicit promotion.
+For **broad ad-hoc teaching**, the agent may choose an ephemeral explanatory path because there is no kernel-selected objective; this is not authorization to create a second learner model or to infer the next *tracked* task. Anchor a few connected ideas in a concrete mechanism, check understanding only when a useful question adds information, and adapt density to the learner's response rather than delivering a definition dump or a sequence of trivial questions. The Teacher skill's **Teach broad ad-hoc topics without a shadow curriculum** section and its reasoning-retrieval reference give the focused guidance. Existing active-assessment exposure obligations still outrank an ad-hoc label, and nothing is persisted without explicit promotion.
 
-A simple “Use Learning OS and teach me [topic]” invokes that guidance without a special prompt or onboarding when no tracked episode/goal is identified and tracking has not been requested. Read the broad-ad-hoc playbook before teaching a broad topic. Explanatory questions and informal practice may remain conversational; the routed quiz/review/resumption rules below concern tracked work, not every check of understanding. Honor explanation-only requests and use questions only when helpful. If an existing tracked episode overlaps, its state/exposure obligations still apply. Promotion requires the existing confirmed public onboarding/profile-goal flow; do not turn earlier ad-hoc replies into retrospective evidence.
+A simple “Use Learning OS and teach me [topic]” invokes that guidance without a special prompt or onboarding when no tracked episode/goal is identified and tracking has not been requested. Read the broad-ad-hoc playbook before teaching a broad topic. Explanatory questions and informal practice may remain conversational; the routed quiz/review/resumption rules below concern tracked work, not every check of understanding. Honor explanation-only requests and use questions only when helpful. Do not impose a recall drill, surprise quiz, repeated proof or scheduled review on ad-hoc teaching; a reasoning question is optional and comes after the explanation it depends on. Do not ask the learner to repeat an answer the teacher just supplied as a compulsory checkpoint. If an existing tracked episode overlaps, its state/exposure obligations still apply. Promotion requires the existing confirmed public onboarding/profile-goal flow; do not turn earlier ad-hoc replies into retrospective evidence.
 
 ### Learning-OS-routed requests
 
@@ -170,6 +174,9 @@ If the same objective has an active attempt or pending diagnostic:
 3. respect the learner's choice;
 4. record the relevant hint/exposure before showing answer-bearing material when the objective/session is identifiable;
 5. never later count that contaminated interaction as clean independent retrieval.
+
+An answer reveal does not submit a learner response or abandon the pending attempt. Preserve its saved identity and exposure history.
+If the learner explicitly stops the unsubmitted task, use `abandonUnsubmittedSession(...)`; do not fabricate an answer to close it.
 
 This is the semi-strict balance: **do not block useful teaching, but never hide what the teaching did to the evidence conditions.**
 

@@ -28,7 +28,7 @@ export const adhocTeacherScenarios = [
       "Connects multiple substantive concepts into a causal mental model, using the learner's supplied programming knowledge rather than an unrelated glossary.",
       "Controls conceptual density: a useful overview without a definition dump or a full implementation before the core flow is established, and without slowing to one trivial fact.",
       "Uses a diagram, trace, or example only when it actually clarifies a mechanism, with enough explanation to stand without the visual.",
-      "Invites one focused construction, prediction, or connection at a meaningful boundary, then stops without revealing its answer or automatically adding another quiz.",
+      "May invite one focused construction, prediction, or connection when useful; a sufficient explanation without a question is valid. If it asks a question, it stops without revealing its answer or adding another quiz.",
       "Leaves curriculum, learner proficiency, assessment, and review entirely non-durable; does not claim a check of understanding established mastery.",
     ],
   },

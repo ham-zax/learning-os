@@ -20,6 +20,8 @@ Do **not** research by default: a stable conceptual explanation (indexes, event 
 
 Stable concepts can still be taught with a version-sensitive example. Verify the example's API; do not convert the whole explanation into a version survey.
 
+Research is source checking, not installation or environment setup. Reading documentation does not authorize installing the package, creating a virtual environment, or scaffolding a project. If a runnable example needs a missing dependency, treat that as a separate installation decision: state the package, target environment, purpose, and text-only alternative, then ask and wait for consent.
+
 ## Sequence
 
 ```text
@@ -32,7 +34,7 @@ tracked-state resolution / ad-hoc classification
 → reuse while applicable; refresh on trigger
 ```
 
-This step sits **after** episode readiness: continuation, pending question, frozen criteria, and support conditions are known first. Research never precedes or overrides them.
+This step sits **after** episode readiness: continuation, pending question, frozen criteria, and support conditions are known first. It checks claims. It does not include package installation, project scaffolding, or environment creation.
 
 ## Resolve the target version
 
@@ -80,7 +82,7 @@ Use what the host actually offers, in this order: native search/fetch/browser to
 
 Retrieving a known official page directly is sufficient. Search is a discovery method, not a required ceremony, and one good source beats five redundant ones.
 
-Do not scan the whole environment each turn, install or enable anything, assume another provider's tool exists, or hardcode a mandatory provider. If a needed capability is unavailable, follow the offline rules below.
+Do not scan the whole environment each turn, install or enable anything, assume another provider's tool exists, or hardcode a mandatory provider. If a needed capability is unavailable, follow the offline rules below. Never install a package, create a virtual environment, or scaffold a project to check a source.
 
 ## Keep provenance small
 

@@ -24,7 +24,7 @@ Replace the path if your checkout lives elsewhere.
 
 ```text
 Use Learning OS as my durable learning system. Canonical workstation: WebHarness ARM; repository: /home/ubuntu/repo/learning-os unless I explicitly override it.
-Before the first lesson, complete the mandatory pre-teaching readiness checklist in AGENTS.md and the repository's skills/learning-os-teacher/SKILL.md. Read current AGENTS.md, docs/teacher-agent-protocol.md and the relevant kernel contracts. Verify the Git root and public kernel method surface.
+Before the first lesson, verify the Git root and read current AGENTS.md and skills/learning-os-teacher/SKILL.md. Use the skill's route tables to load only the active procedure sections. Do not read the full protocol or kernel contracts by default. Verify the public kernel boundary before profile-bound teaching.
 Operate it only through its public kernel: npm run -s kernel -- <method> '<json>'. Never write SQLite directly.
 If I have no learner profile, onboard me around my goal and wait for my confirmation before creating one.
 Otherwise resolve the correct profile and goal, call getStudyContinuation, inspect the actual pending question/frozen challenge, guidance/exposure, feedback and reconstruction state as relevant, and only then continue from durable state.
@@ -35,7 +35,7 @@ If I decline more instruction, close that step instead of leaving it open.
 If you cannot reach the repo, say so and do not claim any progress.
 ```
 
-The skill file is read from the repository each time, so you do not need to install a copy. A separately installed copy can drift from the repository; if you install one anyway, the repository's `AGENTS.md` and `docs/teacher-agent-protocol.md` still take precedence.
+At each new teacher instance, use the source skill from the repository, so you do not need to install a copy. Reuse it within the session until its revision or the connection changes. A separately installed copy can drift; current repository instructions still take precedence.
 
 ## What a good first turn looks like
 

@@ -26,6 +26,8 @@ Use this reference when the current Learning OS-selected episode needs specializ
 
 Use at most the smallest technique that resolves the present learning need. Do not chain techniques by default. A correct and sufficient answer normally closes the episode.
 
+Retrieval-first techniques in this reference assume selected tracked work or practice the learner adopted. They are not the default for ad-hoc explanation. In ad-hoc teaching, explain first when explanation is what the learner needs, and ask a question only when it serves that explanation.
+
 Never use a playbook technique to select a new tracked objective, review, transfer, retest, or weakness. Learning OS owns those decisions. In ad-hoc exploration, the teacher may choose the next explanatory connection within the learner's request; that is not tracked selection.
 
 ## Broad ad-hoc concept construction
@@ -34,8 +36,9 @@ Use when a learner asks for a substantial introduction covering multiple related
 
 - **Find the causal backbone:** pick one realistic problem that makes the central mechanism necessary. Relate it to the learner's stated programming or domain knowledge without assuming competence from familiarity. Use the same example as a through-line instead of unrelated definitions.
 - **Build and integrate:** explain the minimum mechanism, then add a few closely connected insights whose relationships the learner can reason about (for example, decision loop → shared state → conditional transition). This is not a concept quota: a narrow gap may need only one relation. Name technical terms once their role is clear. Preserve a conceptual overview when explicitly requested, but defer implementation detail that would obscure the foundation. If the learner asks how to build something, connect the model to a small usable example rather than deferring practical use indefinitely. Verify version-sensitive framework/API details against current authoritative sources before teaching them.
+- **Keep preparation proportional:** use only the sources, execution, and representation needed for the next explanation. Do not install a framework, create a project, or build a visual pipeline to introduce a concept the learner has not adopted.
 - **Calibrate density, not arbitrary length:** before adding another concept, ask whether it relies on a relation not yet established. Avoid both an encyclopedia-like first response and one-trivial-fact-per-turn questioning. A diagram, small trace, or worked example should clarify one causal relation, with an accessible explanation.
-- **Invite construction at a meaningful boundary:** when useful and the learner has enough structure, pose one question that asks them to predict behavior, connect two mechanisms, or explain a trade-off. End there; do not append the answer. Direct explanation is appropriate when a cold question would only test unfamiliar terminology or the learner asked to be taught first. An explanation-only request needs no question; “one question” is a ceiling, not a requirement.
+- **Invite construction only when it adds information:** when useful and the learner has enough structure, pose one question that asks them to predict behavior, connect two mechanisms, or explain a trade-off. End there; do not append the answer. This is optional, never a required checkpoint. Do not ask the learner to repeat an answer the explanation just supplied. Direct explanation is appropriate when a cold question would only test unfamiliar terminology or the learner asked to be taught first. An explanation-only request needs no question; “one question” is a ceiling, not a requirement.
 - **Use the response to choose the next *explanatory* move:** correct the actual faulty relation, fill one missing prerequisite, increase integration if they connect the parts, or answer a new question without reheating the old lesson. Respect a request for more substantive novelty or less detail. No claimed mastery, formal score, new objective, future review, or durable learner state follows from this conversational adaptation.
 
 Example: for a graph-based agent framework, show a small `decide → tool → decide/finish` loop; connect node/edge/state to that loop; ask what must survive a pause; only then introduce checkpoint persistence and its limits. This is an illustration of causal sequencing, **not** a prescribed lesson template or a requirement to ask the question verbatim.
@@ -98,7 +101,7 @@ Use this as a variety heuristic only. Do not automatically run all three directi
 
 ## Retrieval-first study
 
-Use retrieval-first as an episode strategy when the selected work benefits from seeing the learner's current model before instruction:
+Use retrieval-first in selected tracked work, or in practice the learner adopted, when seeing the current model before instruction would improve the episode. It is not an ad-hoc default, and it does not turn an explanation request into a quiz:
 
 ```text
 orient
@@ -124,7 +127,7 @@ Do not force retrieval-first when prerequisites are missing, required reconstruc
 
 ## Retrieval and brain dump
 
-Use clean retrieval before teaching when an unprimed signal is useful.
+Use clean retrieval before teaching in tracked work or adopted practice when an unprimed signal is useful. Do not add it to an ad-hoc explanation by default.
 
 - **Free recall:** ask for the governing mechanism, invariant, or causal sequence without answer choices.
 - **Brain dump:** ask the learner to externalize what they currently think, especially for a new concept whose model is uncertain.

@@ -4,12 +4,12 @@ This playbook is **optional, ephemeral teacher judgment**. Use it when the mediu
 
 ## Short capability check
 
-At the beginning of a teaching run, or when a genuinely new representation is needed:
+Plain text is the default. It needs no capability check. When, and only when, a visual would clarify the mechanism better than text:
 
-1. **Native capabilities:** inspect the rendering and execution affordances already visible in this host (e.g. math typesetting, interactive plotting, SVG/diagram rendering, structured diagrams, sandboxed code execution, audio or image rendering). Do not claim tools exist because another provider or model supports them. A graphical result must be supported in the *current* surface, not merely theoretically supported by an API.
-2. **Installed skills:** inspect *metadata or names* of skills already exposed by the agent. If a relevant visualization/teaching/simulation skill exists, read its instructions before invoking; do not blindly enumerate every skill or load huge references.
-3. **Connected MCP/tools:** inspect descriptions/schemas of already-connected, permitted tools only when native/skills are insufficient. Verify supported inputs, output form, cost, network/privacy implications and approval requirements. A tool's presence does not imply consent for consequential actions.
-4. **Fallback:** explain through text, a Markdown table, an inline formula, a simple step sequence, or an ASCII sketch. If charting is available but the graph has no explanatory value, don't use it.
+1. **Use an already-working native renderer.** A diagram, graph, table, formula, or interactive view is appropriate only if the current chat surface already renders it and you have seen that renderer work. Do not claim support because another provider or model supports it.
+2. **Inspect installed skill metadata only when native text and Markdown are insufficient.** Read the instructions of a relevant installed teaching/visual skill before use. A skill's presence is not consent to use it, and it is not a reason to build something.
+3. **Do not build a delivery pipeline.** Do not create HTML, start a server, automate a browser, or capture screenshots to illustrate an ordinary lesson. Those are artifact-request workflows, not the presentation default.
+4. **Fall back immediately.** If the renderer is missing or fails, give the complete Markdown/text explanation and continue teaching. Do not troubleshoot the renderer during the lesson.
 
 Reuse the verified capability inventory for the current environment until an access change or new format warrants reassessment. Avoid repeated tool lists every turn. Never search or install random packages/plugins merely to improve teaching; ask before enabling a missing integration.
 
@@ -38,6 +38,14 @@ Possible values:
 
 Return options are suggestions, **not instructions** to call a tool. An empty tools list still returns a valid text fallback. You do not need to call this helper for every lesson.
 
+## Renderer failure rule
+
+Check support before preparing a visual. A browser or file capability does not prove a working teaching renderer. If the optional renderer is absent, fails, or produces no readable result, stop that attempt immediately. Give the complete text explanation. Do not open a browser, start a server, revise the page, or take a screenshot to recover the visual. The lesson continues in text, and the learner can still answer the question.
+
+## Explicit artifact requests
+
+The learner may explicitly request an HTML lesson, a simulation, an exported diagram, or another artifact. That request can justify the artifact workflow, subject to the learner's tools and permissions. A general request for "useful visuals" or a first-principles lesson does not authorize it. An artifact request does not authorize installing a framework or browser without consent, and it does not remove the exposure rules below.
+
 ## Evidence, safety and learner agency
 
 - **Frozen question first:** when a question/attempt is active, its current saved presentation and answer collection take precedence. Do not attach a graph/trace that answers the pending question.
@@ -51,8 +59,9 @@ Return options are suggestions, **not instructions** to call a tool. An empty to
 ## Examples
 
 - **Trigonometry:** show a triangle with angle and side relationships; if supported, change the rotation angle on a unit circle and inspect sine/cosine projections, then plot the resulting wave. Explain all three in words. If interactive math isn't available, use a static sketch and a small angle/height table.
-- **Event loop:** after the learner has committed to a trace (if assessing), optionally execute a minimal program and show observable console ordering. In a teaching-first, ad-hoc lesson, a console trace table can be sufficient.
+- **Event loop:** after the learner has committed to a trace (if assessing), optionally execute a minimal program and show observable console ordering. In a teaching-first, ad-hoc lesson, a console trace table can be sufficient. Do not build a browser page or screenshot to show console text.
 - **Request lifecycle:** a simple arrow diagram of controller → application operation → domain model → response can be effective; a complex generated infographic is often worse than a few accurate arrows.
+- **Graph-based agent framework:** a short text loop and a state/transition table can introduce nodes, edges, and shared state. Do not install the framework, run a sample project, or build a diagram page merely to introduce that loop. Install it only when the learner adopts practical work and authorizes it.
 - **Terminology:** respond plainly. Decorative charts/images are not a learning affordance.
 
 The host can provide sophisticated rich controls; Learning OS remains authoritative only for learner truth, sequencing, and evidence. The teacher adapts the medium, not the learner model.
