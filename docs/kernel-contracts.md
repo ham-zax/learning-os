@@ -1070,6 +1070,8 @@ When `questionSeq` is supplied, `responseText` is required. The sequence must id
 
 `activeTimeSeconds` is optional and records only reliable active effort known at submission time. Omit it when unknown; do not calculate it from `submitted_at - started_at`. A later feedback/reconstruction closure may replace it with a more complete reliable episode total.
 
+For a final answer whose deterministic verification is already known, `submitAndAssess(attemptId, { response, assessment })` performs submission and assessment in one transaction. A rejected assessment rolls the submission back, so the attempt is never left submitted but unassessed. Prefer it to two separate calls; keep `submitAttempt` alone when the turn is still waiting for verification.
+
 For executable work, the agent runs the frozen verifier through the local environment and preserves command/output or equivalent deterministic artifact evidence.
 
 ### 7. Submit assessment

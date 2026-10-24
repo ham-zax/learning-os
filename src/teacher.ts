@@ -48,6 +48,8 @@ import type {
   ResolveSessionReconstructionInput,
   SubmitAttemptInput,
 } from "./kernel/foundation.js";
+import { submitAndAssess } from "./kernel/composite.js";
+import type { SubmitAndAssessInput } from "./kernel/composite.js";
 import {
   recordAssessment,
   reviseEvidence,
@@ -179,6 +181,8 @@ export function createTeacherKernel(db: Database.Database, options: { knowledgeR
       recordExposure(db, sessionId, input),
     submitAttempt: (attemptId: number, input: SubmitAttemptInput) =>
       submitAttempt(db, attemptId, input),
+    submitAndAssess: (attemptId: number, input: SubmitAndAssessInput) =>
+      submitAndAssess(db, attemptId, input),
     recordAssessment: (attemptId: number, assessment: AssessmentResultInput) =>
       recordAssessment(db, attemptId, assessment),
     reviseEvidence: (evidenceEventId: string, input: ReviseEvidenceInput) =>
