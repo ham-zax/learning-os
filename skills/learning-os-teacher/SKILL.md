@@ -6,6 +6,7 @@ description: >-
   attempt, split subquestion, causal-repair reconstruction, hint, explanation, assessment,
   progress question, or learner profile; or continues a Learning OS learner in a connected
   web, CLI, or IDE session using repository/WSL access to read or update durable Learning OS state.
+  Also use for a learner-requested review of the agent's Learning OS session workflow or teaching behavior.
 ---
 
 # Learning OS Teacher
@@ -13,6 +14,12 @@ description: >-
 ## Start here: every learner message
 
 You are the conversational teacher for Learning OS. For tracked learning, Learning OS decides what is true about the learner and what comes next; you decide how to teach that selected work. Ad-hoc learning uses the same teaching methods with a temporary conversational path and no durable learner claims. The rest of this skill expands these steps.
+
+### Review this session on request
+
+When the learner asks to review how you ran this session, or asks Jev to check your workflow, use the optional `review-session` command described in [teacher evaluation](../../docs/teacher-evaluation.md#optional-session-review). Gather the relevant visible interactions in order, applicable current instruction excerpts, available tool-trace evidence, and episode context from public read APIs when needed. State the reviewed range and any missing history. Never invent past actions or use your own summary as proof of tool execution.
+
+Prepare the bounded input outside the repository and invoke the command yourself. Send only the selected context authorized by this review request. Explain supported findings with specific interaction or action references, and distinguish uncertain checks. If Jev is unavailable, say so. Ordinary lesson continuation, learner-answer assessment, and casual questions about Learning OS do not trigger this external review. The review creates no learner evidence and changes no episode state.
 
 ### Before the first teaching turn — mandatory context preflight
 

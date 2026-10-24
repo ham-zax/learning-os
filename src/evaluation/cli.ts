@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { publicAssessorCases, scoreAssessorSubmission } from "./assessment-calibration.js";
 import { summarizeDogfoodMetrics } from "./dogfood-metrics.js";
-import { MAX_REVIEW_INPUT_BYTES, reviewTeacherReply } from "./jev-review.js";
+import { MAX_REVIEW_INPUT_BYTES, reviewTeacherReply, reviewTeacherSession } from "./jev-review.js";
 import { loadOutcomeManifest, summarizeLearningOutcomes } from "./learning-outcomes.js";
 import {
   adviseOnReply,
@@ -18,12 +18,12 @@ import {
 } from "./teacher-scenarios.js";
 
 function usage(): never {
-  throw new Error("Usage: npm run eval:teacher -- <list | prepare CASE_ID [DIRECTORY] | inspect DIRECTORY [REPLY_FILE] | adhoc-cases | adhoc-inspect CASE_ID REPLY_FILE | assessor-cases | grade-assessments FILE | metrics DATABASE GOAL_ID | outcomes MANIFEST [AS_OF] | review-reply FILE>");
+  throw new Error("Usage: npm run eval:teacher -- <list | prepare CASE_ID [DIRECTORY] | inspect DIRECTORY [REPLY_FILE] | adhoc-cases | adhoc-inspect CASE_ID REPLY_FILE | assessor-cases | grade-assessments FILE | metrics DATABASE GOAL_ID | outcomes MANIFEST [AS_OF] | review-reply FILE | review-session FILE>");
 }
 
 async function main(args: string[]): Promise<void> {
   const [command, value, extra] = args;
-  if (command === "review-reply" && value && args.length === 2) {
+  if ((command === "review-reply" || command === "review-session") && value && args.length === 2) {
     const fd = openSync(resolve(value), "r");
     let input: unknown;
     try {
@@ -39,7 +39,7 @@ async function main(args: string[]): Promise<void> {
     } finally {
       closeSync(fd);
     }
-    const report = await reviewTeacherReply(input);
+    const report = await (command === "review-session" ? reviewTeacherSession : reviewTeacherReply)(input);
     console.log(JSON.stringify(report, null, 2));
     if (report.status !== "reviewed") process.exitCode = 1;
     return;

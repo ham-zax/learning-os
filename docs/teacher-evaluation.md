@@ -41,6 +41,42 @@ Input is limited to 64 KiB and 20,000 characters per field. The request has a
 including concerns or uncertainty. Exit 1 means invalid input or incomplete or
 unavailable review. The report never approves delivery or changes learner state.
 
+## Optional session review
+
+The learner can ask: “Ask Jev whether you followed Learning OS during this session.”
+The teacher gathers the relevant context and invokes:
+
+```bash
+npm run -s eval:teacher -- review-session /absolute/path/session-review.json
+```
+
+```json
+{
+  "reviewRequest": "Check our workflow and whether you asked unnecessary questions.",
+  "interactions": [
+    { "role": "learner", "text": "Explain the crash window. No quiz." },
+    { "role": "teacher", "text": "First, answer these three recall questions." }
+  ],
+  "instructions": "For explanation-only ad-hoc requests, explain the mechanism without adding a quiz.",
+  "context": "Synthetic example. Only these two turns are included. Ad-hoc teaching, no tracked episode. Tool history is unavailable."
+}
+```
+
+Supply the actual applicable excerpts from current teacher instructions, not
+just paths or an assertion that the teacher followed them. `actionEvidence` is
+optional text for available tool-trace excerpts. Missing trace evidence leaves
+execution checks uncertain. An agent's own summary is not proof of execution.
+Use public read APIs for relevant tracked context, without grading or changing
+the episode. State missing history and the range of interactions reviewed.
+
+The three advisory checks cover workflow, pedagogy, and proportionate teaching
+and tool use. The teacher explains supported findings with specific turn or
+action references. Jev returns judgments, not a generated audit explanation.
+No concern found in the supplied selection is not a certificate for the whole
+session. The same privacy, size, deadline, uncertainty, and exit rules as reply
+review apply. At most 40 interactions fit one review. Narrow an oversized
+selection and disclose omissions rather than silently claiming full coverage.
+
 ## Episode scenarios
 
 List cases:
