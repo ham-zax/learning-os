@@ -30,6 +30,21 @@ export function submitAndAssess(
   if (!input?.response || !input?.assessment) {
     throw new Error("submitAndAssess requires { response, assessment }");
   }
+  const basis = input.assessment.assessmentBasis;
+  const verification = input.assessment.verificationOutput;
+  if ((basis === "deterministic_execution" || basis === "mixed") && verification) {
+    const details = verification.details ?? {};
+    const recorded = [details.stdout, details.output].some(
+      (value) =>
+        typeof value === "string" ||
+        (Array.isArray(value) && value.every((line) => typeof line === "string")),
+    );
+    if (!recorded) {
+      throw new Error(
+        "Deterministic verification must record the run output in details.stdout or details.output",
+      );
+    }
+  }
   return db.transaction(() => {
     const attempt = submitAttempt(db, attemptId, input.response);
     const assessment = recordAssessment(db, attemptId, input.assessment);

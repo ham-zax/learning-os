@@ -1074,6 +1074,8 @@ For a final answer whose deterministic verification is already known, `submitAnd
 
 For executable work, the agent runs the frozen verifier through the local environment and preserves command/output or equivalent deterministic artifact evidence.
 
+Record the run itself in `verificationOutput`. `outcome: "passed"` means the command completed and produced output, not that the learner was correct. Put the output lines in `details.stdout` as a string or a string array, or in `details.output`. The learner's correctness belongs in the assessment result.
+
 ### 7. Submit assessment
 
 ```text

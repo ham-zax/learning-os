@@ -96,6 +96,8 @@ export const WeaknessLifecycle = z.enum([
 export type WeaknessLifecycle = z.infer<typeof WeaknessLifecycle>;
 
 export const VerificationOutcome = z.enum(["passed", "failed"]);
+// "passed" means the deterministic run completed and produced output. It says nothing
+// about whether the learner's answer was correct; that lives in the assessment result.
 export type VerificationOutcome = z.infer<typeof VerificationOutcome>;
 
 export const HintScopeKind = z.enum(["objective", "criteria", "all_targets"]);

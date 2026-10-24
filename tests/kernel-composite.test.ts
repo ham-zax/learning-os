@@ -1,7 +1,9 @@
 import type Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
+import { createSession } from "../src/db/database.js";
 import { submitAndAssess } from "../src/kernel/composite.js";
-import { createKernelFixture, OBJECTIVE_ID } from "./helpers/kernel-fixture.js";
+import { createTeacherKernel } from "../src/teacher.js";
+import { createKernelFixture, GOAL_ID, OBJECTIVE_ID } from "./helpers/kernel-fixture.js";
 
 describe("submitAndAssess", () => {
   let db: Database.Database | undefined;
@@ -62,5 +64,42 @@ describe("submitAndAssess", () => {
     submitAndAssess(db!, attemptId, { response, assessment });
     expect(() => submitAndAssess(db!, attemptId, { response, assessment }))
       .toThrow(/already submitted/);
+  });
+
+  it("rejects a deterministic assessment without a readable output field", () => {
+    const fixture = createKernelFixture();
+    db = fixture.db;
+    const kernel = createTeacherKernel(db);
+    const template = kernel.getChallenge("challenge", 1)!;
+    kernel.registerChallenge({
+      ...template,
+      id: "verify-challenge",
+      taskForm: "debugging",
+      verification: { required: true, basis: "deterministic_execution" },
+    });
+    const session = createSession(db, { topicId: GOAL_ID, mode: "practice" });
+    const { attempt } = kernel.openAttempt("verify-challenge", 1, session.id);
+    expect(() => kernel.submitAndAssess(attempt.id, {
+      response: { responseText: "It prints A." },
+      assessment: {
+        evaluatorType: "agent",
+        assessmentBasis: "deterministic_execution",
+        verificationOutput: {
+          outcome: "passed",
+          basis: "node",
+          summary: "Ran the frozen model.",
+          details: { printedLines: ["A"] },
+        },
+        objectiveResults: [{
+          objectiveId: OBJECTIVE_ID,
+          result: "correct",
+          criteriaMet: ["mechanism"],
+          criteriaUnmet: [],
+          rationale: "The prediction matches the run.",
+        }],
+      },
+    })).toThrow(/details\.stdout/);
+    expect(db.prepare("SELECT submitted_at FROM attempts WHERE id = ?").get(attempt.id))
+      .toEqual({ submitted_at: null });
   });
 });
