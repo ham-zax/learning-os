@@ -6,6 +6,7 @@ Use this reference when the current Learning OS-selected episode needs specializ
 
 - Invocation rule
 - Broad ad-hoc concept construction
+- Stepwise construction
 - Fast routing
 - Read what the last message did
 - Cognitive-direction rotation
@@ -54,6 +55,25 @@ Keep only a lightweight conversational thread: what the learner wants, the examp
 - **They are done:** synthesize the reusable mechanism and its relevant limit if useful, then stop. Conversational success supports the next explanation, not a mastery, retention, or review claim.
 
 These adaptation moves also help teach a kernel-selected tracked episode. There, the frozen criteria, exposure-before-display, reconstruction, and feedback lifecycle still govern; they do not authorize a different objective or a new attempt.
+
+## Stepwise construction
+
+Use only when the learner asks for a full conceptual build and either asks to go step by step or accepts your offer to do so. Ordinary explanation remains question-free.
+
+The chain is the lesson:
+
+1. **Locate the frontier.** If the starting point is unknown, ask at most three fast questions whose answers lead to different next steps. Skip this when the learner states their level or asks to be taught first.
+2. **Choose the shortest dependency path** from one relation the learner holds to the target. One inference per step.
+3. **For each step:** ask for the next inference, confirm or repair it, then state the step in one or two sentences. Never teach several steps and check at the end.
+4. **Stop** when the learner states and uses the target relation once. Do not run the loop over the whole topic.
+
+Rules:
+
+- A prediction is a teaching move, not evidence. Nothing here creates mastery, evidence, or review state.
+- Use the learner's stated reason to choose the next step. A correct answer with a wrong reason changes it.
+- Keep each step obvious from the previous one. If it is not, the step is too large.
+- If the learner asks for the map first, give the smallest map, then descend.
+- If the same step fails twice, stop the loop and teach that relation directly. Do not keep probing.
 
 ## Fast routing
 

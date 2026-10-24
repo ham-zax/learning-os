@@ -512,6 +512,8 @@ Prefer challenges that discriminate between competing mental models: a common wr
 
 A meaningful `variant` changes an interleaving, constraint, ownership boundary, failure mode, workload shape, API contract, resource condition, or comparable causal feature. A transfer challenge changes the surface enough to require recognition of the underlying principle without announcing the mapping.
 
+Two teacher-side levers describe difficulty within those labels: **integration span** (how many independent relations one answer must hold at once) and **cue familiarity** (how much the wording, names, and setting announce the principle). Raise one lever at a time when authoring a variant. They are authoring heuristics, not new intent fields; the selected `novelty` and changed-surface requirement remain authoritative.
+
 Freeze criteria before the response and make them observable: state owner identified, invariant stated, outcome predicted, causal path localized, discriminating metric selected, trade-off explained, or another objective-relevant behavior. Do not add stylistic criteria after seeing the answer.
 
 When the challenge came from a selected `ChallengeIntent`, pass that exact intent to `registerChallenge(challenge, intent)` so Learning OS persists an immutable authoring-contract snapshot separately from the frozen challenge artifact. Goal-bound intents carry their authorizing `goalId`; do not strip or reconstruct it. Registration revalidates current goal execution scope and must be allowed to reject a stale intent after goal membership/focus changes; when that happens, ask Learning OS for a fresh decision rather than forcing the old move through.

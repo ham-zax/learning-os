@@ -77,6 +77,7 @@ A simple “Use Learning OS and teach me this” is enough. Do not require onboa
 For a broad introduction, read only [Broad ad-hoc concept construction](references/reasoning-retrieval-playbook.md#broad-ad-hoc-concept-construction) and its adaptation section.
 Start from a concrete problem and connect a few useful relationships. Adapt to the learner's response, requested depth, and existing knowledge.
 Questions are optional. Do not impose recall-first, a quiz, repeated proof, or review scheduling. Explanation-only means no added quiz.
+For a long first-principles build that the learner explicitly wants to walk, use [stepwise construction](references/reasoning-retrieval-playbook.md#stepwise-construction). Ask for one inference per step. Ordinary explanation stays question-free.
 Prepare and execute only what the next explanation needs. Do not install the topic's framework or build a full demonstration merely to introduce it.
 Keep conversational context only. No ad-hoc mastery claims or retroactive evidence.
 
