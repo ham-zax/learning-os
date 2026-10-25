@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, existsSync, openSync, readSync, closeSync } from "node:fs";
 import { adhocTeacherScenarios, getAdhocTeacherScenario, inspectAdhocTeacherReply } from "./adhoc-teacher.js";
+import { compareTeacherHarnesses } from "./harness-comparison.js";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,11 +19,15 @@ import {
 } from "./teacher-scenarios.js";
 
 function usage(): never {
-  throw new Error("Usage: npm run eval:teacher -- <list | prepare CASE_ID [DIRECTORY] | inspect DIRECTORY [REPLY_FILE] | adhoc-cases | adhoc-inspect CASE_ID REPLY_FILE | assessor-cases | grade-assessments FILE | metrics DATABASE GOAL_ID | outcomes MANIFEST [AS_OF] | review-reply FILE | review-session FILE>");
+  throw new Error("Usage: npm run eval:teacher -- <list | prepare CASE_ID [DIRECTORY] | inspect DIRECTORY [REPLY_FILE] | adhoc-cases | adhoc-inspect CASE_ID REPLY_FILE | compare-harness FILE | assessor-cases | grade-assessments FILE | metrics DATABASE GOAL_ID | outcomes MANIFEST [AS_OF] | review-reply FILE | review-session FILE>");
 }
 
 async function main(args: string[]): Promise<void> {
   const [command, value, extra] = args;
+  if (command === "compare-harness" && value && args.length === 2) {
+    console.log(JSON.stringify(compareTeacherHarnesses(JSON.parse(readFileSync(resolve(value), "utf8"))), null, 2));
+    return;
+  }
   if ((command === "review-reply" || command === "review-session") && value && args.length === 2) {
     const fd = openSync(resolve(value), "r");
     let input: unknown;

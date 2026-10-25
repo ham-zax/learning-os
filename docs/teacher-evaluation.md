@@ -2,6 +2,76 @@
 
 This pilot checks the replaceable teacher layer separately from kernel lifecycle tests. All learner state it creates is synthetic and isolated in a temporary SQLite database. It never opens a managed profile. The evaluator checks durable actions mechanically; a reviewer still checks whether the learner-facing text actually teaches well.
 
+## Objective and controlled harness comparisons
+
+Teaching quality is the objective: technical accuracy, causal clarity, adaptation
+to the latest learner response, learner agency, and honest assessment. Record
+tool calls, tokens, and elapsed time separately as costs. More necessary tool
+work is not worse teaching. Neither tables nor shorter instructions establish
+better teaching without observed evidence. Model identity never sets a grade.
+
+Use this bounded propose → probe → compose procedure:
+
+1. Choose one observed failure. Freeze the scenario, rubric, model/options,
+   tool permissions, source snapshot, and initial synthetic state before editing.
+2. Run the current harness and a focused candidate in fresh sessions. Give each
+   tracked run a separate pristine database with identical starting content.
+   Include follow-up turns when the claim concerns conversational adaptation.
+3. Save actual replies and ordered action traces outside Git. Record harness and
+   reply hashes, run IDs, model configuration, failures, and the full tested range.
+   Instruction snapshots include the relevant host rules, not just AGENTS.md.
+4. Give a reviewer anonymized replies in randomized order. Keep review criteria
+   out of teacher prompts, except for the frozen learner-assessment rubric that
+   tracked teaching legitimately requires. Quote evidence for every judgment.
+5. Review quality dimensions and integrity separately. Missing evidence is
+   uncertain. Database checks cannot establish what the teacher displayed or when.
+6. Repeat matched runs to expose variation. Check genuinely unseen cases before
+   promotion. Keep their prompts outside the editor's context until evaluation.
+   Public scenarios in this repository are development cases, not secret holdouts.
+7. Keep a change only after examining regressions and integrity failures. Compose
+   useful changes, then probe the combined harness again. Do not infer the combined
+   result from separate successful edits.
+
+Do not average away an inaccurate explanation, false learner evidence, or an
+exposure-order failure with savings or good scores elsewhere. A teaching-quality
+review is still not proof of learning: changed-surface independent performance
+and delayed retrieval require separate observations through the normal evidence
+boundary. Synthetic learner scripts cannot establish human retention.
+
+The offline comparison command accepts paired review receipts:
+
+```bash
+npm run -s eval:teacher -- compare-harness /absolute/path/comparison.json
+```
+
+The strict input schema is [harnessComparisonSchema](../src/evaluation/harness-comparison.ts).
+The [comparison tests](../tests/harness-comparison.test.ts) contain a synthetic
+receipt example, including a CLI invocation. Required top-level fields are
+`caseId`, `split` (`development` or `held_out`), `rubricRevision`, `reviewer`,
+`baseline`, and `candidate`. Each run records identity, harness/reply SHA-256,
+matched conditions, five quality judgments, an integrity judgment, and costs.
+Use `initialStateSha256: null` for DB-free ad-hoc cases. Conditions must include
+the actual model/options, permissions, and source snapshot, including failures.
+Use a content-identical pristine database seed hash for tracked cases.
+
+For each quality dimension, supply `verdict` (`meets`, `concern`, or `uncertain`)
+and nonempty `evidence` pointing to an actual reply or trace excerpt. Integrity
+uses `pass`, `fail`, or `uncertain`, also with evidence. Costs are optional numeric
+`toolCalls`, `tokens`, and `elapsedMs`. Unmeasured costs are omitted, never zero.
+`reviewer.blinded` discloses whether anonymization actually occurred.
+
+The command rejects mismatched conditions or missing judgments. It reports
+dimension changes, unresolved judgments, integrity, and descriptive costs without
+a total score or automatic winner. Exit 0 means the receipt parsed and compared,
+even if it reports regressions. Exit 1 means invalid input or unmatched conditions.
+Hashes, evidence text, and a `held_out` label are caller claims, not independent
+attestations. The command runs no model, opens no learner database, sends no
+external requests, and grants no promotion authority.
+
+The four additional public ad-hoc probes cover index trade-offs, recursive return
+flow, requested closure depth, and unavailable API research. They reduce reliance
+on the graph/payment example. Defining probes does not mean a teacher passed them.
+
 ## Optional reply review
 
 When the learner asks for a second review, the agent can invoke:
@@ -42,6 +112,12 @@ including concerns or uncertainty. Exit 1 means invalid input or incomplete or
 unavailable review. The report never approves delivery or changes learner state.
 
 ## Optional session review
+
+A [live synthetic Jev pilot](research/2026-10-25-jev-teaching-review-pilot.md)
+checks ad-hoc drafts and isolated tracked replays. Actual source excerpts remove
+a false alarm seen with paraphrased instructions. The reviewer still misses a
+technical explanation defect. Keep review advisory and source-grounded. These
+development results do not establish production accuracy or learner benefit.
 
 The learner can ask: “Ask Jev whether you followed Learning OS during this session.”
 The teacher gathers the relevant context and invokes:
@@ -101,7 +177,7 @@ npm run eval:teacher -- inspect /path/printed/by/prepare
 
 The report has automated checks and case-specific reviewer questions. Inspect the actual learner-facing message and tool/action order. A passing database report does **not** certify question neutrality, correct technical explanation, or that exposure was recorded immediately before it was shown. Record those judgments separately with short evidence from the run. Avoid scoring a teacher from its self-report alone.
 
-The sixteen scenarios cover sufficient success, ambiguous wording, a causal misconception, an unclear blocker, question overload, a fresh-session answer, a changed-surface transfer answer, a direct answer request, and four calibrated backend predictions. The backend cases include a fully correct last-seat prediction, a serialized last-seat misconception, correct retry output with faulty reasoning, and an underspecified retry answer. They freeze a challenge from a Learning OS selected intent before the fresh teacher sees the response. The transfer scenario is a frozen changed-surface task; it does not itself test the selector's decision to request transfer. The `im_stuck` database checks only establish that no false evidence or exposure was recorded; a reviewer must judge the visible blocker question. Four `scaffold_*` scenarios cover revision friction after curated instruction: interruption after a recorded presentation, a completion exercise followed by return to the frozen question, a sufficient assisted answer, and a declined offer of further instruction. They need a human reviewer for the visible conversation; see [the revision-friction checklist](revision-friction-checklist.md). Add a case when live use shows a distinct repeated failure; do not turn every protocol sentence into a scenario.
+The twenty-eight scenarios include sufficient success, ambiguous wording, a causal misconception, an unclear blocker, question overload, a fresh-session answer, a changed-surface transfer answer, a direct answer request, and four calibrated backend predictions. The backend cases include a fully correct last-seat prediction, a serialized last-seat misconception, correct retry output with faulty reasoning, and an underspecified retry answer. They freeze a challenge from a Learning OS selected intent before the fresh teacher sees the response. The transfer scenario is a frozen changed-surface task; it does not itself test the selector's decision to request transfer. The `im_stuck` database checks only establish that no false evidence or exposure was recorded; a reviewer must judge the visible blocker question. Four `scaffold_*` scenarios cover revision friction after curated instruction: interruption after a recorded presentation, a completion exercise followed by return to the frozen question, a sufficient assisted answer, and a declined offer of further instruction. They need a human reviewer for the visible conversation; see [the revision-friction checklist](revision-friction-checklist.md). Add a case when live use shows a distinct repeated failure; do not turn every protocol sentence into a scenario.
 
 The repository integration test separately exercises selected intent → calibrated authoring → freeze → presentation → database close/reopen → answer → deterministic verification → assessment → evidence. That test checks kernel continuity, not the judgment or wording of an independent model teacher.
 
@@ -124,9 +200,9 @@ npm run eval:teacher -- adhoc-inspect knows_basics /absolute/path/to/fresh-reply
 
 For each probe, start a **fresh teacher instance** with the current `skills/learning-os-teacher/SKILL.md` and its required references, provide the exported `priorContext` before the separate `learnerMessage`, and save its **actual learner-facing reply** outside the repository. Do not give the model the `review` criteria before it responds; give those only to the independent reviewer. Keep model name, date, invocation/tool permissions and failures in a separate evaluation receipt; an offline response or an unavailable provider must not be reported as a fresh run. The `adhoc-inspect` output provides reply SHA-256, word count and a human rubric, **not an automated quality score or provenance attestation**. Reviewers read the reply and record an evidence-backed verdict for each criterion. Do not copy raw user transcripts or model output into the committed repository.
 
-For an instruction-discovery check, give a repository-connected teacher only the scenario context and learner message, pointing it to the canonical checkout rather than preloading the pedagogical references. Inspect its actual tool trace to verify the mandatory instruction reads and relevant playbook loading before teaching; a reply claiming “I read the skill” is insufficient. Check no learner-state writes were made. Keep this result separate from a reply-quality review with preloaded instructions. For before/after comparisons, hold the scenario, model, permissions and source availability constant. Passing the export/inspection unit tests proves harness behavior only; fresh-teacher compliance and teaching quality still need observed replies and review.
+For an instruction-discovery check, give a repository-connected teacher only the scenario context and learner message, pointing it to the canonical checkout rather than preloading the pedagogical references. Inspect its actual tool trace for references needed by the current teaching trigger; a reply claiming “I read the skill” is insufficient. Check no learner-state writes were made. Keep this result separate from a reply-quality review with preloaded instructions. For before/after comparisons, hold the scenario, model, permissions and source availability constant. Passing the export/inspection unit tests proves harness behavior only; fresh-teacher compliance and teaching quality still need observed replies and review.
 
-These probes supplement, rather than replace, the 16 durable-state teacher episodes above. The ad-hoc cases test wording, pace and connected concept construction; the tracked episodes exercise actual public-kernel actions and exposure ordering. Neither kind of test proves delayed independent learning gains. The owner-judged replay in the first-wave checklist is a separate gate and stays open until the owner actually judges the replies.
+These probes supplement, rather than replace, the 28 durable-state teacher episodes above. The ad-hoc cases test wording, pace and connected concept construction; the tracked episodes exercise actual public-kernel actions and exposure ordering. Neither kind of test proves delayed independent learning gains. The owner-judged replay in the first-wave checklist is a separate gate and stays open until the owner actually judges the replies.
 
 ## Manual research-grounding probes
 

@@ -58,19 +58,19 @@ These adaptation moves also help teach a kernel-selected tracked episode. There,
 
 ## Stepwise construction
 
-Use only when the learner asks for a full conceptual build and either asks to go step by step or accepts your offer to do so. Ordinary explanation remains question-free.
+Use only when the learner asks to build a concept or a focused relation step by step, or accepts that offer. Ordinary explanation remains question-free. A later request for direct explanation ends this guided mode.
 
 The chain is the lesson:
 
 1. **Locate the frontier.** If the starting point is unknown, ask at most three fast questions whose answers lead to different next steps. Skip this when the learner states their level or asks to be taught first.
 2. **Choose the shortest dependency path** from one relation the learner holds to the target. One inference per step.
-3. **For each step:** ask for the next inference, confirm or repair it, then state the step in one or two sentences. Never teach several steps and check at the end.
+3. **For each step:** distinguish the facts already given from the relation the learner will infer. Supply only missing prerequisites, then ask one inference question. Stop before giving its answer or moving to the next relation. After the learner answers, confirm or repair that relation before advancing. Never teach several steps and check at the end.
 4. **Stop** when the learner states and uses the target relation once. Do not run the loop over the whole topic.
 
 Rules:
 
 - A prediction is a teaching move, not evidence. Nothing here creates mastery, evidence, or review state.
-- Use the learner's stated reason to choose the next step. A correct answer with a wrong reason changes it.
+- Use the learner's stated reason to choose the next step. A correct answer with a wrong reason changes it. Correct a wrong relation using the same local example: identify the participants, the value or action they exchange, and the operation still pending. Use only established premises for that repair. Do not attribute an unexplained later result to the learner or reveal the remaining path to justify this step. Then invite one reconstruction of the current relation and wait.
 - Keep each step obvious from the previous one. If it is not, the step is too large.
 - If the learner asks for the map first, give the smallest map, then descend.
 - If the same step fails twice, stop the loop and teach that relation directly. Do not keep probing.

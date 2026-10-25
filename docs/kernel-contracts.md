@@ -993,7 +993,7 @@ The learner-visible payload excludes private solution material.
 When the teacher decomposes one frozen challenge across multiple turns and interruption would otherwise lose what is pending, persist the exact learner-visible subquestion before presenting it:
 
 ```text
-openAttemptSubquestion(attemptId, { promptText, contextText, questionChunking, scopeCriterionId?, scopeNote? })
+openAttemptSubquestion(attemptId, { promptText, contextText?, questionChunking?, scopeCriterionId?, scopeNote? })
 → durable presentation-ready pending subquestion
 ```
 
@@ -1002,15 +1002,17 @@ An `atomic` question must include `scopeCriterionId` for exactly one frozen crit
 After the learner answers that subquestion, persist the exact response before moving to the next split:
 
 ```text
-answerAttemptSubquestion(attemptId, { seq, responseText })
-→ same subquestion with durable learner response
+answerAttemptSubquestion(attemptId, { seq, responseText, followUpQuestion? })
+→ answered subquestion, or new pending follow-up when supplied
 ```
+
+`followUpQuestion` takes the same input as `openAttemptSubquestion`. It answers the current question and opens its follow-up in one transaction. The returned question is the follow-up. If follow-up validation fails, the original question remains unanswered. The purpose still comes from the active session phase.
 
 For a complete response that also finishes the attempt, `submitAttempt(attemptId, { questionSeq: seq, responseText })` answers that pending response question and submits the attempt atomically with the same text. Keep `answerAttemptSubquestion(...)` for intermediate split answers and required reconstruction.
 
 Use the `seq` returned at opening or recovered from resumption. An answer must identify that specific pending question. Both response and required reconstruction phases use this boundary; purpose is derived from session state. Submission and completed reconstruction refuse to bypass their unanswered non-superseded question. A learner may abandon unsubmitted work or explicitly opt out of reconstruction without a fabricated answer. Full `resumeSession(...)` retains the ordered history for assessment.
 
-`replaceAttemptSubquestion(attemptId, { seq, promptText, contextText, questionChunking, scopeCriterionId?, scopeNote? })` replaces the specific pending question after a wording/context/size complaint. Replacement input is complete: context and chunking are always explicit; `default` carries no scope and `atomic` carries both scope fields. This is episode-local and does not establish a lasting preference or change frozen criteria. Record answer-bearing decomposition through the existing assistance boundary before showing it.
+`replaceAttemptSubquestion(attemptId, { seq, promptText, contextText?, questionChunking?, scopeCriterionId?, scopeNote? })` replaces the specific pending question after a wording/context/size complaint. For opening, follow-up, and replacement, omitted, null, or blank `contextText` inherits the latest nonempty subquestion context for the same attempt, then the frozen challenge's public prompt if none exists. Explicit nonempty text is preserved, including the literal expression `null`. Other context types are rejected. Omitted chunking defaults to `default` only when no atomic scope metadata is supplied. `default` rejects either scope field, and `atomic` requires both fields with a frozen criterion ID. This is episode-local and does not establish a lasting preference or change frozen criteria. Record answer-bearing decomposition through the existing assistance boundary before showing it.
 
 `getSessionQuestionPresentation(sessionId)` returns a read-only focused presentation, also exposed as `getStudyContinuation(...).presentation` on the `resume` branch:
 

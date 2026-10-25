@@ -173,6 +173,99 @@ describe("durable attempt subquestions", () => {
       .run(question.seq)).toThrow("durable interaction observations");
   });
 
+  it("inherits contextText automatically and opens followUpQuestion atomically in answerAttemptSubquestion", () => {
+    const q1 = kernel.openAttemptSubquestion(attemptId, {
+      contextText,
+      promptText: "What does the script print?",
+      questionChunking: "default",
+    });
+    const res = kernel.answerAttemptSubquestion(attemptId, {
+      seq: q1.seq,
+      responseText: "Maybe 10 or 12?",
+      followUpQuestion: {
+        promptText: "Which single output are you committing to?",
+        questionChunking: "default",
+      },
+    });
+    expect(res.seq).toBe(q1.seq + 1);
+    expect(res.context_text).toBe(contextText);
+    expect(res.prompt_text).toBe("Which single output are you committing to?");
+
+    const allAfterAnswer = kernel.resumeSession(sessionId).activeAttemptState?.subquestions ?? [];
+    expect(allAfterAnswer[0]?.response_text).toBe("Maybe 10 or 12?");
+
+    const replaced = kernel.replaceAttemptSubquestion(attemptId, {
+      seq: res.seq,
+      promptText: "First step only: what is x?",
+      questionChunking: "default",
+    });
+    expect(replaced.context_text).toBe(contextText);
+    expect(replaced.prompt_text).toBe("First step only: what is x?");
+  });
+
+  it("inherits the frozen prompt for the first question and defaults to ordinary chunking", () => {
+    const frozenPrompt = kernel.resumeSession(sessionId).activeChallenge!.publicPrompt;
+    const question = kernel.openAttemptSubquestion(attemptId, { promptText: "What changes?" });
+    expect(question.context_text).toBe(frozenPrompt);
+    expect(question.question_chunking).toBe("default");
+  });
+
+  it.each([undefined, null, "", "  "])("inherits the previous context for %j", (context) => {
+    const first = kernel.openAttemptSubquestion(attemptId, { contextText, promptText: "First part?" });
+    const next = kernel.answerAttemptSubquestion(attemptId, {
+      seq: first.seq, responseText: "Partial answer",
+      followUpQuestion: { contextText: context, promptText: "Which part?" },
+    });
+    expect(next.context_text).toBe(contextText);
+  });
+
+  it("preserves a literal null expression as task context and inherits it unchanged", () => {
+    const first = kernel.openAttemptSubquestion(attemptId, { contextText: "null", promptText: "What value is this?" });
+    expect(first.context_text).toBe("null");
+    const next = kernel.answerAttemptSubquestion(attemptId, {
+      seq: first.seq, responseText: "Unsure",
+      followUpQuestion: { promptText: "Which type?" },
+    });
+    expect(next.context_text).toBe("null");
+  });
+
+  it("rejects invalid context types instead of silently inheriting", () => {
+    expect(() => kernel.openAttemptSubquestion(attemptId, {
+      contextText: 42 as unknown as string, promptText: "What changes?",
+    })).toThrow("Task context must be a string");
+    expect(kernel.resumeSession(sessionId).activeAttemptState?.subquestions).toEqual([]);
+  });
+
+  it.each([
+    { scopeNote: "One part" },
+    { questionChunking: "default", scopeNote: "One part" },
+    { scopeCriterionId: "mechanism" },
+  ])("rejects default-question scope metadata: %j", (metadata) => {
+    expect(() => kernel.openAttemptSubquestion(attemptId, {
+      contextText, promptText: "What changes?", ...metadata,
+    } as never)).toThrow();
+    expect(kernel.resumeSession(sessionId).activeAttemptState?.subquestions).toEqual([]);
+  });
+
+  it("rolls back the original answer when opening its follow-up fails", () => {
+    const first = kernel.openAttemptSubquestion(attemptId, { contextText, promptText: "First part?" });
+    expect(() => kernel.answerAttemptSubquestion(attemptId, {
+      seq: first.seq, responseText: "Partial answer",
+      followUpQuestion: { promptText: "Which part?", questionChunking: "atomic",
+        scopeCriterionId: "not-a-frozen-criterion", scopeNote: "One part" },
+    })).toThrow("not part of the frozen challenge");
+    expect(kernel.resumeSession(sessionId).activeAttemptState?.subquestions).toMatchObject([
+      { seq: first.seq, response_text: null, answered_at: null },
+    ]);
+    expect(kernel.resumeSession(sessionId).activeAttemptState?.subquestions).toHaveLength(1);
+  });
+
+  it("rejects null chunking instead of treating it as omitted", () => {
+    expect(() => kernel.openAttemptSubquestion(attemptId, {
+      contextText, promptText: "What changes?", questionChunking: null,
+    } as never)).toThrow("Subquestion chunking must be default or atomic");
+  });
+
   it("rejects an unsupported historical schema instead of replaying migrations", () => {
     db.pragma("user_version = 21");
     db.close();

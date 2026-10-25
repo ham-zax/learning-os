@@ -7,12 +7,13 @@ type QuestionChunking = AttemptSubquestion["question_chunking"];
 
 interface PreparedSubquestionInput {
   promptText: string;
-  contextText: string;
+  /** When omitted or empty/null, inherits the attempt's latest subquestion context or frozen challenge publicPrompt. */
+  contextText?: string | null;
 }
 
 export type OpenAttemptSubquestionInput =
   | (PreparedSubquestionInput & {
-      questionChunking: "default";
+      questionChunking?: "default";
       scopeCriterionId?: never;
       scopeNote?: never;
     })
@@ -27,6 +28,8 @@ export type OpenAttemptSubquestionInput =
 export interface AnswerAttemptSubquestionInput {
   seq: number;
   responseText: string;
+  /** Optionally open a follow-up clarification subquestion atomically in the same transaction. */
+  followUpQuestion?: OpenAttemptSubquestionInput;
 }
 
 export type ReplaceAttemptSubquestionInput = OpenAttemptSubquestionInput & { seq: number };
@@ -100,6 +103,37 @@ function frozenCriterionIds(db: Database.Database, attemptId: number): Set<strin
   return new Set(rows.map((entry) => entry.criterion_id));
 }
 
+function resolveContextText(db: Database.Database, attemptId: number, explicit?: string | null): string {
+  if (explicit !== undefined && explicit !== null && typeof explicit !== "string") {
+    throw new Error("Task context must be a string when provided");
+  }
+  if (typeof explicit === "string" && explicit.trim()) {
+    return explicit;
+  }
+  const latestSubq = db
+    .prepare(
+      `SELECT context_text FROM attempt_subquestions
+       WHERE attempt_id = ? AND context_text IS NOT NULL AND TRIM(context_text) <> ''
+       ORDER BY seq DESC LIMIT 1`,
+    )
+    .get(attemptId) as { context_text: string } | undefined;
+  if (latestSubq?.context_text?.trim()) {
+    return latestSubq.context_text;
+  }
+  const row = db.prepare("SELECT challenge_id, challenge_version FROM attempts WHERE id = ?").get(attemptId) as
+    | { challenge_id: string | null; challenge_version: number | null }
+    | undefined;
+  if (row?.challenge_id && row.challenge_version !== null) {
+    const ch = db
+      .prepare("SELECT public_prompt FROM challenge_versions WHERE challenge_id = ? AND version = ?")
+      .get(row.challenge_id, row.challenge_version) as { public_prompt: string } | undefined;
+    if (ch?.public_prompt?.trim()) {
+      return ch.public_prompt;
+    }
+  }
+  throw new Error("Task context must not be empty");
+}
+
 function prepareSubquestion(
   db: Database.Database,
   attemptId: number,
@@ -112,11 +146,14 @@ function prepareSubquestion(
   scopeNote: string | null;
 } {
   const prompt = nonempty(input.promptText, "Subquestion prompt");
-  const context = nonempty(input.contextText, "Task context");
-  if (input.questionChunking !== "default" && input.questionChunking !== "atomic") {
+  const context = resolveContextText(db, attemptId, input.contextText);
+  const chunkingInput = input.questionChunking === undefined
+    ? (input.scopeCriterionId !== undefined ? undefined : "default")
+    : input.questionChunking;
+  if (chunkingInput !== "default" && chunkingInput !== "atomic") {
     throw new Error("Subquestion chunking must be default or atomic");
   }
-  if (input.questionChunking === "default") {
+  if (chunkingInput === "default") {
     if (input.scopeCriterionId !== undefined || input.scopeNote !== undefined) {
       throw new Error("Default subquestions must not carry atomic scope metadata");
     }
@@ -125,8 +162,8 @@ function prepareSubquestion(
     };
   }
 
-  const criterion = nonempty(input.scopeCriterionId, "Subquestion scope criterion");
-  const note = nonempty(input.scopeNote, "Subquestion scope note");
+  const criterion = nonempty("scopeCriterionId" in input ? (input.scopeCriterionId ?? "") : "", "Subquestion scope criterion");
+  const note = nonempty("scopeNote" in input ? (input.scopeNote ?? "") : "", "Subquestion scope note");
   if (!frozenCriterionIds(db, attemptId).has(criterion)) {
     throw new Error(`Subquestion scope criterion is not part of the frozen challenge: ${criterion}`);
   }
@@ -211,6 +248,10 @@ export function answerAttemptSubquestion(
     const question = expectedPending(db, attemptId, input.seq);
     db.prepare("UPDATE attempt_subquestions SET response_text = ?, answered_at = ? WHERE seq = ?")
       .run(response, new Date().toISOString(), question.seq);
+    if (input.followUpQuestion) {
+      const prepared = prepareSubquestion(db, attemptId, input.followUpQuestion);
+      return insertPreparedSubquestion(db, attemptId, question.purpose, prepared);
+    }
     return AttemptSubquestionSchema.parse(
       db.prepare("SELECT * FROM attempt_subquestions WHERE seq = ?").get(question.seq),
     );

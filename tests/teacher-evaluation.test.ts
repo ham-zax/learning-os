@@ -39,7 +39,8 @@ describe("teacher evaluation scenarios", () => {
   it("provides DB-free ad-hoc introduction and adaptation probes without pretending to grade model text", () => {
     expect(adhocTeacherScenarios.map((s) => s.id)).toEqual([
       "changed_question", "broad_framework_intro", "framework_understood_continue",
-      "framework_confused_checkpoint", "knows_basics",
+      "framework_confused_checkpoint", "database_index_tradeoff", "recursion_missing_model",
+      "requested_depth", "research_unavailable", "knows_basics",
     ]);
     for (const scenario of adhocTeacherScenarios) {
       expect(scenario.priorContext.length).toBeGreaterThan(50);
@@ -137,7 +138,8 @@ describe("teacher evaluation scenarios", () => {
     const cases = JSON.parse(listed.stdout as string);
     expect(cases.scenarios.map((item: { id: string }) => item.id))
       .toEqual(["changed_question", "broad_framework_intro", "framework_understood_continue",
-        "framework_confused_checkpoint", "knows_basics"]);
+        "framework_confused_checkpoint", "database_index_tradeoff", "recursion_missing_model",
+        "requested_depth", "research_unavailable", "knows_basics"]);
     expect(JSON.stringify(cases)).not.toContain("reviewCriteria");
     for (const scenario of cases.scenarios) expect(scenario).not.toHaveProperty("review");
     expect(cases.scenarios[1].learnerMessage).toMatch(/checkpoints/);
