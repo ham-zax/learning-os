@@ -96,8 +96,22 @@ export interface RecordExposureInput {
   };
   /** Mark answer-bearing causal/foundational repair as requiring reconstruction before closure. */
   requireReconstruction?: boolean;
-  /** Optionally save the reconstruction question atomically with the exposure, so the exposure call is the final state operation before display. */
-  reconstructionQuestion?: OpenAttemptSubquestionInput;
+  /** Optionally save the reconstruction question atomically with the exposure, so the exposure call is the final state operation before display. When contextText is omitted, inherits the attempt's latest subquestion context or frozen challenge publicPrompt. */
+  reconstructionQuestion?:
+    | {
+        promptText: string;
+        contextText?: string;
+        questionChunking?: "default";
+        scopeCriterionId?: never;
+        scopeNote?: never;
+      }
+    | {
+        promptText: string;
+        contextText?: string;
+        questionChunking: "atomic";
+        scopeCriterionId: string;
+        scopeNote: string;
+      };
 }
 
 export interface CompleteSessionFeedbackInput {
@@ -106,8 +120,13 @@ export interface CompleteSessionFeedbackInput {
 }
 
 export type ResolveSessionReconstructionInput = CompleteSessionFeedbackInput & (
-  | { outcome: "completed"; responseText: string }
-  | { outcome: "opted_out"; responseText?: never }
+  | {
+      outcome: "completed";
+      responseText: string;
+      /** Answer this pending reconstruction subquestion and resolve reconstruction in one transaction. */
+      questionSeq?: number;
+    }
+  | { outcome: "opted_out"; responseText?: never; questionSeq?: never }
 );
 
 export interface ResumableAttempt {
@@ -956,6 +975,7 @@ export function recordExposure(
 
     let challengeId: string | null = null;
     let challengeVersion: number | null = null;
+    let fallbackContextText = "";
     if (input.attemptId !== undefined) {
       const attempt = getAttemptOrThrow(db, input.attemptId);
       if (attempt.challenge_id === null || attempt.challenge_version === null) {
@@ -966,6 +986,16 @@ export function recordExposure(
         attempt.challenge_id,
         attempt.challenge_version,
       );
+      const latestSubq = db
+        .prepare(
+          `SELECT context_text FROM attempt_subquestions
+           WHERE attempt_id = ? AND superseded_at IS NULL
+           ORDER BY seq DESC LIMIT 1`,
+        )
+        .get(attempt.id) as { context_text: string } | undefined;
+      fallbackContextText = latestSubq?.context_text?.trim()
+        ? latestSubq.context_text
+        : challenge.publicPrompt;
       const targetIds = new Set(
         challenge.targets.map((target: ChallengeTarget) => target.objectiveId),
       );
@@ -1002,7 +1032,24 @@ export function recordExposure(
       // Nested transaction/savepoint: an invalid or already-pending question rolls
       // back the checkpoint and the entire exposure; no partial teaching record.
       if (input.reconstructionQuestion) {
-        openAttemptSubquestion(db, input.attemptId!, input.reconstructionQuestion);
+        const resolvedContext = input.reconstructionQuestion.contextText?.trim()
+          ? input.reconstructionQuestion.contextText
+          : fallbackContextText;
+        const rq =
+          input.reconstructionQuestion.questionChunking === "atomic"
+            ? {
+                promptText: input.reconstructionQuestion.promptText,
+                contextText: resolvedContext,
+                questionChunking: "atomic" as const,
+                scopeCriterionId: input.reconstructionQuestion.scopeCriterionId,
+                scopeNote: input.reconstructionQuestion.scopeNote,
+              }
+            : {
+                promptText: input.reconstructionQuestion.promptText,
+                contextText: resolvedContext,
+                questionChunking: "default" as const,
+              };
+        openAttemptSubquestion(db, input.attemptId!, rq);
       }
     }
 
@@ -1390,11 +1437,17 @@ export function resolveSessionReconstruction(
     const activeTimeSeconds = validateActiveTimeSeconds(input.activeTimeSeconds);
     persistActiveTime(db, session.active_attempt_id, activeTimeSeconds);
     if (input.outcome === "completed") {
+      const responseText = requireNonEmpty(input.responseText, "Reconstruction response");
+      if (input.questionSeq !== undefined) {
+        answerAttemptSubquestion(db, attempt.id, {
+          seq: input.questionSeq,
+          responseText,
+        });
+      }
       const pending = db.prepare(`SELECT seq FROM attempt_subquestions
         WHERE attempt_id = ? AND purpose = 'reconstruction'
           AND response_text IS NULL AND superseded_at IS NULL`).get(attempt.id);
       if (pending) throw new Error(`Attempt ${attempt.id} has an unanswered reconstruction question`);
-      const responseText = requireNonEmpty(input.responseText, "Reconstruction response");
       const update = db
         .prepare(
           `UPDATE attempts

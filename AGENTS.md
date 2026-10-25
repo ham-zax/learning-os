@@ -1,181 +1,30 @@
 # AGENTS.md — Learning OS
 
-## What this repository is
+Learning OS is an evidence-driven programming learning system (`explain | predict | implement | debug | design` across `learn | practice | review | interview | mock`). It uses a TypeScript CLI and SQLite (`src/teacher.ts`, `src/kernel-cli.ts`), with a compatible agent acting as a replaceable teacher.
 
-Learning OS is an evidence-driven programming learning system. It uses a TypeScript CLI and SQLite, with ChatGPT or another compatible agent acting as a replaceable teacher.
+## 1. Fast Routing & Mode Selection (Check Before Any Tool Call)
 
-The authoritative learner model is objective-specific evidence, not scalar concept scores or self-ratings.
+| Mode / Situation | Tool / Kernel Action | Teaching & Pedagogical Contract |
+| --- | --- | --- |
+| **Ad-Hoc Teaching & Conceptual Q&A** (no active tracked `tutor.db`/attempt, or "teach me X" / follow-up questions) | **ZERO kernel/DB/bash calls.** Do not run `ls`, `tutor`, `kernel`, `rg`, or profile checks. Answer directly in chat without creating any profile, goal, assessment, or review state. | **Read what the last message did:**<br>• **Changed question / "already know basics":** Answer the *new* question directly or give a brief refresher + immediate actionable practice in the same turn. Never re-explain known basics.<br>• **Broad framework intro:** Start with 1 concrete problem & running example (`decide → tool → decide`), connect core mechanisms causally (nodes, conditional edges, state, checkpoints), and keep conceptual density proportional (150–900 words; no definition dumps or unrequested `webfetch`).<br>• **Continuing / Confused:** Keep the *same* running example. Distinguish local graph checkpoint state from external side-effect deduplication (idempotency keys across the crash window between API call and state commit).<br>• **Quiz & Stop rule:** Explanation-only by default. If the learner says "no quiz" or asks to continue/explain, **never** append a trailing question or "Want X next?" prompt. Never claim durable mastery. |
+| **Tracked Study / Resumed Attempt** (prepared `tutor.db` or named profile/goal) | Load `skills/learning-os-teacher/SKILL.md` and run `npm run -s kernel -- [--profile <id> \| --db tutor.db] getStudyContinuation '{"goalId":"..."}'` on turn 1. Do not run `ls`, `cat package.json`, `kernel methods`, or `grep` on `src/`/`docs/`. | Reconcile the learner's verbatim response against the saved question, frozen rubric criteria, and required deterministic execution (`submitAndAssess`, `recordExposure`, `completeSessionFeedback`). |
+| **New Learner Onboarding** (explicitly requests tracked curriculum) | Use `src/workspace.ts` / `npm run tutor -- onboard`. | Structured intake → missing-info questions → adaptive proposal → explicit learner confirmation before creating an isolated profile. |
 
-```text
-concept × capability
-→ frozen challenge
-→ attempt
-→ assessment
-→ append-only evidence
-→ projections / weaknesses
-→ ReviewRatingMapper
-→ FSRS
-```
+## 2. Core Invariants & State Ownership
 
-Core capabilities are exactly:
-
-```text
-explain | predict | implement | debug | design
-```
-
-Delivery contexts are exactly:
-
-```text
-learn | practice | review | interview | mock
-```
-
-## State ownership
-
-- Global reusable curriculum lives under `knowledge/`. Coding routes are `knowledge/frontend-revision/` and `knowledge/backend-systems/`; read `docs/coding-courses.md` for discovery, exact scope, source references, practical work and profile attachment. Existing sibling source registries remain references; do not clone their corpora into learner databases.
-- Managed learner profiles live under `data/profiles/<profile-id>/tutor.db`.
-- `data/profiles/registry.json` stores profile metadata and the active profile only; registry writes are serialized across concurrent processes.
-- Learner evidence, goals, review cards, weaknesses, sessions, and resumable state are profile-local.
-- Canonical managed `registry.json` and `tutor.db` files are intentionally versioned learner state. When they change and a commit is being made, checkpoint the affected profile and include the canonical files; do not omit them as disposable runtime state.
-- Raw resumes, job descriptions, chat transcripts, provider IDs, and API keys are not learner-state persistence.
-
-Concept rows are descriptive curriculum metadata only. Learner progress belongs to objective evidence/projections and FSRS review state.
-
-## Core paths
-
-| Path | Responsibility |
+| Boundary | Rule |
 | --- | --- |
-| `src/workspace.ts` | Pre-profile teacher workspace: profiles, catalog, onboarding, profile opening |
-| `src/profile/` | Learner profile registry and isolated DB resolution |
-| `src/onboarding/` | Structured intake, information needs, adaptive proposal, confirmed application |
-| `src/teacher.ts` | Provider-neutral teacher kernel bound to one learner DB |
-| `src/kernel-cli.ts` | JSON shell surface over the teacher kernel (`npm run -s kernel`) |
-| `src/knowledge/challenge-calibration.ts` | Discovers and builds calibrated prediction packs from `knowledge/<course>/challenges/` |
-| `src/kernel/foundation.ts` | Objectives, frozen challenges, attempts, hints/exposures, resume |
-| `src/kernel/evidence.ts` | Assessment, append-only evidence, projections, correction |
-| `src/selection/` | Deterministic challenge-intent selection |
-| `src/scheduler/` | `ts-fsrs` adapter and evidence-to-rating mapping |
-| `src/plan/today.ts` | Daily mission orchestration and goal time budget |
-| `src/study/continuation.ts` | Read-only resume-before-budget-before-plan orchestration |
-| `src/session/` | Ordinary learning-session flow |
-| `src/interview/` | Coding and system-design interview flows |
-| `src/db/schema.ts` | Single current SQLite schema |
-| `src/db/database.ts` | Database lifecycle and CRUD |
-| `docs/kernel-contracts.md` | Authoritative V1 kernel contract |
-| `docs/teacher-agent-protocol.md` | Learner-facing agent behavior and semi-strict tutoring policy |
-| `skills/learning-os-teacher/` | Installable/portable teacher skill source |
+| **Evidence Pipeline** | `concept × capability → frozen challenge → attempt → assessment → append-only evidence → projections/weaknesses → ReviewRatingMapper → FSRS`. |
+| **State Ownership** | Global curriculum lives in `knowledge/` (`frontend-revision`, `backend-systems`). Managed learner profiles live in `data/profiles/<profile-id>/tutor.db` and `data/profiles/registry.json` (checkpoint before committing). Keep `config.json`, transcripts, resumes, and secrets out of Git. |
+| **Pre-Display Exposure** | Hints, worked examples, and causal repairs must be recorded via `recordExposure` *before* showing answer-bearing material in tracked mode. Guided/exposed work never counts as independent retrieval. |
+| **Deterministic Check** | Never substitute model opinion for required code execution (`verification.required = true`); record exact `stdout` lines in `submitAndAssess`. |
+| **Environment & Authority** | CLI/IDE uses current Git root; connected web defaults to WebHarness ARM `/home/ubuntu/repo/learning-os`. Authority order: `accepted ADRs → docs/kernel-contracts.md → docs/architecture.md + docs/evidence-model.md → design docs`. |
 
-## Onboarding contract
-
-A new learner should flow through:
-
-```text
-structured intake
-→ missing-information questions
-→ purpose/time-aware proposal
-→ explicit learner confirmation
-→ new isolated profile
-→ reusable/custom concept metadata
-→ sparse goal objectives
-→ initial diagnostics
-→ evidence-driven daily learning
-```
-
-Resume/JD/self-reported experience may change coverage, priority, or diagnostic strategy. It must never create mastery evidence or FSRS state.
-
-Preparation strategies are planning metadata:
-
-```text
-learn | refresh | diagnose_first | transfer_practice
-```
-
-They are not readiness states.
-
-## Learner-facing teacher behavior
-
-Learning OS is **agent-operated**. The learner's normal interface is the conversation with ChatGPT or another compatible agent, not the Learning OS CLI. In a connected web/chat session, the agent uses its WSL/repository connection to read the shared Learning OS checkout, invoke the public workspace/kernel boundaries or current CLI as an execution surface, persist/query learner state, and then return the learner-facing response in chat. The normal loop is therefore `learner message -> agent consults/invokes Learning OS in WSL -> agent responds in chat -> repeat`, and any fresh compatible ChatGPT session connected to the same canonical repository/profile must be able to continue from durable Learning OS state without prior chat history.
-
-Do not require or design a dedicated Learning OS MCP server for this workflow. MCP/WSL access is the agent's bridge to the repository; Learning OS itself remains the local kernel/CLI and durable state owner. Likewise, do not instruct the learner to run routine `npm run tutor -- ...` commands as the primary learning UX unless the learner explicitly asks to operate the CLI. CLI commands are agent/admin/debug integration surfaces and fallbacks, not the intended conversational interface.
-
-When acting as the learner-facing teacher, interviewer, onboarding guide, study coach, or session-resume agent, start with the source Teacher skill. Follow only the relevant sections of `docs/teacher-agent-protocol.md` selected by that skill.
-
-### Required pre-teaching readiness (every new teacher instance)
-
-Read the current checkout's `skills/learning-os-teacher/SKILL.md`. It is the short teacher entry point and owns route selection, readiness, and conditional instruction loading.
-Verify the authoritative checkout before teaching. Honor a named workstation and intended profile; never silently substitute either.
-For tracked work, call `getStudyContinuation(...)` before teaching or selecting work and reconcile the latest message with the returned state.
-Use public workspace/kernel APIs only. Do not write learner SQLite directly or infer learner truth from chat memory.
-
-Load only the skill's matching procedure sections and relevant curriculum. `docs/teacher-agent-protocol.md` is the detailed reference manual, not a mandatory full-file startup read.
-Use `docs/kernel-contracts.md` for the specific operation's missing contract details, not as a default repository survey.
-Reuse current instruction orientation during the session. Refresh continuation and active state on later learner turns and after interruptions.
-Harmless product questions need no profile or kernel call. Ad-hoc teaching stays ephemeral unless the learner authorizes promotion.
-If access fails, identify the missing boundary and offer conceptual help without claiming connected teaching or persisted state.
-
-The skill's non-optional boundaries include frozen criteria, pre-display exposure, practical-work/installation consent, and text-first presentation.
-Stable conceptual teaching needs no release lookup. Version-sensitive claims use the conditional research guide after episode resolution.
-No generic tutoring policy, optional reviewer, visual build pipeline, or separate learner model may override Learning OS sequencing and evidence ownership.
-
-Environment routing:
-
-- CLI/IDE agents should use the current Learning OS Git root.
-- Connected web sessions must use the user-named workstation/repository if specified; otherwise the canonical connected Learning OS workstation is **WebHarness ARM**, `/home/ubuntu/repo/learning-os`. Do not silently use non-ARM WSL `/home/hamza/repo/learning-os` unless the user explicitly chooses that environment.
-- If repository access is unavailable, do not claim to have read or changed learner state.
-
-The portable skill source is `skills/learning-os-teacher/`; provider-specific repository wrappers are intentionally not maintained.
-
-## Important invariants
-
-- Freeze an assessable challenge and rubric before the learner answers.
-- One assessed objective produces one `EvidenceEvent`.
-- Hints and answer/explanation exposure are recorded before they are shown.
-- Confidence is metadata, never correctness.
-- Guided or exposed performance does not silently extend FSRS intervals.
-- FSRS owns **when** a valid retrieval is due.
-- The selector owns **what/how** to practice next.
-- Evidence corrections rebuild derived projections/cards; do not rewrite history.
-- Coding correctness requires real executable verification when the challenge requires it. LLM review alone is qualitative.
-- A fresh teacher must be able to resume from durable kernel state without previous chat history.
-- Learner-facing continuation must call `getStudyContinuation(...)` before selecting new work. An explicitly adopted one-episode route uses `oneEpisode: true` instead of a fictional minute allowance; actual budgets and elapsed-time FSRS semantics remain intact. Episode mode and `availableMinutes` are mutually exclusive.
-
-## Commands
+## 3. Public Commands Reference
 
 ```bash
-npm ci
-npm run tutor -- profile create "My Profile"
-npm run tutor -- profile list
-npm run tutor -- profile checkpoint [profile-id]
-npm run tutor -- onboard
-npm run tutor -- continue <goal-id> [--minutes <n> | --one-episode]
-npm run tutor -- today <goal-id>
-npm run tutor -- <topic-id> --mode learn
-npm run tutor -- <topic-id> --mode practice
-npm run tutor -- <topic-id> --mode review
-npm run tutor -- interview <concept-id> --type coding
-npm run tutor -- interview <concept-id> --type system-design
-npm run tutor -- due
-npm run tutor -- stats
-npm run -s kernel -- <method> '<json-arg>'   # teacher-kernel JSON surface for shell-connected agents
-npm run pack:new -- <course> <concept-id>    # scaffold a calibrated prediction pack
-npm run typecheck
-npm run build
+npm run -s kernel -- [--profile <id> | --db <path>] <method> '<json-arg>'
+npm run tutor -- profile create "<name>" | list | checkpoint [profile-id]
+npm run tutor -- onboard | continue <goal-id> [--minutes <n> | --one-episode] | due | stats
+npm test && npm run typecheck
 ```
-
-Canonical managed learner state in `data/profiles/registry.json` and `data/profiles/<profile-id>/tutor.db` is intentionally versioned. After learner state changes, run `npm run tutor -- profile checkpoint [profile-id]` before staging the database. When committing a work wave that includes those changes, include the changed canonical files; do not leave them out merely because they are learner/runtime data. Keep SQLite WAL/SHM/journal sidecars and registry lock/temp artifacts untracked.
-
-Versioned learner databases contain responses, evidence, exposure history, goals, and scheduling state. Treat repository visibility and collaborator access as learner-data access. SQLite databases are binary: use one canonical writer, avoid independent edits to the same profile on multiple branches or machines, and choose one canonical database if histories diverge. A textual Git merge is not a database merge.
-
-Keep `config.json`, raw learner documents, resumes, job descriptions, chat transcripts, provider IDs, API keys, secrets, and generated personal plans out of Git. Portable, intentionally curated learner examples or personalized lesson snapshots may be committed outside `data/` when they are human-readable, explicitly non-secret, and documented as examples rather than authoritative runtime state. Such snapshots are for learning/reference unless an explicit import/restore path exists.
-
-## Documentation authority
-
-When documentation conflicts, use this order:
-
-```text
-accepted ADRs
-→ docs/kernel-contracts.md
-→ docs/architecture.md + docs/evidence-model.md
-→ approved focused design docs
-→ research notes
-```
-
-Inspect the current implementation before changing contracts. Historical Generic Tutor ancestry remains in Git/ADRs, not in the active learner-state contract.

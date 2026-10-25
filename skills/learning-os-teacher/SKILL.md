@@ -9,96 +9,39 @@ description: >-
   Also use for a learner-requested review of the agent's Learning OS session workflow or teaching behavior.
 ---
 
-# Learning OS Teacher
+# Learning OS Teacher — Action-Table Operating Guide
 
-Learning OS owns learner truth and what comes next. You own the explanation and adaptation to the learner's latest message.
-This entry point is the operating guide. Read only the linked sections that apply; the full protocol is a reference manual.
+Learning OS owns learner truth, scheduling, and what comes next. You own the explanation and adaptation to the learner's latest message.
+**Fast-Path Rule:** When `AGENTS.md` and this skill are loaded, **do not** run `ls`, `cat package.json`, `kernel methods`, `listScaffoldPacks`, or `grep` on `src/` or `docs/`. Call `getStudyContinuation` directly on your first shell turn and execute the matching row in the Action Table below.
 
-## Before the first teaching turn — mandatory context preflight
+## 1. Shell Invocation Convention
 
-1. Verify the user-named checkout and its Git root. In CLI/IDE use the current Learning OS root; connected web defaults to WebHarness ARM `/home/ubuntu/repo/learning-os`. Never silently switch machines or profiles.
-2. Read current repository `AGENTS.md` and this source skill. Reuse already-loaded current instructions. Do not read the full protocol or kernel contract by default.
-3. Choose the route below. For tracked work, resolve the intended profile and goal, then call `getStudyContinuation(...)` before teaching or choosing work. Use public APIs only.
-4. Read the active procedure section and any missing relevant state: saved question, frozen challenge/criteria, feedback, preferences, and hint/exposure provenance. Reconcile the latest message before teaching or grading.
+```bash
+npm run -s kernel -- [--profile <id> | --db tutor.db] <method> [json-arg ...]
+```
+- Use `--db tutor.db` when a root `tutor.db` exists in the working directory; otherwise use `--profile <id>`.
+- **Positional Arguments:** Multi-argument kernel methods take separate JSON arguments in the shell, e.g. `submitAndAssess <attemptId> '<json>'`, `recordExposure <sessionId> '<json>'`, `completeSessionFeedback <sessionId> '{}'`.
 
-Reuse checkout orientation until the connection or instruction revision changes. Refresh tracked continuation on later learner turns and after interruptions.
-If access fails, state what is unavailable. Offer conceptual help without claiming connected teaching or persisted learner state.
+## 2. Tracked State → Single-Command Action Table
 
-## Route the latest message
+Call `npm run -s kernel -- --db tutor.db getStudyContinuation '{"goalId":"<goalId>"}'` (omit `goalId` if unknown, or check `listPreparationContexts` only if no goal is known). `getStudyContinuation` already returns the resumed session, active challenge, question presentation (`presentation`), and `feedback`. **Do not re-fetch them.**
 
-| Situation | Read or do next | Stop boundary |
+| `getStudyContinuation` State / Learner Turn | Exact Kernel CLI Command(s) to Run | Pedagogical & Stop Boundary |
 | --- | --- | --- |
-| Harmless product/help question or unrelated clarification | Answer directly. No profile or kernel call. | Do not turn conversation into learner evidence. |
-| Ad-hoc explanation with no identified tracked overlap | Use [Teach broad ad-hoc topics](#teach-broad-ad-hoc-topics-without-a-shadow-curriculum) below. | No profile, goal, assessment, or review creation. |
-| New learner explicitly wants tracking | Read [Onboarding workflow](../../docs/teacher-agent-protocol.md#onboarding-workflow). Use the pre-profile workspace. | Confirm the exact proposal before creating a profile. |
-| Tracked answer, continuation, or study request | Resolve identity and call continuation, then use the result table below. | Do not guess another learner or invent the next task. |
-| Progress/evidence question or explicit profile/goal action | Use the relevant public receipt, profile, or goal boundary. Read [Authority transitions](../../docs/teacher-agent-protocol.md#authority-transitions-and-inspectable-claims) when needed. | No planning call for a read-only fact unless teaching or next-work selection also begins. Mutations require authorization. |
-| Learner explicitly requests a quiz/interview or another tracked objective | Read [Learning-OS-routed requests](../../docs/teacher-agent-protocol.md#learning-os-routed-requests). Resolve the requested challenge through the kernel. | Respect blockers and the returned intent before authoring. |
-| Explanation or hint overlaps a known active attempt/diagnostic | Read [Exposure-sensitive requests](../../docs/teacher-agent-protocol.md#exposure-sensitive-requests). | Record applicable help before showing answer-bearing material. |
+| **1. Complete, Assessable Learner Answer** (`presentation.kind = "question"`, learner gives a complete answer—correct, slip, or wrong causal model) | **Step A (If `challenge.verification.required` is true):** Run the exact snippet first (e.g. `node -e '...'`) to capture real `stdout` lines.<br>**Step B (Submit, Assess, & Auto-Close if Correct in ONE call):**<br>`npm run -s kernel -- --db tutor.db submitAndAssess <attemptId> '{"closeIfComplete":true,"response":{"questionSeq":<seq>,"responseText":"<exact learner text>"},"assessment":{"evaluatorType":"agent","assessmentBasis":"frozen_rubric|deterministic_execution|mixed","verificationOutput":{"outcome":"passed","basis":"deterministic_execution","summary":"Ran verification","details":{"stdout":["..."]}},"objectiveResults":[{"objectiveId":"<objId>","result":"correct|partially_correct|incorrect|ungradable","criteriaMet":["..."],"criteriaUnmet":["..."],"misconceptionsObserved":[],"rationale":"..."}]}}'`<br>*(Omit `verificationOutput` when `assessmentBasis` is `"frozen_rubric"`. Always pass `"misconceptionsObserved":[]` unless a registered misconception ID exists. Every required criterion MUST appear in `criteriaMet` or `criteriaUnmet`.)* | • **If `result: "correct"` (`feedbackClosed: true`):** Confirm what the answer demonstrated (grounding in any prior scaffold exposure text if applicable) and **stop without asking another question or bonus drill**.<br>• **If `result: "incorrect"` or `"partially_correct"` due to a causal misconception** (even if predicted output matched `stdout`!): Grade `result: "incorrect"` with all required criteria in `criteriaUnmet`, then immediately run **Row 2 (Causal Repair)** in the next command. |
+| **2. Causal Repair & Reconstruction** (`feedback.nextAction = "review_gap"` or after grading an incorrect causal model) | **Do NOT call `listScaffoldPacks` or `getScaffoldMaterial`.** Record the corrective explanation and reconstruction question atomically in **one** call (`contextText` is inherited automatically):<br>`npm run -s kernel -- --db tutor.db recordExposure <sessionId> '{"attemptId":<attemptId>,"objectiveIds":["<objId>"],"exposureType":"corrective_feedback_shown","teachingMaterial":{"content":"<clear causal repair explanation>","format":"markdown"},"requireReconstruction":true,"reconstructionQuestion":{"promptText":"<focused reconstruction question testing the repaired causal link>","questionChunking":"default"}}'` | Present the causal repair explanation clearly, then ask the exact saved reconstruction question and **stop**. Never append the answer to the reconstruction question. |
+| **3. Learner Answers Pending Reconstruction** (`feedback.nextAction = "reconstruct"`, `presentation.purpose = "reconstruction"`) | Answer the pending reconstruction question and close reconstruction atomically in **one** call:<br>`npm run -s kernel -- --db tutor.db resolveSessionReconstruction <sessionId> '{"outcome":"completed","questionSeq":<seq>,"responseText":"<exact learner text>"}'`<br>*(If the learner explicitly opts out of reconstruction instead: `resolveSessionReconstruction <sessionId> '{"outcome":"opted_out"}'`.)* | Acknowledge the learner's reconstruction briefly, confirm the session step is complete, and **stop without asking a new question**. |
+| **4. Ambiguous / Underspecified Answer** (Learner says e.g. *"The microtask goes first"* without naming which log or why) | **Do NOT grade or fail ambiguity.** Preserve the verbatim answer on the current subquestion and open one neutral clarification subquestion:<br>`npm run -s kernel -- --db tutor.db answerAttemptSubquestion <attemptId> '{"seq":<seq>,"responseText":"<exact learner text>"}' && npm run -s kernel -- --db tutor.db openAttemptSubquestion <attemptId> '{"promptText":"<neutral clarification question>","contextText":"<existing presentation.contextText>","questionChunking":"default"}'` | Ask only the neutral clarification question without hinting or revealing the mechanism, and **stop**. |
+| **5. Question Too Large / Learner Requests Smaller Step** (Learner says e.g. *"That's too much at once, ask one small piece"*) | Replace the pending subquestion with an `"atomic"` question scoped to one frozen criterion:<br>`npm run -s kernel -- --db tutor.db replaceAttemptSubquestion <attemptId> '{"seq":<seq>,"contextText":"<existing presentation.contextText>","promptText":"<single-step question>","questionChunking":"atomic","scopeCriterionId":"<criterionId>","scopeNote":"<what a sufficient answer demonstrates>"}'` | Present the preserved code/task context and the smaller scoped question, and **stop**. |
+| **6. Learner Asks for Answer / Explanation / Hint on Unsubmitted Attempt** (`phase = "awaiting_response"`, e.g. *"Just tell me the answer"* or *"Explain what happens here"*) | Record the exposure **before** showing the answer/explanation (**do NOT pass `requireReconstruction: true`** while the attempt is still unsubmitted in `awaiting_response`):<br>`npm run -s kernel -- --db tutor.db recordExposure <sessionId> '{"attemptId":<attemptId>,"objectiveIds":["<objId>"],"exposureType":"answer_revealed|explanation_shown","teachingMaterial":{"content":"<answer and explanation>","format":"markdown"}}'` | Show the recorded explanation/answer clearly, note that guided/exposed work does not count as independent retrieval, and **stop**. |
+| **7. Missing Question Presentation** (`presentation.kind = "needs_question"`) | Save one complete question presentation before displaying:<br>`npm run -s kernel -- --db tutor.db openAttemptSubquestion <attemptId> '{"contextText":"<code or scenario context>","promptText":"<question prompt>","questionChunking":"default"}'` | Display the saved context and question verbatim and **stop**. |
+| **8. `complete_feedback` Pending** (`feedback.nextAction = "complete_feedback"`) | `npm run -s kernel -- --db tutor.db completeSessionFeedback <sessionId> '{}'` | Summarize what the learner demonstrated (referencing any prior scaffold exposure mechanism) and **stop without a follow-up question**. |
+| **9. `recommend` Intent (Author & Open Challenge)** (`continuation.kind = "recommend"`) | Check calibrated cases first:<br>`npm run -s kernel -- --db tutor.db findCalibratedCase '<intent-json>'`<br>If found, build & register (`buildCalibratedChallenge` → `registerChallenge` → `createSession` → `openAttempt` → `openAttemptSubquestion`). | Freeze the challenge before the learner answers. Present only neutral task context and the question, then **stop**. |
+| **10. `needs_budget` or `no_action`** | No mutation call. | For `needs_budget`, ask how much study time the learner has today. For `no_action`, explain the returned reason briefly and **stop**. |
 
-An ad-hoc label does not erase an identified tracked attempt. Do not inspect unrelated profiles to invent an overlap.
-If the intended goal or the meaning of “continue” remains genuinely ambiguous, ask one focused clarification.
-A new message may answer the pending question, ask for context/help, change direction, or state a preference. Interpret that before replaying any saved question.
+## 3. Ad-Hoc Teaching & Non-Optional Boundaries
 
-## Execute the kernel result
-
-`getStudyContinuation` already includes the resumed session, question presentation, feedback, and practical-work policy when applicable.
-Use those returned values; fetch only missing details. Do not repeat the reads merely because another guide names the same API.
-
-| Returned state or learner action | Relevant procedure | Required action |
-| --- | --- | --- |
-| `needs_budget` | [Resumption workflow](../../docs/teacher-agent-protocol.md#existing-learner--resumption-workflow) | Ask for current study time. Use `oneEpisode: true` only for an explicitly adopted episode-sized route, never with `availableMinutes`. |
-| `no_action` | Returned reason and mission | Explain briefly and stop. Do not invent work. |
-| `recommend` or a resolved requested intent | [Challenge authoring](../../docs/teacher-agent-protocol.md#challenge-authoring) and [Assessable lifecycle](../../docs/teacher-agent-protocol.md#assessable-challenge-lifecycle) | Use the exact intent and `getPedagogyRecommendation(intent)`. Freeze before the answer. Use the goal ID for the session. |
-| `resume`, response collection or question/context complaint | [Present the saved question](../../docs/teacher-agent-protocol.md#present-the-saved-question) and [Preserve question identity](../../docs/teacher-agent-protocol.md#preserve-question-identity) | Interpret this message first. A complete answer uses `submitAttempt` with the saved `questionSeq` and verbatim `responseText`; split parts use `answerAttemptSubquestion`. |
-| `presentation.kind = needs_question` | Same question procedure | Save one complete presentation before displaying it. Preserve frozen criteria and explicit chunking. |
-| `feedback.nextAction = run_verification` or `assess_response` | [Assessment contract](../../docs/kernel-contracts.md#assessment-contract), frozen challenge, and the specific API operation | Run required executable checking, then assess the frozen criteria. Do not substitute model opinion for required execution. When the final answer and its run are both ready, use one `submitAndAssess` call: `outcome: "passed"` means the command ran, the run output belongs in `details.stdout`, and learner correctness belongs in `objectiveResults`. |
-| `complete_feedback`, `review_gap`, `review_ungradable`, or `reconstruct` | [Adapt feedback](../../docs/teacher-agent-protocol.md#adapt-feedback-to-the-actual-answer) | Follow the returned action. Correct sufficient work closes without a bonus drill. Preserve saved reconstruction and explicit opt-out. |
-
-Read only each named section, plus direct prerequisites needed for the current operation. Do not load a whole document to find one procedure.
-Use [kernel contracts](../../docs/kernel-contracts.md) for the exact current operation when its signature or preconditions are missing.
-If repository protocol text is unavailable, use the matching section in the bundled [portable protocol](references/teacher-protocol.md), not both copies.
-A fallback document cannot supply missing learner state or establish kernel access.
-
-## Non-optional boundaries
-
-- Never write learner SQLite directly, fabricate learner answers/evidence, infer mastery from self-report, or promote ad-hoc conversation without authorization.
-- Keep the selected objective, task form, novelty, and frozen criteria. Learning OS chooses later work and FSRS owns review timing.
-- Hints and answer-bearing explanations require their existing pre-display records. Prepare the exact material first, record it as the final state operation, then show it. Hidden tool output is not learner-visible teaching.
-- A causal repair uses the saved reconstruction lifecycle. Do not open replacement work or silently close a required reconstruction. Never count guided/exposed work as clean retrieval.
-- Preserve the learner's actual answer and saved question identity. Clarify ambiguous wording before grading; a complete wrong causal explanation is assessable, not a reason for endless clarification.
-- Honor practical-work preferences. `ask_first` is not consent. Do not install dependencies, create environments, or scaffold projects for conceptual teaching. If installation becomes necessary, explain the package, target, purpose and text alternative, then obtain consent. An explicit installation request already authorizes that scope.
-- Use text/Markdown by default. An already-working native visual may help. Do not build HTML, start servers, automate browsers, or capture screenshots for an ordinary lesson. Renderer failure means immediate text fallback. Explicit artifact requests are separate workflows and do not imply installation consent.
-- For an answer-hidden assessment question, provide only neutral task context. After asking any genuine learner question, stop without appending its answer. Speak naturally, hide internal IDs, and operate routine CLI steps yourself.
-
-## Teach broad ad-hoc topics without a shadow curriculum
-
-A simple “Use Learning OS and teach me this” is enough. Do not require onboarding or a special prompt.
-For a broad introduction, read only [Broad ad-hoc concept construction](references/reasoning-retrieval-playbook.md#broad-ad-hoc-concept-construction) and its adaptation section.
-Start from a concrete problem and connect a few useful relationships. Adapt to the learner's response, requested depth, and existing knowledge.
-Questions are optional. Do not impose recall-first, a quiz, repeated proof, or review scheduling. Explanation-only means no added quiz.
-For a long first-principles build that the learner explicitly wants to walk, use [stepwise construction](references/reasoning-retrieval-playbook.md#stepwise-construction). Ask for one inference per step. Ordinary explanation stays question-free.
-Prepare and execute only what the next explanation needs. Do not install the topic's framework or build a full demonstration merely to introduce it.
-Keep conversational context only. No ad-hoc mastery claims or retroactive evidence.
-
-## Load extra guidance only on its trigger
-
-| Trigger | Read only this guidance |
-| --- | --- |
-| Version-sensitive code/API, release/support/security claim | [Research grounding](references/research-grounding.md). Stable concepts need no lookup; checking sources never authorizes installation. |
-| An explicitly requested artifact needs presentation guidance, or an available native renderer has unclear output/permissions | [Presentation capabilities](references/presentation-capabilities.md). If text suffices or no renderer is available, skip this reference and teach in text. |
-| Selected concept construction, retrieval, discrimination, or transfer | Matching section of [Reasoning playbook](references/reasoning-retrieval-playbook.md). Retrieval-first is not an ad-hoc default. |
-| Concrete failure or causal repair | [Debugging playbook](references/debugging-repair-playbook.md). |
-| Adopted real implementation/design/codebase work | [Implementation playbook](references/problem-solving-implementation-playbook.md). |
-| Selected interview/mock or post-attempt debrief | [Performance playbook](references/performance-interview-playbook.md). Do not teach during an assessment that forbids it. |
-| Adopted coding revision route | [Technical revision](references/technical-revision.md). |
-| Learner asks why an objective is weak/ready/durable | `getObjectiveEvidenceReceipt(objectiveId)` and [Authority transitions](../../docs/teacher-agent-protocol.md#authority-transitions-and-inspectable-claims). Disagreement alone never rewrites evidence. |
-| Learner requests a saved revision note | [Personalized revision notes](../../docs/teacher-agent-protocol.md#personalized-revision-notes). Use fresh canonical note context. |
-| Learner declines practical work or changes lasting preferences | [Learner agency](../../docs/teacher-agent-protocol.md#learner-agency) or [Stable preferences](../../docs/teacher-agent-protocol.md#stable-interaction-preferences). |
-| Inherited challenge conflicts with its saved authoring contract | [Inherited challenge review](../../docs/teacher-agent-protocol.md#review-an-inherited-frozen-challenge-narrowly). |
-| Learner requests review of this session's workflow | [Optional session review](../../docs/teacher-evaluation.md#optional-session-review). Use visible interactions and available action evidence only; disclose missing evidence. No automatic reviewer on ordinary turns. |
-| Connection, workstation, or profile access is unclear | [Environment routing](references/environment-routing.md). |
-
-Choose one primary teaching playbook for the active need. Load another only when that need changes.
-Through a shell, invoke `npm run -s kernel -- <method> '<json-arg>'` in the verified checkout. Use `--profile <id>` for the intended profile.
-Do not list methods every turn or write a helper script for each call. Before a profile exists, use the workspace/onboarding boundary instead.
+- **Ad-Hoc Conversations (Zero Tool Calls):** When there is no tracked `tutor.db`/profile or the learner asks a broad conceptual question (*"Teach me X"*), **do not invoke any kernel or shell tools**. Start from a concrete problem and running example, connect mechanisms causally, adapt directly to follow-up turns without repeating known basics, and never append a quiz when the learner asked for explanation-only or "no quiz".
+- **Assisted Closure Grounding:** When closing an attempt that had prior scaffold/hint exposures (`activeAttemptState.exposureEvents` or `getSessionScaffoldPresentations`), explicitly connect your closing confirmation to the mechanism taught in that scaffold exposure.
+- **No Unsolicited Installs or Artifacts:** Honor `practicalWorkPolicy` (`ask_first` is not consent). Use clean Markdown by default; do not spin up servers, browsers, or extra files unless requested.
+- **Reference Manuals (Load Only on Explicit Trigger):** Only read `docs/teacher-agent-protocol.md`, `docs/kernel-contracts.md`, or `references/*.md` when handling a workflow not covered by the table above (e.g., onboarding a new tracked profile, revising invalidated evidence receipts, or saving personalized revision notes).

@@ -12,15 +12,21 @@ import type Database from "better-sqlite3";
 import type { AssessmentResultInput, Attempt } from "../db/types.js";
 import { recordAssessment } from "./evidence.js";
 import type { AssessmentCommitResult } from "./evidence.js";
-import { submitAttempt } from "./foundation.js";
+import { getSessionFeedback } from "./feedback.js";
+import { completeSessionFeedback, submitAttempt } from "./foundation.js";
 import type { SubmitAttemptInput } from "./foundation.js";
 
 export interface SubmitAndAssessInput {
   response: SubmitAttemptInput;
   assessment: AssessmentResultInput;
+  /** When true and the assessed feedback step is complete (all frozen targets correct, no reconstruction required), close feedback in the same transaction. */
+  closeIfComplete?: boolean;
 }
 
-export type SubmitAndAssessResult = AssessmentCommitResult & { attempt: Attempt };
+export type SubmitAndAssessResult = AssessmentCommitResult & {
+  attempt: Attempt;
+  feedbackClosed?: boolean;
+};
 
 export function submitAndAssess(
   db: Database.Database,
@@ -48,6 +54,18 @@ export function submitAndAssess(
   return db.transaction(() => {
     const attempt = submitAttempt(db, attemptId, input.response);
     const assessment = recordAssessment(db, attemptId, input.assessment);
-    return { attempt, ...assessment };
+    let feedbackClosed = false;
+    if (input.closeIfComplete && attempt.session_id !== null) {
+      const feedback = getSessionFeedback(db, attempt.session_id);
+      if (feedback.nextAction === "complete_feedback") {
+        completeSessionFeedback(db, attempt.session_id, {
+          activeTimeSeconds: input.response.activeTimeSeconds,
+        });
+        feedbackClosed = true;
+      }
+    }
+    return input.closeIfComplete !== undefined
+      ? { attempt, ...assessment, feedbackClosed }
+      : { attempt, ...assessment };
   })();
 }

@@ -22,6 +22,7 @@ afterEach(() => {
 
 const scaffoldBeforeResponse = new Set<string>([
   "scaffold_interrupted_after_presentation", "scaffold_completion_return_to_frozen", "scaffold_assisted_answer_closure",
+  "reconstruction_completed_closure",
 ]);
 const unchangedStateIsCorrect = new Set<string>([
   "im_stuck", "scaffold_interrupted_after_presentation", "scaffold_completion_return_to_frozen",
@@ -153,12 +154,14 @@ describe("teacher evaluation scenarios", () => {
     expect(output.replySha256).toBe(createHash("sha256").update("Brief answer with a usable example.\n").digest("hex"));
   });
 
-  it("offers sixteen replayable episodes including blocker, transfer, backend counterexamples and scaffold continuity", () => {
-    expect(teacherScenarios).toHaveLength(16);
+  it("offers twenty-eight replayable episodes including blocker, transfer, backend/frontend counterexamples, scaffold continuity, and reconstruction closure", () => {
+    expect(teacherScenarios).toHaveLength(28);
     for (const id of ["im_stuck", "transfer_answer", "calibrated_transaction_wrong_model",
       "calibrated_idempotency_ambiguous", "scaffold_interrupted_after_presentation",
       "scaffold_completion_return_to_frozen", "scaffold_assisted_answer_closure",
-      "scaffold_declined_further_instruction"]) {
+      "scaffold_declined_further_instruction", "calibrated_cache_stale_fill_answer",
+      "calibrated_cache_stale_fill_wrong_model", "calibrated_promises_missing_return_answer",
+      "calibrated_this_binding_wrong_model", "reconstruction_completed_closure"]) {
       expect(teacherScenarios.some((scenario) => scenario.id === id)).toBe(true);
     }
   });

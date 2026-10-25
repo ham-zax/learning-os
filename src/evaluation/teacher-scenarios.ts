@@ -33,6 +33,18 @@ export type TeacherScenarioId =
   | "calibrated_transaction_wrong_model"
   | "calibrated_idempotency_model_error"
   | "calibrated_idempotency_ambiguous"
+  | "calibrated_cache_stale_fill_answer"
+  | "calibrated_cache_stale_fill_wrong_model"
+  | "calibrated_promises_missing_return_answer"
+  | "calibrated_promises_wrong_model"
+  | "calibrated_this_binding_wrong_model"
+  | "calibrated_this_binding_answer"
+  | "calibrated_idempotency_answer"
+  | "calibrated_overlap_idempotency_answer"
+  | "calibrated_async_nested_calls_answer"
+  | "calibrated_username_race_wrong_model"
+  | "calibrated_validation_transfer_answer"
+  | "reconstruction_completed_closure"
   | "scaffold_interrupted_after_presentation"
   | "scaffold_completion_return_to_frozen"
   | "scaffold_assisted_answer_closure"
@@ -227,6 +239,138 @@ export const teacherScenarios: readonly TeacherScenario[] = [
       "Does not record an unrequested exposure, require reconstruction, or imply the gap is resolved.",
     ],
   },
+  {
+    id: "calibrated_cache_stale_fill_answer",
+    title: "Assess a resumed cache-aside stale-fill prediction",
+    learnerMessage: "updated to 12; first read: 10; later read: 10; db: 12. The reader read 10 before the update, the cache invalidation ran before the slow fill completed, and the late fill republished the stale 10 into the cache while the database is authoritative at 12.",
+    startingPoint: "A calibrated cache-consistency prediction question is pending in durable state; this message is the learner's answer in a fresh conversation.",
+    review: [
+      "Uses the saved question and exact learner response rather than inventing a new challenge.",
+      "Runs the frozen source after the learner prediction and assesses both criteria.",
+      "Gives concise grounded feedback and closes the episode without a bonus question.",
+    ],
+  },
+  {
+    id: "calibrated_cache_stale_fill_wrong_model",
+    title: "Reject a cache-invalidation prediction that misses the late stale fill",
+    learnerMessage: "updated to 12; first read: 10; later read: 12; db: 12. Deleting the cache entry after the database write guarantees that any later read will miss the cache and load the fresh 12 from the database.",
+    startingPoint: "The calibrated cache-aside stale-fill question is pending; this answer assumes delete-after-write prevents a slow concurrent reader from republishing stale data.",
+    review: [
+      "Runs the frozen source after the prediction and does not grade the wrong model correct.",
+      "Explains how the in-flight reader's slow fill lands after the delete and repopulates stale 10.",
+      "Records answer-bearing repair before showing it, then asks one reconstruction question.",
+    ],
+  },
+  {
+    id: "calibrated_promises_missing_return_answer",
+    title: "Assess a resumed promise-chain missing-return prediction",
+    learnerMessage: "next got undefined; saved draft. The first then callback starts the save but does not return its promise, so it returns undefined and the chained then runs immediately with undefined without waiting for the save.",
+    startingPoint: "A calibrated JavaScript promises prediction question is pending in durable state; this message is the learner's answer in a fresh conversation.",
+    review: [
+      "Uses the saved question and exact learner response rather than inventing a new challenge.",
+      "Runs the frozen source after the learner prediction and assesses both criteria.",
+      "Gives concise grounded feedback and closes the episode without a bonus question.",
+    ],
+  },
+  {
+    id: "calibrated_this_binding_wrong_model",
+    title: "Reject a detached-method prediction that assumes lexical receiver binding",
+    learnerMessage: "1; 2; 2. increment is defined on counter, so calling fn() still increments counter.count to 2.",
+    startingPoint: "The calibrated JavaScript this-binding question is pending; this answer assumes a detached method retains its defining object as this.",
+    review: [
+      "Runs the frozen source after the prediction and does not grade the wrong model correct.",
+      "Explains that a plain call in strict-mode ESM leaves this undefined so reading this.count throws TypeError.",
+      "Records answer-bearing repair before showing it, then asks one reconstruction question.",
+    ],
+  },
+  {
+    id: "calibrated_idempotency_answer",
+    title: "Assess a resumed idempotent retry prediction with correct effect counting",
+    learnerMessage: "retry:10; total:10. The first call recorded key 'payment-7' and total became 5. Because the retry sent a new key 'payment-7-retry', the completed Map lookup misses and the second effect runs, incrementing total to 10.",
+    startingPoint: "A calibrated retries and idempotency prediction question is pending in durable state; this message is the learner's answer in a fresh conversation.",
+    review: [
+      "Uses the saved question and exact learner response rather than inventing a new challenge.",
+      "Runs the frozen source after the learner prediction and assesses both criteria.",
+      "Gives concise grounded feedback and closes the episode without a bonus question.",
+    ],
+  },
+  {
+    id: "calibrated_this_binding_answer",
+    title: "Assess a resumed detached-method prediction with strict-mode receiver awareness",
+    learnerMessage: "1; TypeError; 1. In counter.increment(), counter is before the dot so it is the receiver and count increments to 1. In fn(), the function is called without a receiver, so in strict mode this is undefined and reading this.count throws TypeError, leaving count at 1.",
+    startingPoint: "The calibrated JavaScript this-binding question is pending in durable state; this message is the learner's answer in a fresh conversation.",
+    review: [
+      "Uses the saved question and exact learner response rather than inventing a new challenge.",
+      "Runs the frozen source after the learner prediction and assesses both criteria.",
+      "Gives concise grounded feedback and closes the episode without a bonus question.",
+    ],
+  },
+  {
+    id: "calibrated_promises_wrong_model",
+    title: "Reject a promise-chain prediction that assumes synchronous fulfillment of unreturned work",
+    learnerMessage: "saved draft; next got draft. A then chain waits for every asynchronous operation started inside the callback, so save finishes before next runs.",
+    startingPoint: "The calibrated JavaScript promise-chain question is pending; this answer assumes a then chain waits for unreturned promises created inside callbacks.",
+    review: [
+      "Runs the frozen source after the prediction and does not grade the wrong model correct.",
+      "Explains that without returning the save promise, the first callback returns undefined and the chained then runs immediately.",
+      "Records answer-bearing repair before showing it, then asks one reconstruction question.",
+    ],
+  },
+  {
+    id: "calibrated_overlap_idempotency_answer",
+    title: "Assess an overlapping concurrent retry prediction sharing an operation ID",
+    learnerMessage: "results:[5,10]; total:10. Both calls start before either records completion, so both check completed.has(id) when it is empty and both execute the effect, incrementing total twice to 10.",
+    startingPoint: "The calibrated idempotency concurrent-overlap challenge is pending in durable state; this answer correctly predicts both calls execute because check-then-act is unshared.",
+    review: [
+      "Uses the saved question and exact learner response rather than inventing a new challenge.",
+      "Runs the frozen source after the learner prediction and assesses both criteria.",
+      "Gives concise grounded feedback and closes the episode without a bonus question.",
+    ],
+  },
+  {
+    id: "calibrated_async_nested_calls_answer",
+    title: "Assess a nested async-await prediction with separate suspension boundaries",
+    learnerMessage: "outer-start; inner-start; outer-middle; top-end; inner-end; outer-end. Calling outer runs outer-start synchronously, then inner runs inner-start up to await 0. When inner suspends, outer logs outer-middle and suspends at await inner. Control returns to top level, logging top-end. Microtasks then drain inner-end followed by outer-end.",
+    startingPoint: "The calibrated nested async execution challenge is pending in durable state; this answer correctly traces both synchronous prefixes and continuation order.",
+    review: [
+      "Uses the saved question and exact learner response rather than inventing a new challenge.",
+      "Runs the frozen source after the learner prediction and assesses both criteria.",
+      "Gives concise grounded feedback and closes the episode without a bonus question.",
+    ],
+  },
+  {
+    id: "calibrated_username_race_wrong_model",
+    title: "Reject a concurrent-claim prediction that assumes Set uniqueness guarantees single-claim success",
+    learnerMessage: "A:claimed; decisions:[true,false]; claimed:[\"alex\"]. A Set cannot contain duplicates, so the second client's reservation is rejected.",
+    startingPoint: "The calibrated concurrent username-claim challenge is pending; this answer assumes final collection uniqueness serializes the decision.",
+    review: [
+      "Runs the frozen source after the prediction and does not grade the wrong model correct.",
+      "Explains that both clients observe absence before either add, so both decisions return true even though the Set deduplicates storage.",
+      "Records answer-bearing repair before showing it, then asks one reconstruction question.",
+    ],
+  },
+  {
+    id: "calibrated_validation_transfer_answer",
+    title: "Assess an out-of-order async validation transfer prediction",
+    learnerMessage: "new: new-valid; old: old-invalid; final: old-invalid. Each validation resumes after its own simulated network delay. Because old settles after new, the stale validation result overwrites the newer field, leaving final as old-invalid.",
+    startingPoint: "The calibrated validation transfer challenge is pending in durable state; this answer identifies the race condition publishing stale state.",
+    review: [
+      "Uses the saved question and exact learner response rather than inventing a new challenge.",
+      "Runs the frozen source after the learner prediction and assesses both criteria.",
+      "Gives concise grounded feedback and closes the episode without a bonus question.",
+    ],
+  },
+  {
+    id: "reconstruction_completed_closure",
+    title: "Resolve a pending causal reconstruction and close the episode",
+    learnerMessage: "I assumed async defers the whole function body, but the code before the first await runs synchronously during the call, so A and end run before the paused continuation prints B.",
+    startingPoint: "An incorrect causal explanation was repaired and a reconstruction question is pending on the active attempt; the learner now supplies the reconstruction.",
+    review: [
+      "Records the learner's answer against the pending reconstruction question and resolves session reconstruction as completed.",
+      "Closes the feedback episode without inventing another assessment or bonus drill.",
+      "Does not record a duplicate EvidenceEvent or extra exposure.",
+    ],
+  },
 ];
 
 export interface PreparedTeacherScenario {
@@ -249,13 +393,38 @@ function count(db: Database.Database, table: "evidence_events" | "exposure_event
   return (db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count;
 }
 
+type CalibratedScenarioId =
+  | "calibrated_transaction_answer"
+  | "calibrated_transaction_wrong_model"
+  | "calibrated_idempotency_model_error"
+  | "calibrated_idempotency_ambiguous"
+  | "calibrated_idempotency_answer"
+  | "calibrated_overlap_idempotency_answer"
+  | "calibrated_async_nested_calls_answer"
+  | "calibrated_username_race_wrong_model"
+  | "calibrated_validation_transfer_answer"
+  | "calibrated_cache_stale_fill_answer"
+  | "calibrated_cache_stale_fill_wrong_model"
+  | "calibrated_promises_missing_return_answer"
+  | "calibrated_promises_wrong_model"
+  | "calibrated_this_binding_wrong_model"
+  | "calibrated_this_binding_answer"
+  | ScaffoldScenarioId;
+
+function calibratedPackIdFor(id: CalibratedScenarioId): CalibratedPredictionPackId {
+  if (id.startsWith("calibrated_idempotency") || id === "calibrated_overlap_idempotency_answer") return "idempotency-predict";
+  if (id.startsWith("calibrated_cache_stale_fill")) return "state-ownership-and-cache-consistency-predict";
+  if (id.startsWith("calibrated_promises")) return "js-promises-predict";
+  if (id.startsWith("calibrated_this_binding")) return "js-this-binding-predict";
+  if (id === "calibrated_async_nested_calls_answer" || id === "calibrated_validation_transfer_answer") return "async-predict";
+  return "transaction-predict";
+}
+
 function prepareCalibratedScenario(
   db: Database.Database,
-  id: "calibrated_transaction_answer" | "calibrated_transaction_wrong_model"
-    | "calibrated_idempotency_model_error" | "calibrated_idempotency_ambiguous" | ScaffoldScenarioId,
+  id: CalibratedScenarioId,
 ): PreparedTeacherScenario {
-  const packId: CalibratedPredictionPackId = id.startsWith("calibrated_idempotency")
-    ? "idempotency-predict" : "transaction-predict";
+  const packId: CalibratedPredictionPackId = calibratedPackIdFor(id);
   const pack = loadCalibratedPredictionPack(KNOWLEDGE_ROOT, packId);
   const conceptId = pack.objective.conceptId;
   const objectiveId = `${conceptId}:predict`;
@@ -270,11 +439,17 @@ function prepareCalibratedScenario(
   const intent = continuation.item.intent;
   const selected = findCalibratedPredictionCase(KNOWLEDGE_ROOT, intent, kernel.getChallenge);
   if (!selected || selected.packId !== packId) throw new Error(`No calibrated case for ${id}`);
-  const item = pack.cases.find((candidate) => candidate.id === selected.caseId)!;
+  let targetCaseId = selected.caseId;
+  if (id === "calibrated_overlap_idempotency_answer") targetCaseId = "overlap-variant";
+  else if (id === "calibrated_async_nested_calls_answer") targetCaseId = "nested-call-variant";
+  else if (id === "calibrated_username_race_wrong_model") targetCaseId = "username-transfer";
+  else if (id === "calibrated_validation_transfer_answer") targetCaseId = "validation-transfer";
+  const item = pack.cases.find((candidate) => candidate.id === targetCaseId)!;
+  const alignedIntent = { ...intent, novelty: item.novelty };
   const challengeId = `teacher-eval-${packId}-${item.id}`;
   const built = buildCalibratedPredictionChallenge({ knowledgeRoot: KNOWLEDGE_ROOT,
-    packId, intent, caseId: item.id, challengeId });
-  kernel.registerChallenge(built.challenge, intent);
+    packId, intent: alignedIntent, caseId: item.id, challengeId });
+  kernel.registerChallenge(built.challenge, alignedIntent);
   const sessionId = kernel.createSession(intent.goalId, intent.deliveryContext).id;
   const attemptId = kernel.openAttempt(challengeId, 1, sessionId).attempt.id;
   const question = kernel.openAttemptSubquestion(attemptId, {
@@ -306,6 +481,14 @@ export function prepareTeacherScenario(id: TeacherScenarioId, dbPath: string): P
   try {
     if (id === "calibrated_transaction_answer" || id === "calibrated_transaction_wrong_model"
       || id === "calibrated_idempotency_model_error" || id === "calibrated_idempotency_ambiguous"
+      || id === "calibrated_idempotency_answer"
+      || id === "calibrated_overlap_idempotency_answer"
+      || id === "calibrated_async_nested_calls_answer"
+      || id === "calibrated_username_race_wrong_model"
+      || id === "calibrated_validation_transfer_answer"
+      || id === "calibrated_cache_stale_fill_answer" || id === "calibrated_cache_stale_fill_wrong_model"
+      || id === "calibrated_promises_missing_return_answer" || id === "calibrated_promises_wrong_model"
+      || id === "calibrated_this_binding_wrong_model" || id === "calibrated_this_binding_answer"
       || id === "scaffold_interrupted_after_presentation" || id === "scaffold_completion_return_to_frozen"
       || id === "scaffold_assisted_answer_closure") {
       return prepareCalibratedScenario(db, id);
@@ -337,7 +520,8 @@ export function prepareTeacherScenario(id: TeacherScenarioId, dbPath: string): P
     const attemptId = kernel.openAttempt(challengeId, 1, sessionId).attempt.id;
     let initialQuestionSeq: number | null = null;
 
-    if (id === "correct_cold_answer" || id === "causal_model_error" || id === "scaffold_declined_further_instruction") {
+    if (id === "correct_cold_answer" || id === "causal_model_error" || id === "scaffold_declined_further_instruction"
+      || id === "reconstruction_completed_closure") {
       const correct = id === "correct_cold_answer";
       kernel.submitAttempt(attemptId, { responseText: correct
         ? "A runs at the call; await suspends B, so end appears before B."
@@ -347,6 +531,27 @@ export function prepareTeacherScenario(id: TeacherScenarioId, dbPath: string): P
           criteriaMet: correct ? ["mechanism"] : [], criteriaUnmet: correct ? [] : ["mechanism"],
           rationale: correct ? "Identifies the synchronous prefix and suspended continuation."
             : "Treats the entire async function as deferred." }] });
+      if (id === "reconstruction_completed_closure") {
+        const events = kernel.recordExposure(sessionId, {
+          attemptId,
+          objectiveIds: [OBJECTIVE_ID],
+          exposureType: "corrective_feedback_shown",
+          teachingMaterial: {
+            content: "Calling task() runs synchronously up to the first await, so A prints during the call and only the continuation after await is deferred.",
+            format: "markdown",
+          },
+          requireReconstruction: true,
+          reconstructionQuestion: {
+            contextText: CONTEXT,
+            promptText: "What was the wrong assumption about async, and which part of task runs before await?",
+            questionChunking: "default",
+          },
+        });
+        if (!events.length) throw new Error("Expected reconstruction exposure event");
+        const reconQuestion = db.prepare("SELECT seq FROM attempt_subquestions WHERE attempt_id = ? AND purpose = 'reconstruction' ORDER BY seq DESC LIMIT 1")
+          .get(attemptId) as { seq: number } | undefined;
+        initialQuestionSeq = reconQuestion?.seq ?? null;
+      }
     } else {
       const promptText = transfer
         ? "Why can an older completion overwrite the newer result, and what condition should control publishing?"
@@ -419,16 +624,30 @@ export function inspectTeacherScenario(dbPath: string, prepared: PreparedTeacher
     switch (prepared.id) {
       case "calibrated_transaction_answer":
       case "calibrated_transaction_wrong_model":
-      case "calibrated_idempotency_model_error": {
-        const transaction = prepared.id.startsWith("calibrated_transaction");
-        const wrongTransaction = prepared.id === "calibrated_transaction_wrong_model";
-        const packId = transaction ? "transaction-predict" : "idempotency-predict";
-        const expectedOutput = loadCalibratedPredictionPack(KNOWLEDGE_ROOT, packId).cases[0]!.expectedOutput;
-        const boundaryCriterion = transaction ? "invariant_boundary" : "identity_boundary";
-        const expectedMet = transaction && !wrongTransaction ? ["observable_outcome", boundaryCriterion] : [];
-        const expectedUnmet = transaction && !wrongTransaction ? [] : ["observable_outcome", boundaryCriterion];
+      case "calibrated_idempotency_model_error":
+      case "calibrated_idempotency_answer":
+      case "calibrated_overlap_idempotency_answer":
+      case "calibrated_async_nested_calls_answer":
+      case "calibrated_username_race_wrong_model":
+      case "calibrated_validation_transfer_answer":
+      case "calibrated_cache_stale_fill_answer":
+      case "calibrated_cache_stale_fill_wrong_model":
+      case "calibrated_promises_missing_return_answer":
+      case "calibrated_promises_wrong_model":
+      case "calibrated_this_binding_wrong_model":
+      case "calibrated_this_binding_answer": {
+        const packId = calibratedPackIdFor(prepared.id);
+        const packCases = loadCalibratedPredictionPack(KNOWLEDGE_ROOT, packId).cases;
+        let caseItem = packCases[0]!;
+        if (prepared.id === "calibrated_overlap_idempotency_answer" || prepared.id === "calibrated_async_nested_calls_answer") caseItem = packCases[1]!;
+        else if (prepared.id === "calibrated_validation_transfer_answer" || prepared.id === "calibrated_username_race_wrong_model") caseItem = packCases[2]!;
+        const expectedOutput = caseItem.expectedOutput;
+        const allCriteriaIds = caseItem.criteria.map((c) => c.id);
+        const isCorrectScenario = prepared.id.endsWith("_answer");
+        const expectedMet = isCorrectScenario ? allCriteriaIds : [];
+        const expectedUnmet = isCorrectScenario ? [] : allCriteriaIds;
         const correctAssessment = evidence.length === 1 &&
-          evidence[0]?.result === (transaction && !wrongTransaction ? "correct" : "incorrect") &&
+          evidence[0]?.result === (isCorrectScenario ? "correct" : "incorrect") &&
           JSON.stringify([...(criteria?.met ?? [])].sort()) === JSON.stringify([...expectedMet].sort()) &&
           JSON.stringify([...(criteria?.unmet ?? [])].sort()) === JSON.stringify([...expectedUnmet].sort());
         return [
@@ -438,7 +657,7 @@ export function inspectTeacherScenario(dbPath: string, prepared: PreparedTeacher
             passed: verification?.outcome === "passed" &&
               JSON.stringify(verifiedLines) === JSON.stringify(expectedOutput) },
           { label: "one objective assessed against both frozen criteria", passed: correctAssessment },
-          ...(transaction && !wrongTransaction ? [
+          ...(isCorrectScenario ? [
             { label: "feedback episode closed without a bonus question",
               passed: session.phase === "complete" && questions.length === 1 && count(db, "attempts") === 1 },
           ] : [
@@ -446,6 +665,18 @@ export function inspectTeacherScenario(dbPath: string, prepared: PreparedTeacher
             { label: "reconstruction pending on same attempt", passed: session.reconstruction_status === "required" &&
               activeQuestions.length === 1 && activeQuestions[0]?.purpose === "reconstruction" && questions.length === 2 },
           ]),
+        ];
+      }
+      case "reconstruction_completed_closure": {
+        const reconRow = db.prepare("SELECT reconstruction_response_text FROM attempts WHERE id = ?")
+          .get(prepared.attemptId) as { reconstruction_response_text: string | null } | undefined;
+        return [
+          { label: "pending reconstruction question answered with learner response",
+            passed: initial?.response_text === expectedResponse && reconRow?.reconstruction_response_text === expectedResponse },
+          { label: "session reconstruction marked completed and episode closed",
+            passed: session.reconstruction_status === "completed" && session.phase === "complete" && activeQuestions.length === 0 },
+          { label: "no duplicate evidence or exposure created during closure",
+            passed: evidenceCount === prepared.initialEvidenceCount && exposureCount === prepared.initialExposureCount },
         ];
       }
       case "correct_cold_answer":

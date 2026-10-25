@@ -42,6 +42,89 @@ describe("submitAndAssess", () => {
       .toEqual({ phase: "feedback" });
   });
 
+  it("closes feedback atomically when closeIfComplete is true and all targets are correct", () => {
+    const { sessionId, attemptId } = open();
+    const result = submitAndAssess(db!, attemptId, {
+      response,
+      assessment,
+      closeIfComplete: true,
+    });
+    expect(result.feedbackClosed).toBe(true);
+    expect(db!.prepare("SELECT phase, pending_action FROM sessions WHERE id = ?").get(sessionId))
+      .toEqual({ phase: "complete", pending_action: "none" });
+  });
+
+  it("keeps session in feedback when closeIfComplete is true but a gap requires review", () => {
+    const { sessionId, attemptId } = open();
+    const result = submitAndAssess(db!, attemptId, {
+      response: { responseText: "I am not sure." },
+      assessment: {
+        evaluatorType: "agent",
+        assessmentBasis: "frozen_rubric",
+        objectiveResults: [{
+          objectiveId: OBJECTIVE_ID,
+          result: "incorrect",
+          criteriaMet: [],
+          criteriaUnmet: ["mechanism"],
+          rationale: "Missing mechanism.",
+        }],
+      },
+      closeIfComplete: true,
+    });
+    expect(result.feedbackClosed).toBe(false);
+    expect(db!.prepare("SELECT phase, pending_action FROM sessions WHERE id = ?").get(sessionId))
+      .toEqual({ phase: "feedback", pending_action: "present_feedback" });
+  });
+
+  it("inherits contextText on recordExposure reconstructionQuestion and resolves atomically via questionSeq", () => {
+    const { sessionId, attemptId } = open();
+    const kernel = createTeacherKernel(db!);
+    const q1 = kernel.openAttemptSubquestion(attemptId, {
+      contextText: "```js\nasync function f() { await 0; }\n```",
+      promptText: "What happens at await 0?",
+      questionChunking: "default",
+    });
+    kernel.submitAndAssess(attemptId, {
+      response: { questionSeq: q1.seq, responseText: "Nothing yields." },
+      assessment: {
+        evaluatorType: "agent",
+        assessmentBasis: "frozen_rubric",
+        objectiveResults: [{
+          objectiveId: OBJECTIVE_ID,
+          result: "incorrect",
+          criteriaMet: [],
+          criteriaUnmet: ["mechanism"],
+          rationale: "Wrong causal model.",
+        }],
+      },
+    });
+    kernel.recordExposure(sessionId, {
+      attemptId,
+      objectiveIds: [OBJECTIVE_ID],
+      exposureType: "corrective_feedback_shown",
+      teachingMaterial: { content: "Await yields the continuation to the microtask queue." },
+      requireReconstruction: true,
+      reconstructionQuestion: {
+        promptText: "In your own words, why does await yield?",
+      },
+    });
+    const pres = kernel.getSessionQuestionPresentation(sessionId);
+    expect(pres).toMatchObject({
+      kind: "question",
+      purpose: "reconstruction",
+      contextText: "```js\nasync function f() { await 0; }\n```",
+      promptText: "In your own words, why does await yield?",
+    });
+    if (pres.kind !== "question") throw new Error("Expected question presentation");
+    const resolved = kernel.resolveSessionReconstruction(sessionId, {
+      outcome: "completed",
+      questionSeq: pres.seq,
+      responseText: "Because await suspends the async function and schedules the continuation.",
+    });
+    expect(resolved.phase).toBe("complete");
+    expect(resolved.reconstruction_status).toBe("completed");
+  });
+
   it("rolls the submission back when the assessment is rejected", () => {
     const { attemptId } = open();
     expect(() => submitAndAssess(db!, attemptId, {
