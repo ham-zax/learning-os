@@ -6,54 +6,78 @@ How to use Learning OS from a chat session (Claude web, ChatGPT, or any agent) a
 
 Learning OS state is a SQLite profile in this repository (`data/profiles/<profile-id>/tutor.db`). A chat session can only use it if it can read the authoritative repository and run shell commands there, for example through the connected WebHarness ARM workstation or an expressly selected filesystem/shell connector. No dedicated Learning OS server is required.
 
-Without that access the session can explain concepts, but it cannot select study, record evidence, schedule reviews or truthfully report progress. It should say so rather than pretend.
+Without that access the session can explain concepts, but it cannot select study, record evidence, schedule reviews, or truthfully report progress. It should say so rather than pretend.
 
 Smoke test, before you trust a session:
 
 ```bash
-cd /home/ubuntu/repo/learning-os && npm run -s kernel -- methods
+cd /home/ubuntu/repo/learning-os
+git rev-parse --show-toplevel
+npm run -s kernel -- methods
 ```
 
 Ask the session to run it and tell you it worked. If it cannot, stop and fix the connection first.
 
 Privacy: whatever the session reads or prints is visible to the chat provider. Learner state stays on your machine, but the session sees the parts it queries. Do not paste secrets into the chat.
 
-## Starter prompt (first message of a new session)
+## Starter prompt
 
-Replace the path if your checkout lives elsewhere.
+Two lines. Everything else is discovered by following the routing, not restated here.
 
 ```text
-Use Learning OS as my durable learning system. Canonical workstation: WebHarness ARM; repository: /home/ubuntu/repo/learning-os unless I explicitly override it.
-Before the first lesson, verify the Git root and read current AGENTS.md and skills/learning-os-teacher/SKILL.md. Use the skill's route tables to load only the active procedure sections. Do not read the full protocol or kernel contracts by default. Verify the public kernel boundary before profile-bound teaching.
-Operate it only through its public kernel: npm run -s kernel -- <method> '<json>'. Never write SQLite directly.
-If I have no learner profile, onboard me around my goal and wait for my confirmation before creating one.
-Otherwise resolve the correct profile and goal, call getStudyContinuation, inspect the actual pending question/frozen challenge, guidance/exposure, feedback and reconstruction state as relevant, and only then continue from durable state.
-Use Learning OS for sequencing, evidence, review timing and progress claims. Never infer mastery from chat history.
-One question per message. Keep replies short. Hide internal IDs and labels unless I ask.
-When a visual or interactive teaching aid would clarify the current mechanism, use verified native presentation tools first, then relevant installed skills or authorized connected tools. Pair graphs/diagrams with explanations and text alternatives. Don't scan tools every turn, install integrations, or compromise frozen questions/evidence.
-If I decline more instruction, close that step instead of leaving it open.
-If you cannot reach the repo, say so and do not claim any progress.
+Study backend systems with me in /home/ubuntu/repo/learning-os.
+Read AGENTS.md and follow its routing. Don't ask me to restate anything it already covers.
 ```
 
-At each new teacher instance, use the source skill from the repository, so you do not need to install a copy. Reuse it within the session until its revision or the connection changes. A separately installed copy can drift; current repository instructions still take precedence.
+Swap the topic or goal for whatever you are studying, and replace the path if your checkout lives elsewhere. The checkout and your intent are the only facts the prompt needs to carry, because they are the things the repository cannot tell the agent about itself.
+
+## Entry cascade
+
+The prompt is a trigger, not a contract. Each layer loads only what the next one needs:
+
+```text
+2-line prompt
+-> AGENTS.md            routing table + core invariants + authority
+-> SKILL.md             pre-teaching gate, turn routing, assessment truth, resume rules
+-> protocol section     only the one procedure the current turn needs
+-> reference playbook   only when the episode phase calls for it
+```
+
+What each layer owns, so nothing is duplicated upward:
+
+| Layer | Owns | Must not contain |
+| --- | --- | --- |
+| Prompt | Intent, topic/goal focus, checkout | Kernel commands, profile IDs, exposure rules, evidence schemas |
+| `AGENTS.md` | Situation → file routing, core invariants, authority order | Step-by-step procedure |
+| `SKILL.md` | Pre-teaching gate, turn classification, assessment and resume rules | Full lifecycle prose |
+| Protocol | One named procedure per section | Routing decisions |
+| References | One playbook per episode phase or capability | Cross-phase policy |
+
+Consequences worth knowing:
+
+- At each new teacher instance, the agent reads the source skill from the repository (`skills/learning-os-teacher/SKILL.md`), so a separately installed copy cannot drift from current contracts.
+- For tracked study, the agent resolves the profile and goal itself (`npm run tutor -- profile list`, then `getStudyContinuation`). Do not hardcode internal IDs in the prompt; they go stale and defeat discovery.
+- For ad-hoc conceptual questions with no tracked episode, `AGENTS.md` routes directly to teaching without creating learner state or loading full protocol docs.
+- `npm run -s check:entry` enforces the shape: the starter prompt stays at three lines or fewer, names `AGENTS.md`, and does not re-inline internal contracts.
 
 ## What a good first turn looks like
 
-1. The session verifies the authoritative workstation/Git checkout, reads the current repository instructions/Teacher skill/relevant kernel contracts and verifies the public kernel, not a made-up summary.
+1. For tracked study, the session verifies the authoritative workstation/Git checkout, follows `AGENTS.md` → `skills/learning-os-teacher/SKILL.md`, and verifies the public kernel boundary.
 2. It resolves your profile (`npm run tutor -- profile list` if needed) and calls `getStudyContinuation`.
 3. It does one thing: resume the pending question, ask for your goal if you are new, or recommend the next step and wait for you to accept.
 
-If the first reply is a long study plan with no tool calls, the session is not using Learning OS. Ask it to start again from the starter prompt.
+If you asked for tracked study and the first reply is a long study plan with no tool calls, the session is not using Learning OS. Ask it to start again from the starter prompt.
 
 ## Continuing later
 
-New day, new chat, or a different model or provider: start a fresh session with the starter prompt, or this shorter one:
+New day, new chat, or a different model or provider:
 
 ```text
-Continue my Learning OS study on WebHarness ARM at /home/ubuntu/repo/learning-os. Complete the AGENTS.md/Teacher skill pre-teaching readiness checklist, verify the public kernel, resolve my profile and goal, load current continuation and active-attempt context, then resume.
+Continue my Learning OS study in /home/ubuntu/repo/learning-os.
+Read AGENTS.md and follow its routing.
 ```
 
-You do not need to paste earlier chat. Pending questions, shown material and unfinished attempts are in durable state. Use one teacher session at a time against the same profile, because two sessions writing at once can conflict.
+You do not need to paste earlier chat. Pending questions, shown material, and unfinished attempts are in durable state. Use one teacher session at a time against the same profile, because two sessions writing at once can conflict.
 
 Things you can say mid-session:
 
@@ -73,7 +97,7 @@ Things you can say mid-session:
 
 ## What the session should not do
 
-- Claim mastery, progress or a schedule it did not read from Learning OS.
+- Claim mastery, progress, or a schedule it did not read from Learning OS.
 - Write to the database directly, or commit or push learner state unless you ask. Canonical profile files are versioned deliberately; use the checkpoint command first.
 - Show hints or explanations before recording them, or count assisted answers as independent.
 - Ask extra questions after a sufficient answer, or press you to write code when you declined practical work.

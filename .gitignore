@@ -1,6 +1,9 @@
 # Retired Generic Tutor local state may still exist in older checkouts; keep it private.
 state/
 .pipeline/
+.pi/
+.claude/HANDOFF.md
+codedb.snapshot
 CLAUDE.local.md
 # TypeScript
 node_modules/

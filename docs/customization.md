@@ -112,21 +112,17 @@ The root `knowledge/manifest.json` is useful as a human-readable topic index, bu
 
 Markdown is reusable source material, not learner state.
 
-For a concept with ID `isolation-levels`, the catalog looks for either:
+For a concept with ID `isolation-levels`, the catalog looks for one of:
 
 ```text
 knowledge/postgres/isolation-levels.md
-```
-
-or:
-
-```text
 knowledge/postgres/concepts/isolation-levels.md
+knowledge/postgres/isolation-levels/concept.md
 ```
 
-If neither exists, it can fall back to a topic `INDEX.md` when present. A concept can therefore exist as catalog metadata before a full lesson has been written.
+If none exists, it can fall back to a topic `INDEX.md` when present. A concept can therefore exist as catalog metadata before a full lesson has been written.
 
-Use `knowledge/concepts/_template.md` as a starting point:
+Use `templates/concept-template.md` as a starting point:
 
 ```markdown
 ---

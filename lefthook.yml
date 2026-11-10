@@ -1,4 +1,4 @@
-# lefthook.yml — pre-commit hooks for generic-tutor
+# lefthook.yml — pre-commit hooks for Learning OS
 pre-commit:
   parallel: true
   commands:
