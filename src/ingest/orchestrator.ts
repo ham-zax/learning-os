@@ -74,11 +74,15 @@ export interface IngestionOptions {
 /**
  * Derive a kebab-case concept ID from a human-readable label.
  */
+const MAX_CONCEPT_ID_LENGTH = 80;
+
 function slugify(text: string): string {
   return text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+    .replace(/^-+|-+$/g, "")
+    .slice(0, MAX_CONCEPT_ID_LENGTH)
+    .replace(/-+$/g, "");
 }
 
 /**
@@ -112,14 +116,23 @@ function parseManualMaterial(material: string): ConceptProposal[] {
     .map((l) => l.replace(/^[\s\-*\d.)]+\s*/, "").trim())
     .filter((l) => l.length > 0);
 
-  return lines.map((line, idx) => ({
-    id: slugify(line),
-    title: line,
-    prerequisites: idx > 0 ? [slugify(lines[idx - 1])] : [],
-    difficulty: 3,
-    estimatedMinutes: 45,
-    source: "manual" as const,
-  }));
+  const proposals: ConceptProposal[] = [];
+  const seenIds = new Set<string>();
+  for (const line of lines) {
+    const id = slugify(line);
+    if (!id || seenIds.has(id)) continue;
+    const prevId = proposals.at(-1)?.id;
+    seenIds.add(id);
+    proposals.push({
+      id,
+      title: line.slice(0, 200),
+      prerequisites: prevId ? [prevId] : [],
+      difficulty: 3,
+      estimatedMinutes: 45,
+      source: "manual" as const,
+    });
+  }
+  return proposals;
 }
 
 // ─── Mapping Functions ───────────────────────────────────────────────────────
@@ -148,7 +161,7 @@ export function mapGapsToConcepts(
           : 4;
 
     return {
-      id: `${slugify(topic)}-${slugify(gap.skill)}`,
+      id: slugify(`${topic}-${gap.skill}`),
       title: gap.skill,
       prerequisites: [],
       difficulty,
@@ -188,7 +201,7 @@ export function mapPapersToConcepts(
       : paper.title;
 
     return {
-      id: `${slugify(topic)}-${slugify(title)}`,
+      id: slugify(`${topic}-${title}`),
       title,
       prerequisites: [],
       difficulty,
@@ -285,7 +298,7 @@ export async function ingestFromSource(
   const seen = new Set<string>();
   const deduped: ConceptProposal[] = [];
   for (const c of concepts) {
-    if (!seen.has(c.id)) {
+    if (c.id && !seen.has(c.id)) {
       seen.add(c.id);
       deduped.push(c);
     }

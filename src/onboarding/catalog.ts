@@ -44,6 +44,7 @@ function materialRefs(knowledgeRoot: string, topicDir: string, conceptId: string
   const candidates = [
     resolveContainedPath(knowledgeRoot, relative(knowledgeRoot, join(topicDir, `${conceptId}.md`))),
     resolveContainedPath(knowledgeRoot, relative(knowledgeRoot, join(topicDir, "concepts", `${conceptId}.md`))),
+    resolveContainedPath(knowledgeRoot, relative(knowledgeRoot, join(topicDir, conceptId, "concept.md"))),
   ];
   const exact = candidates.filter((path) => existsSync(path));
   if (exact.length > 0) {

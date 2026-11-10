@@ -8,146 +8,247 @@
     {
       "id": "what-trader-is",
       "title": "What trader Is (and Is Not)",
-      "file": "what-trader-is.md",
+      "file": "concepts/what-trader-is.md",
       "prerequisites": [],
       "difficulty": 1,
-      "tags": ["foundation", "orientation"]
+      "tags": [
+        "foundation",
+        "orientation"
+      ]
     },
     {
       "id": "fail-closed",
       "title": "Fail-Closed: The Load-Bearing Property",
-      "file": "fail-closed.md",
-      "prerequisites": ["what-trader-is"],
+      "file": "concepts/fail-closed.md",
+      "prerequisites": [
+        "what-trader-is"
+      ],
       "difficulty": 1,
-      "tags": ["foundation", "safety"]
+      "tags": [
+        "foundation",
+        "safety"
+      ]
     },
     {
       "id": "where-truth-lives",
       "title": "Where the Truth Lives",
-      "file": "where-truth-lives.md",
-      "prerequisites": ["what-trader-is"],
+      "file": "concepts/where-truth-lives.md",
+      "prerequisites": [
+        "what-trader-is"
+      ],
       "difficulty": 1,
-      "tags": ["foundation", "doctrine", "navigation"]
+      "tags": [
+        "foundation",
+        "doctrine",
+        "navigation"
+      ]
     },
     {
       "id": "the-scan-pipeline",
       "title": "The Scan Pipeline",
-      "file": "the-scan-pipeline.md",
-      "prerequisites": ["what-trader-is", "fail-closed"],
+      "file": "concepts/the-scan-pipeline.md",
+      "prerequisites": [
+        "what-trader-is",
+        "fail-closed"
+      ],
       "difficulty": 1,
-      "tags": ["foundation", "architecture"]
+      "tags": [
+        "foundation",
+        "architecture"
+      ]
     },
     {
       "id": "run-modes-and-gates",
       "title": "Run Modes and the Gate Order",
-      "file": "run-modes-and-gates.md",
-      "prerequisites": ["the-scan-pipeline"],
+      "file": "concepts/run-modes-and-gates.md",
+      "prerequisites": [
+        "the-scan-pipeline"
+      ],
       "difficulty": 2,
-      "tags": ["mechanics", "architecture"]
+      "tags": [
+        "mechanics",
+        "architecture"
+      ]
     },
     {
       "id": "human-approval-gate",
       "title": "The Human Approval Gate",
-      "file": "human-approval-gate.md",
-      "prerequisites": ["the-scan-pipeline", "fail-closed"],
+      "file": "concepts/human-approval-gate.md",
+      "prerequisites": [
+        "the-scan-pipeline",
+        "fail-closed"
+      ],
       "difficulty": 2,
-      "tags": ["mechanics", "safety", "desk"]
+      "tags": [
+        "mechanics",
+        "safety",
+        "desk"
+      ]
     },
     {
       "id": "point-in-time-and-data",
       "title": "Point-in-Time and the Data Foundation",
-      "file": "point-in-time-and-data.md",
-      "prerequisites": ["the-scan-pipeline"],
+      "file": "concepts/point-in-time-and-data.md",
+      "prerequisites": [
+        "the-scan-pipeline"
+      ],
       "difficulty": 2,
-      "tags": ["mechanics", "data"]
+      "tags": [
+        "mechanics",
+        "data"
+      ]
     },
     {
       "id": "the-risk-stack",
       "title": "The Risk Stack",
-      "file": "the-risk-stack.md",
-      "prerequisites": ["run-modes-and-gates"],
+      "file": "concepts/the-risk-stack.md",
+      "prerequisites": [
+        "run-modes-and-gates"
+      ],
       "difficulty": 2,
-      "tags": ["mechanics", "risk"]
+      "tags": [
+        "mechanics",
+        "risk"
+      ]
     },
     {
       "id": "position-lifecycle",
       "title": "Position Lifecycle and Exits",
-      "file": "position-lifecycle.md",
-      "prerequisites": ["run-modes-and-gates", "point-in-time-and-data"],
+      "file": "concepts/position-lifecycle.md",
+      "prerequisites": [
+        "run-modes-and-gates",
+        "point-in-time-and-data"
+      ],
       "difficulty": 2,
-      "tags": ["mechanics", "positions"]
+      "tags": [
+        "mechanics",
+        "positions"
+      ]
     },
     {
       "id": "store-and-journal",
       "title": "The Store and the Approval Journal",
-      "file": "store-and-journal.md",
-      "prerequisites": ["human-approval-gate"],
+      "file": "concepts/store-and-journal.md",
+      "prerequisites": [
+        "human-approval-gate"
+      ],
       "difficulty": 2,
-      "tags": ["mechanics", "state", "audit"]
+      "tags": [
+        "mechanics",
+        "state",
+        "audit"
+      ]
     },
     {
       "id": "guardrails-and-authority",
       "title": "Guardrails and the Two Authority Levels",
-      "file": "guardrails-and-authority.md",
-      "prerequisites": ["where-truth-lives", "the-risk-stack"],
+      "file": "concepts/guardrails-and-authority.md",
+      "prerequisites": [
+        "where-truth-lives",
+        "the-risk-stack"
+      ],
       "difficulty": 3,
-      "tags": ["judgment", "doctrine"]
+      "tags": [
+        "judgment",
+        "doctrine"
+      ]
     },
     {
       "id": "sdd-workflow",
       "title": "The SDD Workflow and the RED Gate",
-      "file": "sdd-workflow.md",
-      "prerequisites": ["where-truth-lives"],
+      "file": "concepts/sdd-workflow.md",
+      "prerequisites": [
+        "where-truth-lives"
+      ],
       "difficulty": 3,
-      "tags": ["judgment", "process"]
+      "tags": [
+        "judgment",
+        "process"
+      ]
     },
     {
       "id": "cost-and-flattering-direction",
       "title": "Costs and the Flattering Direction",
-      "file": "cost-and-flattering-direction.md",
-      "prerequisites": ["the-risk-stack", "point-in-time-and-data"],
+      "file": "concepts/cost-and-flattering-direction.md",
+      "prerequisites": [
+        "the-risk-stack",
+        "point-in-time-and-data"
+      ],
       "difficulty": 3,
-      "tags": ["judgment", "cost"]
+      "tags": [
+        "judgment",
+        "cost"
+      ]
     },
     {
       "id": "measurement-and-benchmarks",
       "title": "Measurement, R, and the Shadow Benchmarks",
-      "file": "measurement-and-benchmarks.md",
-      "prerequisites": ["position-lifecycle"],
+      "file": "concepts/measurement-and-benchmarks.md",
+      "prerequisites": [
+        "position-lifecycle"
+      ],
       "difficulty": 3,
-      "tags": ["judgment", "measurement"]
+      "tags": [
+        "judgment",
+        "measurement"
+      ]
     },
     {
       "id": "model-in-the-loop",
       "title": "The Model in the Loop",
-      "file": "model-in-the-loop.md",
-      "prerequisites": ["human-approval-gate", "guardrails-and-authority"],
+      "file": "concepts/model-in-the-loop.md",
+      "prerequisites": [
+        "human-approval-gate",
+        "guardrails-and-authority"
+      ],
       "difficulty": 3,
-      "tags": ["judgment", "llm"]
+      "tags": [
+        "judgment",
+        "llm"
+      ]
     },
     {
       "id": "operating-the-system",
       "title": "Operating the System",
-      "file": "operating-the-system.md",
-      "prerequisites": ["store-and-journal", "human-approval-gate"],
+      "file": "concepts/operating-the-system.md",
+      "prerequisites": [
+        "store-and-journal",
+        "human-approval-gate"
+      ],
       "difficulty": 3,
-      "tags": ["judgment", "operations"]
+      "tags": [
+        "judgment",
+        "operations"
+      ]
     },
     {
       "id": "fund-structure",
       "title": "Fund Structure and Kill Criteria",
-      "file": "fund-structure.md",
-      "prerequisites": ["guardrails-and-authority", "measurement-and-benchmarks"],
+      "file": "concepts/fund-structure.md",
+      "prerequisites": [
+        "guardrails-and-authority",
+        "measurement-and-benchmarks"
+      ],
       "difficulty": 4,
-      "tags": ["mastery", "strategy"]
+      "tags": [
+        "mastery",
+        "strategy"
+      ]
     },
     {
       "id": "failure-patterns",
       "title": "The Recurring Failure Patterns",
-      "file": "failure-patterns.md",
-      "prerequisites": ["sdd-workflow", "guardrails-and-authority", "measurement-and-benchmarks"],
+      "file": "concepts/failure-patterns.md",
+      "prerequisites": [
+        "sdd-workflow",
+        "guardrails-and-authority",
+        "measurement-and-benchmarks"
+      ],
       "difficulty": 4,
-      "tags": ["mastery", "doctrine"]
+      "tags": [
+        "mastery",
+        "doctrine"
+      ]
     }
   ]
 }

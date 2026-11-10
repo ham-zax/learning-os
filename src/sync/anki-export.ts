@@ -10,6 +10,7 @@ import type Database from "better-sqlite3";
 import { writeFile } from "node:fs/promises";
 import { getConceptsByTopic } from "../db/database.js";
 import type { Concept } from "../db/types.js";
+import { portableKnowledgeRef } from "../knowledge/resolve-concept-file.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -78,16 +79,24 @@ export function exportToAnkiString(
 
 // ─── Internal ────────────────────────────────────────────────────────────────
 
+function sanitizeAnkiTag(tag: string): string {
+  return tag.trim().replace(/\s+/g, "-");
+}
+
 function conceptToCard(concept: Concept, topicId: string): AnkiCard {
-  const tags: string[] = [topicId, `difficulty::${concept.difficulty}`];
+  const tags: string[] = [
+    sanitizeAnkiTag(topicId),
+    `difficulty::${concept.difficulty}`,
+  ].filter(Boolean);
 
   // Parse JSON fields (DB stores as strings)
   const conceptTags: string[] = Array.isArray(concept.tags) ? concept.tags : safeJsonParse(concept.tags as unknown as string);
   const prerequisites: string[] = Array.isArray(concept.prerequisites) ? concept.prerequisites : safeJsonParse(concept.prerequisites as unknown as string);
 
-  // Add tags from concept
-  for (const tag of conceptTags) {
-    if (!tags.includes(tag)) {
+  // Add sanitized tags from concept so whitespace never corrupts Anki TSV columns
+  for (const rawTag of conceptTags) {
+    const tag = sanitizeAnkiTag(rawTag);
+    if (tag && !tags.includes(tag)) {
       tags.push(tag);
     }
   }
@@ -95,7 +104,7 @@ function conceptToCard(concept: Concept, topicId: string): AnkiCard {
   // Build back content from available fields
   const backParts: string[] = [];
   if (concept.file_path) {
-    backParts.push(`See: ${concept.file_path}`);
+    backParts.push(`See: ${portableKnowledgeRef(concept.file_path)}`);
   }
   if (prerequisites.length > 0) {
     backParts.push(`Prerequisites: ${prerequisites.join(", ")}`);

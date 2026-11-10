@@ -6,7 +6,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import { loadManifest } from "./knowledge/loader.js";
 import { validateManifest } from "./knowledge/validator.js";
 import { assertSafeId, resolveContainedPath } from "./knowledge/safe-path.js";
@@ -129,9 +129,15 @@ export function initializeTopic(
       throw new Error(`Concept ID ${entry.id} already belongs to topic ${existing.topic_id}; concept IDs are global within a learner profile`);
     }
     const topicDir = dirname(manifestPath);
-    const candidates = entry.file ? [entry.file] : [`${entry.id}.md`, `concepts/${entry.id}.md`];
+    const candidates = entry.file
+      ? [entry.file]
+      : [`${entry.id}.md`, `concepts/${entry.id}.md`, `${entry.id}/concept.md`];
     const paths = candidates.map((candidate) => resolveContainedPath(topicDir, candidate));
-    return { entry, filePath: paths.find((candidate) => existsSync(candidate)) ?? null };
+    const resolved = paths.find((candidate) => existsSync(candidate)) ?? null;
+    const filePath = resolved
+      ? `${topicId}/${relative(resolve(topicDir), resolved).split(sep).join("/")}`
+      : null;
+    return { entry, filePath };
   });
 
   db.transaction(() => {

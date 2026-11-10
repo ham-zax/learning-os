@@ -31,6 +31,7 @@ import {
   getObjectiveProjection,
 } from "./kernel/foundation.js";
 import { getWeaknessProjections } from "./kernel/evidence.js";
+import { portableKnowledgeRef } from "./knowledge/resolve-concept-file.js";
 
 export type RevisionNoteScope =
   | { kind: "profile" }
@@ -579,7 +580,7 @@ export function getRevisionNoteContext(
       const ref: RevisionNoteKnowledgeRef = {
         conceptId: concept.id,
         title: concept.title,
-        filePath: concept.file_path,
+        filePath: concept.file_path ? portableKnowledgeRef(concept.file_path) : null,
         source: concept.source,
         sourceId: concept.source_id,
       };

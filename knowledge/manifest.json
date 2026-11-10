@@ -1,6 +1,12 @@
 {
-  "description": "Topic index for the generic tutor knowledge base. Each topic has its own manifest.json in its subdirectory.",
+  "description": "Topic index for the Learning OS knowledge base. Each topic has its own manifest.json in its subdirectory.",
   "topics": [
+    {
+      "id": "backend-systems",
+      "name": "Backend Systems: Invariants, Failures, Recovery",
+      "manifest": "knowledge/backend-systems/manifest.json",
+      "conceptCount": 12
+    },
     {
       "id": "coding-interview",
       "name": "Coding Interview",
@@ -14,16 +20,22 @@
       "conceptCount": 30
     },
     {
-      "id": "llm",
-      "name": "LLM Engineering",
-      "manifest": "knowledge/llm/manifest.json",
-      "conceptCount": 32
+      "id": "frontend-revision",
+      "name": "Frontend Revision: Recover, Reason, Build",
+      "manifest": "knowledge/frontend-revision/manifest.json",
+      "conceptCount": 37
     },
     {
       "id": "kubernetes",
       "name": "Kubernetes",
       "manifest": "knowledge/kubernetes/manifest.json",
       "conceptCount": 10
+    },
+    {
+      "id": "llm",
+      "name": "LLM Engineering",
+      "manifest": "knowledge/llm/manifest.json",
+      "conceptCount": 32
     },
     {
       "id": "spring-framework",

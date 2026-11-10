@@ -13,7 +13,8 @@
     "eval:teacher": "tsx src/evaluation/cli.ts",
     "typecheck": "node --max-old-space-size=4096 node_modules/.bin/tsc --noEmit --incremental",
     "tutor": "tsx src/cli.ts",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build && npm run check:package",
+    "verify:courses": "tsx scripts/verify-courses.ts",
+    "prepublishOnly": "npm run typecheck && npm test && npm run verify:courses && npm run build && npm run check:package",
     "pack:new": "tsx src/knowledge/new-pack.ts",
     "kernel": "tsx src/kernel-cli.ts",
     "present:teaching": "tsx src/presentation-cli.ts",
@@ -62,6 +63,7 @@
   },
   "files": [
     "dist",
+    "knowledge/manifest.json",
     "knowledge/backend-systems",
     "knowledge/frontend-revision",
     "knowledge/kubernetes",

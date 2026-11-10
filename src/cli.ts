@@ -19,8 +19,8 @@
  *   tutor sync                 Sync gaps and signals
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { isAbsolute, relative, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { Command } from "commander";
 import chalk from "chalk";
@@ -100,7 +100,10 @@ import type { ConceptMap, ConceptProposal, ConceptFile } from "./knowledge/types
 import { DeliveryContext, GoalImportance, GoalTargetReadiness } from "./db/types.js";
 import { runOfflineOnboarding } from "./onboarding/cli.js";
 import { getStudyContinuation } from "./study/continuation.js";
-import { assertSafeId, resolveContainedPath } from "./knowledge/safe-path.js";
+import {
+  resolveConceptFile,
+  resolveKnowledgeDir,
+} from "./knowledge/resolve-concept-file.js";
 import { inspectProfileHealth } from "./diagnostics.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -108,8 +111,7 @@ import { inspectProfileHealth } from "./diagnostics.js";
 const PROFILE_DATA_DIR = resolve("./data");
 const JOB_HUNTER_DB_PATH = resolve("../job-hunter/data/job_hunter.db");
 const AI_FEEDS_DB_PATH = resolve("../ai-feeds/db/ai-feeds.sqlite");
-const KNOWLEDGE_DIR = resolve("./knowledge");
-const VAULT_PATH = resolve("../vault");
+const WORKSPACE_KNOWLEDGE_DIR = resolve("./knowledge");
 
 interface TutorConfig {
   daily_minutes: number;
@@ -190,6 +192,21 @@ function openCliDatabase(): ReturnType<typeof createDatabase> {
   return openProfileDatabase(cliProfileOverride(), profileStoreOptions());
 }
 
+async function withCliDatabase(
+  action: (db: ReturnType<typeof createDatabase>) => Promise<void> | void,
+): Promise<void> {
+  let db: ReturnType<typeof createDatabase> | undefined;
+  try {
+    db = openCliDatabase();
+    await action(db);
+  } catch (err) {
+    error(err instanceof Error ? err.message : String(err));
+    process.exitCode = 1;
+  } finally {
+    db?.close();
+  }
+}
+
 // ─── Topic auto-detection ────────────────────────────────────────────────────
 
 function topicExists(db: ReturnType<typeof createDatabase>, topicId: string): boolean {
@@ -221,29 +238,6 @@ function displayConceptMap(concepts: ConceptProposal[]): void {
 
 // ─── Concept file resolution ─────────────────────────────────────────────────
 
-/**
- * Locate the markdown file backing a concept.  Topic packs use two layouts —
- * `<topic>/concepts/<id>.md` (kubernetes, llm, foundry) and `<topic>/<id>.md`
- * (system-design) — so both are tried.  Returns null when neither exists,
- * which is not an error: the session falls back to metadata only.
- */
-function resolveConceptFile(
-  knowledgeDir: string,
-  topicId: string,
-  conceptId: string,
-  storedPath?: string | null,
-): string | null {
-  assertSafeId(topicId, "Topic ID");
-  assertSafeId(conceptId, "Concept ID");
-  const candidates = [
-    ...(storedPath ? [resolveContainedPath(knowledgeDir,
-      isAbsolute(storedPath) ? relative(knowledgeDir, storedPath) : storedPath)] : []),
-    resolveContainedPath(knowledgeDir, `${topicId}/concepts/${conceptId}.md`),
-    resolveContainedPath(knowledgeDir, `${topicId}/${conceptId}.md`),
-  ];
-  return candidates.find((p) => existsSync(p)) ?? null;
-}
-
 /** Load a concept's markdown, or null if it is missing or unparseable. */
 function tryLoadConceptFile(
   knowledgeDir: string,
@@ -251,7 +245,13 @@ function tryLoadConceptFile(
   conceptId: string,
   storedPath?: string | null,
 ): ConceptFile | null {
-  const filePath = resolveConceptFile(knowledgeDir, topicId, conceptId, storedPath);
+  let filePath: string | null;
+  try {
+    filePath = resolveConceptFile(knowledgeDir, topicId, conceptId, storedPath);
+  } catch {
+    warn(`Concept path for ${conceptId} is unsafe or invalid; using metadata only.`);
+    return null;
+  }
   if (!filePath) return null;
   try {
     return loadConcept(filePath);
@@ -418,116 +418,117 @@ async function runSession(
   }
 
   const rl = createPrompt();
-
-  console.log(
-    chalk.bold(`\nSession started — ${mode} context, ${sessionState.concepts.length} concepts\n`),
-  );
-
-  const config = loadConfig();
-  const knowledgeDir = resolve(config.knowledge_dir);
-  let missingFiles = 0;
-
-  for (const concept of sessionState.concepts) {
-    console.log(chalk.bold.underline(`\nConcept: ${concept.title}`));
-    console.log(chalk.dim(`  Difficulty: ${concept.difficulty}/5`));
-
-    const file = tryLoadConceptFile(knowledgeDir, topicId, concept.id, concept.file_path);
-    if (!file) missingFiles++;
-
-    let surfaceId: string;
-    let prompt: string;
-
-    if (mode === "learn") {
-      const sequence = file ? generateGuidedDiscoverySequence(file) : null;
-      surfaceId = sequence?.surfaceId ?? "restatement";
-      prompt =
-        sequence?.assessmentPrompt ??
-        `Explain **${concept.title}** in your own words as if teaching someone new to it.`;
-    } else if (mode === "practice") {
-      const teachBack = file ? generateTeachBackSession(file) : null;
-      surfaceId = teachBack?.surfaceId ?? "teach-back";
-      prompt =
-        teachBack?.openingPrompt ??
-        `Explain **${concept.title}** to me like I'm new to this topic. Focus on the mechanism and intuition.`;
-    } else if (mode === "review") {
-      const question = file ? generateRetrievalBatch([file], 1).questions[0] : undefined;
-      surfaceId = question?.surfaceId ?? "general-explanation";
-      prompt =
-        question?.question ??
-        `Explain the key ideas behind **${concept.title}** in your own words.`;
-    } else {
-      throw new Error(`Delivery context ${mode} is not supported by ordinary sessions.`);
-    }
-
-    const prepared = prepareOrdinaryChallenge(db, concept, mode, {
-      surfaceId,
-      prompt,
-      referenceMaterial: challengeReferenceMaterial(file),
-    });
-    const opened = openAttempt(
-      db,
-      prepared.challenge.id,
-      prepared.challenge.version,
-      sessionState.sessionId,
+  try {
+    console.log(
+      chalk.bold(`\nSession started — ${mode} context, ${sessionState.concepts.length} concepts\n`),
     );
 
-    const recordLearnExposure: MaterialRevealRecorder = (sourceRef, content) => {
-      recordExposure(db, sessionState.sessionId, {
-        attemptId: opened.attempt.id,
-        objectiveIds: [prepared.objectiveId],
-        exposureType: "explanation_shown",
-        sourceRef,
-        teachingMaterial: { content, format: "markdown" },
-      });
-    };
-    const recordPostResponseExposure: MaterialRevealRecorder = (sourceRef, content) => {
-      recordExposure(db, sessionState.sessionId, {
-        attemptId: opened.attempt.id,
-        objectiveIds: [prepared.objectiveId],
-        exposureType: "answer_revealed",
-        sourceRef,
-        teachingMaterial: { content, format: "markdown" },
-      });
-    };
+    const config = loadConfig();
+    const knowledgeDir = resolveKnowledgeDir(config.knowledge_dir);
+    let missingFiles = 0;
 
-    if (mode === "learn") {
-      console.log(
-        chalk.dim(`  Prerequisites: ${concept.prerequisites.join(", ") || "none"}`),
+    for (const concept of sessionState.concepts) {
+      console.log(chalk.bold.underline(`\nConcept: ${concept.title}`));
+      console.log(chalk.dim(`  Difficulty: ${concept.difficulty}/5`));
+
+      const file = tryLoadConceptFile(knowledgeDir, topicId, concept.id, concept.file_path);
+      if (!file) missingFiles++;
+
+      let surfaceId: string;
+      let prompt: string;
+
+      if (mode === "learn") {
+        const sequence = file ? generateGuidedDiscoverySequence(file) : null;
+        surfaceId = sequence?.surfaceId ?? "restatement";
+        prompt =
+          sequence?.assessmentPrompt ??
+          `Explain **${concept.title}** in your own words as if teaching someone new to it.`;
+      } else if (mode === "practice") {
+        const teachBack = file ? generateTeachBackSession(file) : null;
+        surfaceId = teachBack?.surfaceId ?? "teach-back";
+        prompt =
+          teachBack?.openingPrompt ??
+          `Explain **${concept.title}** to me like I'm new to this topic. Focus on the mechanism and intuition.`;
+      } else if (mode === "review") {
+        const question = file ? generateRetrievalBatch([file], 1).questions[0] : undefined;
+        surfaceId = question?.surfaceId ?? "general-explanation";
+        prompt =
+          question?.question ??
+          `Explain the key ideas behind **${concept.title}** in your own words.`;
+      } else {
+        throw new Error(`Delivery context ${mode} is not supported by ordinary sessions.`);
+      }
+
+      const prepared = prepareOrdinaryChallenge(db, concept, mode, {
+        surfaceId,
+        prompt,
+        referenceMaterial: challengeReferenceMaterial(file),
+      });
+      const opened = openAttempt(
+        db,
+        prepared.challenge.id,
+        prepared.challenge.version,
+        sessionState.sessionId,
       );
-      await presentGuidedDiscoveryAcquisition(rl, file, recordLearnExposure);
+
+      const recordLearnExposure: MaterialRevealRecorder = (sourceRef, content) => {
+        recordExposure(db, sessionState.sessionId, {
+          attemptId: opened.attempt.id,
+          objectiveIds: [prepared.objectiveId],
+          exposureType: "explanation_shown",
+          sourceRef,
+          teachingMaterial: { content, format: "markdown" },
+        });
+      };
+      const recordPostResponseExposure: MaterialRevealRecorder = (sourceRef, content) => {
+        recordExposure(db, sessionState.sessionId, {
+          attemptId: opened.attempt.id,
+          objectiveIds: [prepared.objectiveId],
+          exposureType: "answer_revealed",
+          sourceRef,
+          teachingMaterial: { content, format: "markdown" },
+        });
+      };
+
+      if (mode === "learn") {
+        console.log(
+          chalk.dim(`  Prerequisites: ${concept.prerequisites.join(", ") || "none"}`),
+        );
+        await presentGuidedDiscoveryAcquisition(rl, file, recordLearnExposure);
+      }
+
+      const response = await ask(
+        rl,
+        chalk.yellow(`\n  ${opened.challenge.publicPrompt.replace(/\*\*/g, "")}\n  > `),
+      );
+      submitAttempt(db, opened.attempt.id, { responseText: response });
+
+      if (mode === "practice") {
+        revealTeachBackReference(file, recordPostResponseExposure);
+      } else if (mode === "review") {
+        revealRetrievalReference(file, recordPostResponseExposure);
+      }
+
+      info("  Response submitted. Assessment pending; no trusted evaluator is configured in this CLI.");
     }
 
-    const response = await ask(
-      rl,
-      chalk.yellow(`\n  ${opened.challenge.publicPrompt.replace(/\*\*/g, "")}\n  > `),
-    );
-    submitAttempt(db, opened.attempt.id, { responseText: response });
+    const summary = endSession(db, sessionState.sessionId);
 
-    if (mode === "practice") {
-      revealTeachBackReference(file, recordPostResponseExposure);
-    } else if (mode === "review") {
-      revealRetrievalReference(file, recordPostResponseExposure);
+    header("Session Complete");
+    if (missingFiles > 0) {
+      warn(
+        `  ${missingFiles} of ${sessionState.concepts.length} concept(s) had no markdown file — ` +
+          `those used a generic explanation prompt.`,
+      );
     }
-
-    info("  Response submitted. Assessment pending; no trusted evaluator is configured in this CLI.");
+    console.log(`  Challenges attempted: ${summary.challengesAttempted}`);
+    console.log(`  Submitted attempts: ${summary.submittedAttempts}`);
+    console.log(`  Assessed attempts: ${summary.assessedAttempts}`);
+    console.log(`  Awaiting assessment: ${summary.pendingAssessmentAttempts}`);
+    console.log(`  Wall elapsed: ${Math.floor(summary.duration / 60)}m ${summary.duration % 60}s (not active study time)`);
+  } finally {
+    rl.close();
   }
-
-  const summary = endSession(db, sessionState.sessionId);
-
-  header("Session Complete");
-  if (missingFiles > 0) {
-    warn(
-      `  ${missingFiles} of ${sessionState.concepts.length} concept(s) had no markdown file — ` +
-        `those used a generic explanation prompt.`,
-    );
-  }
-  console.log(`  Challenges attempted: ${summary.challengesAttempted}`);
-  console.log(`  Submitted attempts: ${summary.submittedAttempts}`);
-  console.log(`  Assessed attempts: ${summary.assessedAttempts}`);
-  console.log(`  Awaiting assessment: ${summary.pendingAssessmentAttempts}`);
-  console.log(`  Wall elapsed: ${Math.floor(summary.duration / 60)}m ${summary.duration % 60}s (not active study time)`);
-
-  rl.close();
 }
 
 // ─── Ingestion mode ──────────────────────────────────────────────────────────
@@ -539,80 +540,81 @@ async function runIngestion(
   manualMaterial?: string,
 ): Promise<void> {
   const rl = createPrompt();
-
-  // Ensure topic exists
-  if (!topicExists(db, topicId)) {
-    const topicName = topicId.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    createTopic(db, { id: topicId, name: topicName });
-    success(`Created topic: ${topicName}`);
-  }
-
-  let material = manualMaterial;
-
-  if (sourceType === "manual" && !material) {
-    console.log(chalk.dim("Enter concept material (one concept per line). Type END on a blank line to finish:\n"));
-    const lines: string[] = [];
-    let line: string;
-    while ((line = await ask(rl, "")) !== "END") {
-      lines.push(line);
+  try {
+    // Ensure topic exists
+    if (!topicExists(db, topicId)) {
+      const topicName = topicId.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      createTopic(db, { id: topicId, name: topicName });
+      success(`Created topic: ${topicName}`);
     }
-    material = lines.join("\n");
-  }
 
-  info(`\nIngesting from ${sourceType}...`);
+    let material = manualMaterial;
 
-  const result = await ingestFromSource({
-    topic: topicId,
-    source: { type: sourceType, data: material },
-    jobHunterDbPath: JOB_HUNTER_DB_PATH,
-    aiFeedsDbPath: AI_FEEDS_DB_PATH,
-    manualMaterial: material,
-  });
-
-  if (result.validationErrors.length > 0) {
-    for (const err of result.validationErrors) {
-      error(`  Validation: ${err}`);
+    if (sourceType === "manual" && !material) {
+      console.log(chalk.dim("Enter concept material (one concept per line). Type END on a blank line to finish:\n"));
+      const lines: string[] = [];
+      let line: string;
+      while ((line = await ask(rl, "")) !== "END") {
+        lines.push(line);
+      }
+      material = lines.join("\n");
     }
-  }
 
-  if (result.concepts.length === 0) {
-    warn("No concepts proposed from this source.");
+    info(`\nIngesting from ${sourceType}...`);
+
+    const result = await ingestFromSource({
+      topic: topicId,
+      source: { type: sourceType, data: material },
+      jobHunterDbPath: JOB_HUNTER_DB_PATH,
+      aiFeedsDbPath: AI_FEEDS_DB_PATH,
+      manualMaterial: material,
+    });
+
+    if (result.validationErrors.length > 0) {
+      for (const err of result.validationErrors) {
+        error(`  Validation: ${err}`);
+      }
+    }
+
+    if (result.concepts.length === 0) {
+      warn("No concepts proposed from this source.");
+      return;
+    }
+
+    displayConceptMap(result.concepts);
+
+    const approved = await askYesNo(rl, "Approve this concept map?");
+    if (!approved) {
+      warn("Ingestion cancelled.");
+      return;
+    }
+
+    info("\nGenerating concept files...");
+
+    const conceptMap: ConceptMap = {
+      topic: topicId,
+      description: result.description,
+      concepts: result.concepts,
+    };
+
+    // Use LLM enrichment if available
+    const llm = tryCreateLLM();
+    if (llm) {
+      info("LLM enrichment enabled — generating rich content...");
+    }
+
+    const outputKnowledgeDir = resolve(loadConfig().knowledge_dir || WORKSPACE_KNOWLEDGE_DIR);
+    const files = await generateConceptFiles(db, topicId, conceptMap, outputKnowledgeDir, llm);
+    success(`Generated ${files.length} concept file(s).`);
+
+    for (const f of files) {
+      console.log(chalk.dim(`  ${f}`));
+    }
+
+    console.log();
+  } finally {
     rl.close();
-    return;
   }
-
-  displayConceptMap(result.concepts);
-
-  const approved = await askYesNo(rl, "Approve this concept map?");
-  if (!approved) {
-    warn("Ingestion cancelled.");
-    rl.close();
-    return;
-  }
-
-  info("\nGenerating concept files...");
-
-  const conceptMap: ConceptMap = {
-    topic: topicId,
-    description: result.description,
-    concepts: result.concepts,
-  };
-
-  // Use LLM enrichment if available
-  const llm = tryCreateLLM();
-  if (llm) {
-    info("LLM enrichment enabled — generating rich content...");
-  }
-
-  const files = await generateConceptFiles(db, topicId, conceptMap, KNOWLEDGE_DIR, llm);
-  success(`Generated ${files.length} concept file(s).`);
-
-  for (const f of files) {
-    console.log(chalk.dim(`  ${f}`));
-  }
-
-  console.log();
-  rl.close();
 }
 
 // ─── Interview drills ────────────────────────────────────────────────────────
@@ -647,11 +649,14 @@ async function runCodingDrill(
 
     const rl = createPrompt();
     const lines: string[] = [];
-    let line: string;
-    while ((line = await ask(rl, "")) !== "END") {
-      lines.push(line);
+    try {
+      let line: string;
+      while ((line = await ask(rl, "")) !== "END") {
+        lines.push(line);
+      }
+    } finally {
+      rl.close();
     }
-    rl.close();
 
     const code = lines.join("\n");
     if (!code.trim()) {
@@ -709,35 +714,35 @@ async function runDesignDrill(
       ? startDesignDrill(db, { conceptId, difficulty })
       : resumeDesignDrill(db, resumeAttemptId);
     const rl = createPrompt();
-
-    header(`System Design: ${state.problem.title}`);
-    console.log(`Difficulty: ${state.problem.difficulty}/5`);
-    console.log(`Tags: ${state.problem.tags.join(", ") || "none"}`);
-    console.log();
-    console.log(state.problem.description);
-    console.log();
-
     let currentState = state;
-
-    while (currentState.currentPhase !== "complete") {
-      const prompt = getPhasePrompt(currentState);
-      console.log(chalk.bold.underline(`\nPhase: ${prompt.phase}`));
-      console.log(prompt.prompt);
+    try {
+      header(`System Design: ${state.problem.title}`);
+      console.log(`Difficulty: ${state.problem.difficulty}/5`);
+      console.log(`Tags: ${state.problem.tags.join(", ") || "none"}`);
+      console.log();
+      console.log(state.problem.description);
       console.log();
 
-      warn("Enter your response (type END on a blank line to finish):\n");
-      const lines: string[] = [];
-      let line: string;
-      while ((line = await ask(rl, "")) !== "END") {
-        lines.push(line);
+      while (currentState.currentPhase !== "complete") {
+        const prompt = getPhasePrompt(currentState);
+        console.log(chalk.bold.underline(`\nPhase: ${prompt.phase}`));
+        console.log(prompt.prompt);
+        console.log();
+
+        warn("Enter your response (type END on a blank line to finish):\n");
+        const lines: string[] = [];
+        let line: string;
+        while ((line = await ask(rl, "")) !== "END") {
+          lines.push(line);
+        }
+
+        const response = lines.join("\n");
+        currentState = submitPhase(db, currentState, response);
+        success(`  Phase "${prompt.phase}" recorded.`);
       }
-
-      const response = lines.join("\n");
-      currentState = submitPhase(db, currentState, response);
-      success(`  Phase "${prompt.phase}" recorded.`);
+    } finally {
+      rl.close();
     }
-
-    rl.close();
 
     const llm = tryCreateLLM();
     info("\nAttempt submitted; assessing the frozen rubric when a trusted evaluator is available.");
@@ -934,7 +939,7 @@ program
     try {
       await runOfflineOnboarding({
         dataDir: PROFILE_DATA_DIR,
-        knowledgeRoot: KNOWLEDGE_DIR,
+        knowledgeRoot: resolveKnowledgeDir(loadConfig().knowledge_dir),
       });
     } catch (err) {
       error(err instanceof Error ? err.message : String(err));
@@ -968,9 +973,8 @@ program
         retest: string[];
         json?: boolean;
       },
-    ) => {
-      const db = openCliDatabase();
-      try {
+    ) =>
+      withCliDatabase((db) => {
         const availableMinutes = opts.minutes === undefined
           ? undefined
           : Number(opts.minutes);
@@ -1049,13 +1053,7 @@ program
             break;
           }
         }
-      } catch (err) {
-        error(err instanceof Error ? err.message : String(err));
-        process.exitCode = 1;
-      } finally {
-        db.close();
-      }
-    },
+      }),
   );
 
 // tutor <topic> — auto-detect mode
@@ -1066,10 +1064,8 @@ program
     "Session delivery context: learn, practice, or review",
     "learn",
   )
-  .action(async (topic: string, opts: { mode: string }) => {
-    const db = openCliDatabase();
-
-    try {
+  .action(async (topic: string, opts: { mode: string }) =>
+    withCliDatabase(async (db) => {
       const topicId = topic.toLowerCase().replace(/\s+/g, "-");
 
       if (topicExists(db, topicId) && topicHasConcepts(db, topicId)) {
@@ -1084,13 +1080,8 @@ program
           await runSession(db, topicId, "learn");
         }
       }
-    } catch (err) {
-      error(err instanceof Error ? err.message : String(err));
-      process.exitCode = 1;
-    } finally {
-      db.close();
-    }
-  });
+    }),
+  );
 
 // tutor ingest <topic>
 program
@@ -1103,20 +1094,12 @@ program
     async (
       topic: string,
       opts: { from: string; material?: string },
-    ) => {
-      const db = openCliDatabase();
-
-      try {
+    ) =>
+      withCliDatabase(async (db) => {
         const topicId = topic.toLowerCase().replace(/\s+/g, "-");
         const sourceType = opts.from as "job-hunter" | "ai-feeds" | "manual";
         await runIngestion(db, topicId, sourceType, opts.material);
-      } catch (err) {
-        error(err instanceof Error ? err.message : String(err));
-        process.exitCode = 1;
-      } finally {
-        db.close();
-      }
-    },
+      }),
   );
 
 // tutor init <topic> <manifest-path>
@@ -1125,10 +1108,8 @@ program
   .description("Initialize a topic from a manifest JSON file")
   .argument("<topic>", "Topic ID (e.g., kubernetes)")
   .argument("<manifest-path>", "Path to manifest JSON file")
-  .action(async (topicArg: string, manifestPath: string) => {
-    const db = openCliDatabase();
-
-    try {
+  .action(async (topicArg: string, manifestPath: string) =>
+    withCliDatabase((db) => {
       const topicId = topicArg.toLowerCase().replace(/\s+/g, "-");
       const resolvedPath = resolve(manifestPath);
       initializeTopic(db, topicId, resolvedPath);
@@ -1137,13 +1118,8 @@ program
       success(
         `Initialized topic "${topicRow?.name ?? topicId}" with ${concepts.length} concept(s).`,
       );
-    } catch (err) {
-      error(err instanceof Error ? err.message : String(err));
-      process.exitCode = 1;
-    } finally {
-      db.close();
-    }
-  });
+    }),
+  );
 
 // tutor gaps
 program
@@ -1151,10 +1127,8 @@ program
   .description("Show skill gaps from job-hunter")
   .option("-j, --job-id <id>", "Scope to a specific job listing")
   .option("-n, --top <n>", "Show top N gaps", "20")
-  .action(async (opts: { jobId?: string; top: string }) => {
-    const db = openCliDatabase();
-
-    try {
+  .action(async (opts: { jobId?: string; top: string }) =>
+    withCliDatabase(() => {
       let jhDb: ReturnType<typeof openJobHunterDb>;
       try {
         jhDb = openJobHunterDb(JOB_HUNTER_DB_PATH);
@@ -1195,13 +1169,8 @@ program
       if (gaps.length > topN) {
         console.log(chalk.dim(`\n  ... and ${gaps.length - topN} more`));
       }
-    } catch (err) {
-      error(err instanceof Error ? err.message : String(err));
-      process.exitCode = 1;
-    } finally {
-      db.close();
-    }
-  });
+    }),
+  );
 
 // tutor interview <concept-id>
 program
@@ -1211,10 +1180,8 @@ program
   .option("-t, --type <type>", "Interview type: coding or system-design", "coding")
   .option("-d, --difficulty <n>", "Difficulty level (1-5)")
   .option("--resume-attempt <id>", "Resume a durable system-design attempt")
-  .action(async (conceptId: string, opts: { type: string; difficulty?: string; resumeAttempt?: string }) => {
-    const db = openCliDatabase();
-
-    try {
+  .action(async (conceptId: string, opts: { type: string; difficulty?: string; resumeAttempt?: string }) =>
+    withCliDatabase(async (db) => {
       const difficulty = opts.difficulty === undefined ? undefined : Number(opts.difficulty);
       if (difficulty !== undefined && (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 5)) {
         throw new Error("Difficulty must be an integer from 1 to 5.");
@@ -1230,13 +1197,8 @@ program
         if (opts.type !== "coding" || resumeAttemptId !== undefined) throw new Error("Use coding or system-design; resume-attempt requires system-design.");
         await runCodingDrill(db, conceptId, difficulty);
       }
-    } catch (err) {
-      error(err instanceof Error ? err.message : String(err));
-      process.exitCode = 1;
-    } finally {
-      db.close();
-    }
-  });
+    }),
+  );
 
 // tutor goal <topic> [objective]
 program
@@ -1260,9 +1222,8 @@ program
         durability?: boolean;
         inactive?: boolean;
       },
-    ) => {
-      const db = openCliDatabase();
-      try {
+    ) =>
+      withCliDatabase((db) => {
         const goalId = topic.toLowerCase().replace(/\s+/g, "-");
         const topicRow = getTopic(db, goalId);
         if (!topicRow) {
@@ -1333,13 +1294,7 @@ program
         } else {
           warn("\n  No learning objectives exist yet; run learning/interview work first.");
         }
-      } catch (err) {
-        error(err instanceof Error ? err.message : String(err));
-        process.exitCode = 1;
-      } finally {
-        db.close();
-      }
-    },
+      }),
   );
 
 // tutor today <topic>
@@ -1365,9 +1320,8 @@ program
         transferContext?: string;
         retest: string[];
       },
-    ) => {
-      const db = openCliDatabase();
-      try {
+    ) =>
+      withCliDatabase((db) => {
         const goalId = topic.toLowerCase().replace(/\s+/g, "-");
         const topicRow = getTopic(db, goalId);
         if (!topicRow) {
@@ -1449,13 +1403,7 @@ program
             console.log(`  ${item.objectiveId}: ${item.blockers.join("; ")}`);
           }
         }
-      } catch (err) {
-        error(err instanceof Error ? err.message : String(err));
-        process.exitCode = 1;
-      } finally {
-        db.close();
-      }
-    },
+      }),
   );
 
 // tutor due
@@ -1463,10 +1411,8 @@ program
   .command("due")
   .description("Show learning objectives due for review")
   .option("-t, --topic <topic>", "Filter by topic")
-  .action(async (opts: { topic?: string }) => {
-    const db = openCliDatabase();
-
-    try {
+  .action(async (opts: { topic?: string }) =>
+    withCliDatabase((db) => {
       const topicId = opts.topic?.toLowerCase().replace(/\s+/g, "-");
       const due = getDueObjectives(db, { topicId });
 
@@ -1492,23 +1438,16 @@ program
           `  ${item.objectiveId.padEnd(42)}${item.conceptTitle.slice(0, 26).padEnd(28)}${item.capabilityId.padEnd(14)}${item.dueAt}`,
         );
       }
-    } catch (err) {
-      error(err instanceof Error ? err.message : String(err));
-      process.exitCode = 1;
-    } finally {
-      db.close();
-    }
-  });
+    }),
+  );
 
 // tutor stats
 program
   .command("stats")
   .description("Show topic statistics")
   .option("-t, --topic <topic>", "Topic to show stats for")
-  .action(async (opts: { topic?: string }) => {
-    const db = openCliDatabase();
-
-    try {
+  .action(async (opts: { topic?: string }) =>
+    withCliDatabase((db) => {
       if (opts.topic) {
         const topicId = opts.topic.toLowerCase().replace(/\s+/g, "-");
         const summary = getTopicSummary(db, topicId);
@@ -1557,13 +1496,8 @@ program
           );
         }
       }
-    } catch (err) {
-      error(err instanceof Error ? err.message : String(err));
-      process.exitCode = 1;
-    } finally {
-      db.close();
-    }
-  });
+    }),
+  );
 
 // tutor sync
 program
@@ -1572,10 +1506,8 @@ program
   .option("-t, --topic <topic>", "Topic to export (required for anki/obsidian)")
   .option("--anki <path>", "Export to Anki TSV format at the given path")
   .option("--obsidian <vault>", "Sync to Obsidian vault at the given path")
-  .action(async (opts: { topic?: string; anki?: string; obsidian?: string }) => {
-    const db = openCliDatabase();
-
-    try {
+  .action(async (opts: { topic?: string; anki?: string; obsidian?: string }) =>
+    withCliDatabase(async (db) => {
       // Anki export
       if (opts.anki) {
         if (!opts.topic) {
@@ -1623,13 +1555,8 @@ program
 
       console.log();
       success(`Total: ${gapCount} gaps, ${signalCount} signals synced.`);
-    } catch (err) {
-      error(err instanceof Error ? err.message : String(err));
-      process.exitCode = 1;
-    } finally {
-      db.close();
-    }
-  });
+    }),
+  );
 
 // tutor search
 program
@@ -1637,10 +1564,8 @@ program
   .description("Search for concepts by query")
   .argument("<query>", "Search query")
   .option("-t, --topic <topic>", "Scope to a specific topic")
-  .action(async (query: string, opts: { topic?: string }) => {
-    const db = openCliDatabase();
-
-    try {
+  .action(async (query: string, opts: { topic?: string }) =>
+    withCliDatabase((db) => {
       if (!opts.topic) {
         error("--topic is required for search.");
         process.exitCode = 1;
@@ -1662,13 +1587,8 @@ program
         );
         console.log(chalk.dim(`    ID: ${r.conceptId}`));
       }
-    } catch (err) {
-      error(err instanceof Error ? err.message : String(err));
-      process.exitCode = 1;
-    } finally {
-      db.close();
-    }
-  });
+    }),
+  );
 
 // ─── Parse and run ───────────────────────────────────────────────────────────
 

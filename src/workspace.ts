@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { relative, resolve, sep } from "node:path";
 import {
   getActiveProfile,
   getProfile,
@@ -232,8 +232,9 @@ export function createTeacherWorkspace(options: TeacherWorkspaceOptions = {}) {
                 loaded.directory,
                 `concepts/${item.conceptId}.md`,
               );
+              const portableFile = relative(resolve(knowledgeRoot), file).split(sep).join("/");
               // Reference metadata only. Do not rewrite ownership, prerequisites, evidence or active scope.
-              updateConcept(db, item.conceptId, { file_path: file });
+              updateConcept(db, item.conceptId, { file_path: portableFile });
               linked.push(item.conceptId);
             }
           })();

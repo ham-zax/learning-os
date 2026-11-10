@@ -10,7 +10,7 @@
       "title": "Runtime request execution and concurrency",
       "difficulty": 3,
       "prerequisites": [],
-      "file": "runtime-request-execution-and-concurrency.md",
+      "file": "concepts/runtime-request-execution-and-concurrency.md",
       "tags": [
         "coding-course",
         "revision-first"
@@ -23,7 +23,7 @@
       "prerequisites": [
         "runtime-request-execution-and-concurrency"
       ],
-      "file": "resource-saturation-and-backpressure.md",
+      "file": "concepts/resource-saturation-and-backpressure.md",
       "tags": [
         "coding-course",
         "revision-first"
@@ -34,7 +34,7 @@
       "title": "Database transactions and concurrent correctness",
       "difficulty": 3,
       "prerequisites": [],
-      "file": "database-transactions-and-concurrent-correctness.md",
+      "file": "concepts/database-transactions-and-concurrent-correctness.md",
       "tags": [
         "coding-course",
         "revision-first"
@@ -47,7 +47,7 @@
       "prerequisites": [
         "resource-saturation-and-backpressure"
       ],
-      "file": "database-connection-and-resource-pressure.md",
+      "file": "concepts/database-connection-and-resource-pressure.md",
       "tags": [
         "coding-course",
         "revision-first"
@@ -58,7 +58,7 @@
       "title": "State ownership and cache consistency",
       "difficulty": 3,
       "prerequisites": [],
-      "file": "state-ownership-and-cache-consistency.md",
+      "file": "concepts/state-ownership-and-cache-consistency.md",
       "tags": [
         "coding-course",
         "revision-first"
@@ -69,7 +69,7 @@
       "title": "Queue delivery and worker failure",
       "difficulty": 3,
       "prerequisites": [],
-      "file": "queue-delivery-and-worker-failure.md",
+      "file": "concepts/queue-delivery-and-worker-failure.md",
       "tags": [
         "coding-course",
         "revision-first"
@@ -82,7 +82,7 @@
       "prerequisites": [
         "queue-delivery-and-worker-failure"
       ],
-      "file": "retries-idempotency-and-uncertain-outcomes.md",
+      "file": "concepts/retries-idempotency-and-uncertain-outcomes.md",
       "tags": [
         "coding-course",
         "revision-first"
@@ -93,7 +93,7 @@
       "title": "Authorization and tenant isolation",
       "difficulty": 3,
       "prerequisites": [],
-      "file": "authorization-and-tenant-isolation.md",
+      "file": "concepts/authorization-and-tenant-isolation.md",
       "tags": [
         "coding-course",
         "revision-first"
@@ -106,7 +106,7 @@
       "prerequisites": [
         "authorization-and-tenant-isolation"
       ],
-      "file": "long-lived-connection-authorization.md",
+      "file": "concepts/long-lived-connection-authorization.md",
       "tags": [
         "coding-course",
         "revision-first"
@@ -120,7 +120,7 @@
         "resource-saturation-and-backpressure",
         "runtime-request-execution-and-concurrency"
       ],
-      "file": "production-latency-localization.md",
+      "file": "concepts/production-latency-localization.md",
       "tags": [
         "coding-course",
         "revision-first"
@@ -131,7 +131,7 @@
       "title": "Architecture boundaries and scaling",
       "difficulty": 3,
       "prerequisites": [],
-      "file": "architecture-boundaries-and-scaling.md",
+      "file": "concepts/architecture-boundaries-and-scaling.md",
       "tags": [
         "coding-course",
         "revision-first"
@@ -145,7 +145,7 @@
         "retries-idempotency-and-uncertain-outcomes",
         "state-ownership-and-cache-consistency"
       ],
-      "file": "replication-and-distributed-consistency.md",
+      "file": "concepts/replication-and-distributed-consistency.md",
       "tags": [
         "coding-course",
         "revision-first"
