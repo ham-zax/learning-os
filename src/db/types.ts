@@ -219,18 +219,18 @@ const jsonArrayOfStrings = z
  * Same pattern for arrays of arbitrary objects (e.g. test_cases).
  */
 const jsonArrayOfObjects = z
-  .union([z.string(), z.array(z.record(z.unknown()))])
+  .union([z.string(), z.array(z.record(z.string(), z.unknown()))])
   .transform((v: string | Record<string, unknown>[]) =>
     typeof v === "string" ? JSON.parse(v) : v,
   )
-  .pipe(z.array(z.record(z.unknown())));
+  .pipe(z.array(z.record(z.string(), z.unknown())));
 
 const jsonRecord = z
-  .union([z.string(), z.record(z.unknown())])
+  .union([z.string(), z.record(z.string(), z.unknown())])
   .transform((v: string | Record<string, unknown>) =>
     typeof v === "string" ? JSON.parse(v) : v,
   )
-  .pipe(z.record(z.unknown()));
+  .pipe(z.record(z.string(), z.unknown()));
 
 const sqliteBoolean = z
   .union([z.boolean(), z.number().int().min(0).max(1)])
@@ -240,7 +240,7 @@ export const VerificationOutputSchema = z.object({
   outcome: VerificationOutcome,
   basis: z.string().min(1),
   summary: z.string().min(1),
-  details: z.record(z.unknown()).default({}),
+  details: z.record(z.string(), z.unknown()).default({}),
 }).strict();
 export type VerificationOutput = z.infer<typeof VerificationOutputSchema>;
 

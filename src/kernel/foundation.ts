@@ -976,8 +976,12 @@ export function recordExposure(
     let challengeId: string | null = null;
     let challengeVersion: number | null = null;
     let fallbackContextText = "";
+    let submittedAttemptMs: number | null = null;
     if (input.attemptId !== undefined) {
       const attempt = getAttemptOrThrow(db, input.attemptId);
+      if (attempt.submitted_at !== null) {
+        submittedAttemptMs = Date.parse(attempt.submitted_at);
+      }
       if (attempt.challenge_id === null || attempt.challenge_version === null) {
         throw new Error(`Attempt is not attached to a frozen challenge: ${input.attemptId}`);
       }
@@ -1053,7 +1057,27 @@ export function recordExposure(
       }
     }
 
-    const occurredAt = new Date().toISOString();
+    if (submittedAttemptMs === null && sessionId !== null) {
+      const activeSession = db
+        .prepare(`SELECT active_attempt_id FROM sessions WHERE id = ?`)
+        .get(sessionId) as { active_attempt_id: number | null } | undefined;
+      if (activeSession?.active_attempt_id != null) {
+        const activeAttempt = getAttempt(db, activeSession.active_attempt_id);
+        if (activeAttempt?.submitted_at) {
+          submittedAttemptMs = Date.parse(activeAttempt.submitted_at);
+        }
+      }
+    }
+
+    let occurredAtMs = Date.now();
+    if (
+      submittedAttemptMs !== null &&
+      Number.isFinite(submittedAttemptMs) &&
+      occurredAtMs <= submittedAttemptMs
+    ) {
+      occurredAtMs = submittedAttemptMs + 1;
+    }
+    const occurredAt = new Date(occurredAtMs).toISOString();
     const content = requireNonEmpty(input.teachingMaterial.content, "Teaching artifact content");
     const format = TeachingArtifactFormat.parse(input.teachingMaterial.format ?? "markdown");
     const teachingArtifactId = randomUUID();

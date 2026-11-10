@@ -114,7 +114,7 @@ async function reviewTeacherText(
       signal: controller.signal,
     });
     if (!response.ok) return unavailable(`provider_http_${response.status}`);
-    const result = z.object({ model: z.string().min(1), answers: z.record(z.unknown()) })
+    const result = z.object({ model: z.string().min(1), answers: z.record(z.string(), z.unknown()) })
       .safeParse(await response.json());
     if (!result.success) return unavailable("invalid_response");
 

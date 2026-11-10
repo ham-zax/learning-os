@@ -36,7 +36,7 @@ export const ConceptFileSchema = z.object({
    * badly into `keyPoints`; callers that display content to the learner should
    * render from here so the original formatting survives.
    */
-  sections: z.record(z.string()).default({}),
+  sections: z.record(z.string(), z.string()).default({}),
 });
 
 export type ConceptFile = z.infer<typeof ConceptFileSchema>;

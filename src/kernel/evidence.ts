@@ -461,11 +461,12 @@ function computeDelay(
       `SELECT occurred_at AS contact_at
        FROM exposure_events
        WHERE objective_id = ?
+         AND (attempt_id IS NULL OR attempt_id <> ?)
          AND occurred_at <= ?
        ORDER BY occurred_at DESC, seq DESC
        LIMIT 1`,
     )
-    .get(objectiveId, performedAt) as { contact_at: string } | undefined;
+    .get(objectiveId, currentAttemptId, performedAt) as { contact_at: string } | undefined;
 
   const contacts = [priorAttempt?.contact_at, priorExposure?.contact_at].filter(
     (value): value is string => value !== undefined,
