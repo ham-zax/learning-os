@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { compiledPackageProblems } from "./package-artifacts.mjs";
 
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const packed = spawnSync(npm, ["pack", "--dry-run", "--ignore-scripts", "--json"], { encoding: "utf8" });
@@ -8,6 +9,13 @@ const packages = Array.isArray(result) ? result : Object.values(result);
 const files = packages.flatMap((entry) => entry.files.map((file) => file.path));
 const tracked = spawnSync("git", ["ls-files", "-z"], { encoding: "utf8" });
 if (tracked.status !== 0) throw new Error("Package privacy verification requires the source Git checkout.");
+const { unexpected, missing } = compiledPackageProblems(files, tracked.stdout.split("\0").filter(Boolean));
+if (unexpected.length || missing.length) {
+  throw new Error([
+    ...unexpected.map((path) => `Unexpected compiled artifact without tracked source: ${path}`),
+    ...missing.map((path) => `Missing compiled artifact (run npm run build): ${path}`),
+  ].join("\n"));
+}
 const publicSources = new Set(tracked.stdout.split("\0"));
 const forbidden = files.filter((path) =>
   /(^|\/)(data|state|plans|specs|\.env[^/]*|config\.json)(\/|$)/i.test(path)

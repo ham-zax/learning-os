@@ -24,6 +24,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:package-artifacts
       - run: npm run verify:courses
       - run: npm run check:entry
       - run: npm run build
