@@ -1,16 +1,25 @@
 import type Database from "better-sqlite3";
-import { getGoalPreparation, getPracticalWorkPolicy, getTopic } from "../db/database.js";
+import {
+  getGoalPreparation,
+  getInteractionPreferences,
+  getPracticalWorkPolicy,
+  getTopic,
+} from "../db/database.js";
 import type { PracticalWorkPolicy } from "../db/database.js";
 import { PracticalWorkPreference } from "../db/types.js";
 import type { DeliveryContext } from "../db/types.js";
+import { getEffectiveEvidenceEventsByObjective } from "../kernel/evidence.js";
 import { listResumableSessions } from "../kernel/foundation.js";
 import type { ResumedSession } from "../kernel/foundation.js";
 import { getSessionQuestionPresentation } from "../kernel/questions.js";
 import type { QuestionPresentation } from "../kernel/questions.js";
 import { getSessionFeedback } from "../kernel/feedback.js";
 import type { SessionFeedback } from "../kernel/feedback.js";
+import { getDurablePreparationContext } from "../onboarding/apply.js";
 import { getTodayMission } from "../plan/today.js";
 import type { DailyMission, DailyMissionItem, OneEpisodeMission } from "../plan/today.js";
+import { derivePedagogyDirective } from "../teacher-pedagogy.js";
+import type { PedagogyDirective } from "../teacher-pedagogy.js";
 
 export interface StudyContinuationInput {
   /** Goal topic ID; when omitted, defaults to the profile's sole confirmed or active goal. */
@@ -25,6 +34,8 @@ export interface StudyContinuationInput {
   retestEligibleWeaknessKeys?: readonly string[];
   mainDeliveryContext?: DeliveryContext;
   transferDeliveryContext?: DeliveryContext;
+  /** Optional knowledge root used to load manifest confusableWith links for discrimination hints. */
+  knowledgeRoot?: string;
 }
 
 export type StudyContinuation = {
@@ -46,6 +57,7 @@ export type StudyContinuation = {
       kind: "recommend";
       mission: DailyMission | OneEpisodeMission;
       item: DailyMissionItem;
+      pedagogy: PedagogyDirective;
     }
   | {
       kind: "no_action";
@@ -139,8 +151,30 @@ export function getStudyContinuation(
     mainDeliveryContext: input.mainDeliveryContext,
     transferDeliveryContext: input.transferDeliveryContext,
     practicalWork: practicalWork.preference,
+    knowledgeRoot: input.knowledgeRoot,
   });
   const [item] = mission.items;
-  return item ? { kind: "recommend", mission, item, practicalWork }
-    : { kind: "no_action", mission, practicalWork };
+  if (!item) {
+    return { kind: "no_action", mission, practicalWork };
+  }
+  const prepContext = getDurablePreparationContext(db, item.intent.goalId);
+  const prepObjective = prepContext?.objectives.find(
+    (candidate) => candidate.objectiveId === item.intent.objectiveId,
+  );
+  const gradable = getEffectiveEvidenceEventsByObjective(db, item.intent.objectiveId).filter(
+    (event) => event.result !== "ungradable",
+  );
+  let consecutiveFailures = 0;
+  for (let i = gradable.length - 1; i >= 0; i -= 1) {
+    if (gradable[i]!.result === "correct") break;
+    consecutiveFailures += 1;
+  }
+  const pedagogy = derivePedagogyDirective({
+    intent: item.intent,
+    objective: prepObjective,
+    interactionPreferences: getInteractionPreferences(db),
+    consecutiveFailures,
+    latestResult: gradable.at(-1)?.result ?? null,
+  });
+  return { kind: "recommend", mission, item, pedagogy, practicalWork };
 }

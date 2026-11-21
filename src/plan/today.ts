@@ -1,3 +1,5 @@
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type Database from "better-sqlite3";
 import {
   getActiveGoalStudyFocusEpisode,
@@ -38,6 +40,8 @@ export interface RequestedChallengeInput {
   prerequisitePolicy?: PrerequisiteSelectionPolicy;
   recentChallengeLimit?: number;
   retestEligibleWeaknessKeys?: readonly string[];
+  /** Optional knowledge root used to load manifest confusableWith links for discrimination hints. */
+  knowledgeRoot?: string;
 }
 
 export interface TodayMissionInput {
@@ -59,6 +63,8 @@ export interface TodayMissionInput {
   mainDeliveryContext?: DeliveryContext;
   /** Context for an additional transfer item. Defaults to practice. */
   transferDeliveryContext?: DeliveryContext;
+  /** Optional knowledge root used to load manifest confusableWith links for discrimination hints. */
+  knowledgeRoot?: string;
 }
 
 /** Explicitly bounded by work, not an invented learner time allowance. */
@@ -148,7 +154,59 @@ const MIN_TASK_START_MINUTES: Record<TaskForm, number> = {
 const MAX_INITIAL_DIAGNOSTICS_PER_MISSION = 1;
 const AUTO_RETEST_DELAY_MS = 7 * 86_400_000;
 const FIRE_LITE_IMPLICIT_WINDOW_MS = 7 * 86_400_000;
-const IMPLICIT_CREDIT_CAPABILITIES = new Set(["debug", "design", "implement"]);
+
+function loadConfusableConceptMap(knowledgeRoot?: string): Map<string, string[]> {
+  const result = new Map<string, string[]>();
+  if (!knowledgeRoot || !existsSync(knowledgeRoot)) return result;
+  let entries: Array<{ name: string; isDirectory(): boolean }>;
+  try {
+    entries = readdirSync(knowledgeRoot, { withFileTypes: true });
+  } catch {
+    return result;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const manifestPath = join(knowledgeRoot, entry.name, "manifest.json");
+    if (!existsSync(manifestPath)) continue;
+    try {
+      const parsed = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+        concepts?: Array<{ id?: unknown; confusableWith?: unknown }>;
+      };
+      for (const concept of parsed.concepts ?? []) {
+        if (typeof concept.id !== "string" || !Array.isArray(concept.confusableWith)) continue;
+        const peers = concept.confusableWith.filter((id): id is string => typeof id === "string" && id.length > 0);
+        if (peers.length > 0) {
+          const existing = result.get(concept.id) ?? [];
+          for (const peer of peers) {
+            if (!existing.includes(peer)) existing.push(peer);
+          }
+          result.set(concept.id, existing);
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+  return result;
+}
+
+function attachConfusablePeers(
+  db: Database.Database,
+  candidates: readonly ObjectiveSelectionCandidate[],
+  knowledgeRoot?: string,
+): ObjectiveSelectionCandidate[] {
+  const confusableMap = loadConfusableConceptMap(knowledgeRoot);
+  if (confusableMap.size === 0) return [...candidates];
+  const lookup = db.prepare(`SELECT concept_id FROM learning_objectives WHERE id = ?`);
+  return candidates.map((candidate) => {
+    if (candidate.confusableConceptIds !== undefined) return candidate;
+    const row = lookup.get(candidate.objectiveId) as { concept_id: string } | undefined;
+    const peers = row ? confusableMap.get(row.concept_id) : undefined;
+    return peers && peers.length > 0
+      ? { ...candidate, confusableConceptIds: peers }
+      : candidate;
+  });
+}
 
 const IMPORTANCE_RANK: Record<GoalObjective["importance"], number> = {
   core: 0,
@@ -425,7 +483,7 @@ function hasRecentDependentImplicitCredit(
        LIMIT 1`,
     )
     .get(...dependentConceptIds, minThreshold, now);
-  return Boolean(credit && IMPLICIT_CREDIT_CAPABILITIES.size > 0);
+  return Boolean(credit);
 }
 
 function isDue(state: GoalObjectiveState, now: string, db?: Database.Database): boolean {
@@ -619,18 +677,22 @@ function selectIntent(
     deliveryContext,
     prerequisitePolicy: input.prerequisitePolicy ?? DEFAULT_PREREQUISITE_POLICY,
     recentChallengeLimit: input.recentChallengeLimit ?? 5,
-    candidates: [
-      ...states.map((state) => ({
-        ...candidateFor(
-          state,
-          deadlineUrgency(deadlineAt, now),
-          eligibleRetestKeys,
-          options,
-        ),
-        preferred: preferredObjectiveIds.has(state.config.objective_id),
-      })),
-      ...additionalCandidates.filter((candidate) => !stateObjectiveIds.has(candidate.objectiveId)),
-    ],
+    candidates: attachConfusablePeers(
+      db,
+      [
+        ...states.map((state) => ({
+          ...candidateFor(
+            state,
+            deadlineUrgency(deadlineAt, now),
+            eligibleRetestKeys,
+            options,
+          ),
+          preferred: preferredObjectiveIds.has(state.config.objective_id),
+        })),
+        ...additionalCandidates.filter((candidate) => !stateObjectiveIds.has(candidate.objectiveId)),
+      ],
+      input.knowledgeRoot,
+    ),
   });
 }
 
@@ -804,13 +866,17 @@ export function resolveRequestedChallenge(
     deliveryContext: input.deliveryContext,
     prerequisitePolicy: input.prerequisitePolicy ?? DEFAULT_PREREQUISITE_POLICY,
     recentChallengeLimit: input.recentChallengeLimit ?? 5,
-    candidates: [
-      candidateFor(
-        state,
-        deadlineUrgency(normalizeDeadline(topic.deadline), now),
-        eligibleRetestKeys,
-      ),
-    ],
+    candidates: attachConfusablePeers(
+      db,
+      [
+        candidateFor(
+          state,
+          deadlineUrgency(normalizeDeadline(topic.deadline), now),
+          eligibleRetestKeys,
+        ),
+      ],
+      input.knowledgeRoot,
+    ),
   });
   if (!result.intent || !state.diagnosticPending || state.initialDiagnosticKind === null) {
     return result;

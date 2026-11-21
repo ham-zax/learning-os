@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
   createConcept,
@@ -322,6 +323,94 @@ describe("Scope 3 & 4 pedagogy, FIRe-Lite compression, and confusion-pair discri
       expect(mission.items.map((item) => item.kind)).not.toContain("retrieval");
     } finally {
       vi.useRealTimers();
+      db.close();
+    }
+  });
+
+  it("surfaces pedagogy and manifest-backed discriminationHint directly on getStudyContinuation recommend", () => {
+    const db = createDatabase(":memory:");
+    const knowledgeRoot = fileURLToPath(new URL("../knowledge", import.meta.url));
+    try {
+      const kernel = createTeacherKernel(db, { knowledgeRoot });
+      createTopic(db, { id: "backend-systems", name: "Backend Systems" });
+      createConcept(db, {
+        id: "runtime-request-execution-and-concurrency",
+        topicId: "backend-systems",
+        title: "Runtime request execution and concurrency",
+      });
+      createConcept(db, {
+        id: "resource-saturation-and-backpressure",
+        topicId: "backend-systems",
+        title: "Resource saturation and backpressure",
+      });
+      createLearningObjective(db, {
+        id: "runtime-request-execution-and-concurrency:predict",
+        conceptId: "runtime-request-execution-and-concurrency",
+        capabilityId: "predict",
+      });
+      createLearningObjective(db, {
+        id: "resource-saturation-and-backpressure:predict",
+        conceptId: "resource-saturation-and-backpressure",
+        capabilityId: "predict",
+      });
+      setGoalObjective(db, {
+        goalId: "backend-systems",
+        objectiveId: "runtime-request-execution-and-concurrency:predict",
+        importance: "core",
+        targetReadiness: "independent",
+      });
+      setGoalObjective(db, {
+        goalId: "backend-systems",
+        objectiveId: "resource-saturation-and-backpressure:predict",
+        importance: "core",
+        targetReadiness: "independent",
+      });
+
+      // Advance both confusable concepts (declared in knowledge/backend-systems/manifest.json) to guided
+      for (const [id, objId] of [
+        ["ch-rt-e2e", "runtime-request-execution-and-concurrency:predict"],
+        ["ch-bp-e2e", "resource-saturation-and-backpressure:predict"],
+      ] as const) {
+        registerChallenge(db, {
+          id,
+          version: 1,
+          publicPrompt: `Trace ${objId}`,
+          taskForm: "runtime_trace",
+          deliveryContext: "practice",
+          targets: [{ objectiveId: objId, novelty: "same", criterionIds: ["o"] }],
+          rubric: { id: `r-${id}`, version: 1, criteria: [{ id: "o", objectiveId: objId, required: true, description: "ok" }] },
+          verification: { required: false, basis: "frozen_rubric" },
+        });
+        const s = kernel.createSession("backend-systems", "practice");
+        const a = kernel.openAttempt(id, 1, s.id).attempt;
+        submitAndAssess(db, a.id, {
+          closeIfComplete: true,
+          response: { responseText: "trace" },
+          assessment: {
+            evaluatorType: "agent",
+            assessmentBasis: "frozen_rubric",
+            objectiveResults: [{ objectiveId: objId, result: "correct", criteriaMet: ["o"], criteriaUnmet: [], rationale: "ok" }],
+          },
+        });
+      }
+
+      const cont = kernel.getStudyContinuation({
+        goalId: "backend-systems",
+        now: "2026-09-12T00:00:00Z",
+        oneEpisode: true,
+      });
+      expect(cont.kind).toBe("recommend");
+      if (cont.kind === "recommend") {
+        expect(cont.pedagogy).toMatchObject({
+          stage: expect.any(String),
+          scaffold: expect.any(String),
+          commitBeforeReveal: true,
+        });
+        expect(cont.item.intent.discriminationHint).toMatchObject({
+          contrastConceptId: expect.stringMatching(/^(runtime-request-execution-and-concurrency|resource-saturation-and-backpressure)$/),
+        });
+      }
+    } finally {
       db.close();
     }
   });

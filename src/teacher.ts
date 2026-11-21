@@ -117,7 +117,7 @@ export function createTeacherKernel(db: Database.Database, options: { knowledgeR
       prepareScaffoldPresentation(db, knowledgeRoot, sessionId, input),
     getSessionScaffoldPresentations: (sessionId: number) => getSessionScaffoldPresentations(db, sessionId),
     getStudyContinuation: (input: StudyContinuationInput = {}) =>
-      getStudyContinuation(db, input),
+      getStudyContinuation(db, { knowledgeRoot, ...input }),
     getSessionQuestionPresentation: (sessionId: number) => getSessionQuestionPresentation(db, sessionId),
     getSessionFeedback: (sessionId: number) => getSessionFeedback(db, sessionId),
     getPracticalWorkPolicy: (sessionId?: number) => getPracticalWorkPolicy(db, sessionId),
@@ -125,9 +125,9 @@ export function createTeacherKernel(db: Database.Database, options: { knowledgeR
       setSessionPracticalWork(db, sessionId, preference),
     replaceAttemptSubquestion: (attemptId: number, input: ReplaceAttemptSubquestionInput) =>
       replaceAttemptSubquestion(db, attemptId, input),
-    getTodayMission: (input: TodayMissionInput) => getTodayMission(db, input),
+    getTodayMission: (input: TodayMissionInput) => getTodayMission(db, { knowledgeRoot, ...input }),
     resolveRequestedChallenge: (input: RequestedChallengeInput) =>
-      resolveRequestedChallenge(db, input),
+      resolveRequestedChallenge(db, { knowledgeRoot, ...input }),
     listPreparationContexts: () => listDurablePreparationContexts(db),
     getPreparationContext: (goalId: string) => getDurablePreparationContext(db, goalId),
     // Tiny, pure execution directive for an already-selected intent.
