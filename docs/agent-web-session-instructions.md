@@ -1,6 +1,6 @@
 # Agent / web session instructions
 
-How to use Learning OS from a chat session (Claude web, ChatGPT, or any agent) and how to pick up where you left off. The chat is the interface; Learning OS keeps the learner state. The default connected workstation for this project is **WebHarness ARM** at `/home/ubuntu/repo/learning-os`, unless the user explicitly names another checkout.
+How to use Learning OS from a local folder agent (Claude Code, Codex, Cursor, Gemini CLI, OpenCode) or a connected web chat session, and how to pick up where you left off. The chat is the interface; Learning OS keeps the learner state. When opened directly in a local checkout, agents use that Git root via local shell CLI (no MCP server required). Connected web sessions without a local checkout default to **WebHarness ARM** at `/home/ubuntu/repo/learning-os`.
 
 ## What the session needs
 
@@ -30,6 +30,17 @@ Read AGENTS.md and follow its routing. Don't ask me to restate anything it alrea
 ```
 
 Swap the topic or goal for whatever you are studying, and replace the path if your checkout lives elsewhere. The checkout and your intent are the only facts the prompt needs to carry, because they are the things the repository cannot tell the agent about itself.
+
+## Local folder / CLI / IDE starter prompt
+
+When your AI agent is already opened inside the local `learning-os` folder (no MCP server needed):
+
+```text
+Study backend systems with me in this repo.
+Read AGENTS.md and follow its routing. Don't ask me to restate anything it already covers.
+```
+
+Run `npm run build` once after pulling updates so local agents can invoke the fast compiled `node dist/kernel-cli.js` path directly.
 
 ## Entry cascade
 

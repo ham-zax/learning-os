@@ -27,8 +27,8 @@ Without repository access, do not claim to have opened a profile, persisted onbo
 Prefer:
 
 1. `createTeacherWorkspace()` before a profile exists;
-2. `createTeacherKernel(db)` after profile resolution, calling `getStudyContinuation(...)` before ordinary resumption/next-action selection; from a shell, call the same methods with `npm run -s kernel -- <method> '<json-arg>'` instead of writing a script per turn;
-3. `npm run tutor -- ...` when CLI is the available stable execution surface for the agent;
+2. `createTeacherKernel(db)` after profile resolution, calling `getStudyContinuation(...)` before ordinary resumption/next-action selection; from a shell, call the same methods with `node dist/kernel-cli.js <method> '<json-arg>'` (fast path when `dist/` is built) or `npm run -s kernel -- <method> '<json-arg>'` instead of writing a script per turn;
+3. `node dist/cli.js ...` / `npm run tutor -- ...` when CLI is the available stable execution surface for the agent;
 4. narrow read-only inspection for diagnosis.
 
 Avoid direct SQLite writes for learner-state operations.

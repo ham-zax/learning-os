@@ -1,6 +1,6 @@
 # Learning OS — Repository Instructions
 
-Read `AGENTS.md` first and follow its fast route selection before any tool call. The default connected workstation is **WebHarness ARM**, with canonical repository `/home/ubuntu/repo/learning-os`, unless the user explicitly names another checkout.
+Read `AGENTS.md` first and follow its fast route selection before any tool call. When opened inside a Learning OS checkout (local folder / CLI / IDE), use the **current Git root** directly (no MCP server required). Only default to **WebHarness ARM** `/home/ubuntu/repo/learning-os` in connected web sessions without a local checkout.
 
 - **Ad-hoc teaching and conceptual Q&A** (no identified tracked episode or request for tracked study): answer directly. Do not discover profiles, create learner state, or blanket-load protocol/contract files. Use sources or execution only when the request requires them, and never claim mastery from conversation.
 - **Tracked study, assessment, or resuming a learner**: verify the checkout; load `skills/learning-os-teacher/SKILL.md` and use its route tables to load only the active sections of `docs/teacher-agent-protocol.md` or `docs/kernel-contracts.md`; verify the public kernel route; resolve the intended profile/goal; and call `getStudyContinuation(...)` before acting. Never substitute chat history for durable kernel state.
@@ -70,7 +70,8 @@ npm test
 npm run verify:courses
 npm run check:entry
 npm run build
-npm run tutor -- profile list
+node dist/cli.js profile list
+node dist/kernel-cli.js --profile <id> getStudyContinuation '{}'
 npm run tutor -- onboard
 npm run tutor -- continue <goal-id> [--minutes <n> | --one-episode]
 npm run tutor -- today <goal-id>

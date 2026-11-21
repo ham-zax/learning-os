@@ -24,15 +24,20 @@ Repository maintenance and evaluation are engineering work, not ad-hoc learner t
 | --- | --- |
 | **Evidence Pipeline** | `concept × capability → frozen challenge → attempt → assessment → append-only evidence → projections/weaknesses → ReviewRatingMapper → FSRS`. |
 | **State Ownership** | Global curriculum lives in `knowledge/` (`frontend-revision`, `backend-systems`). Managed learner profiles live in `data/profiles/<profile-id>/tutor.db` and `data/profiles/registry.json` (checkpoint before committing). Keep `config.json`, transcripts, resumes, and secrets out of Git. |
-| **Pre-Display Exposure** | Hints, worked examples, and causal repairs must be recorded via `recordExposure` *before* showing answer-bearing material in tracked mode. Guided/exposed work never counts as independent retrieval. |
+| **Pre-Display Exposure** | Hints, worked examples, and causal repairs must be recorded via `recordExposure` (or `prepareScaffoldPresentation`) *before* showing answer-bearing material in tracked mode. Guided/exposed work never counts as independent retrieval. |
+| **Pedagogy & Anti-Offloading** | Follow `pedagogy.stage` (`worked_example`, `completion`, `independent`, or `transfer`) and `discriminationHint` from `getStudyContinuation`. Never hint or leak the mechanism before learner commitment on `independent`/`transfer`/`predict`/`debug` tasks. Keep kernel JSON/plumbing invisible to the learner. |
 | **Deterministic Check** | Never substitute model opinion for required code execution (`verification.required = true`); record exact `stdout` lines in `submitAndAssess`. |
-| **Environment & Authority** | CLI/IDE uses current Git root; connected web defaults to WebHarness ARM `/home/ubuntu/repo/learning-os`. Authority order: `accepted ADRs → docs/kernel-contracts.md → docs/architecture.md + docs/evidence-model.md → design docs`. |
+| **Environment & Authority** | Local folder / CLI / IDE agents use the **current Git root** directly (no MCP required). Connected web sessions without a local checkout default to WebHarness ARM `/home/ubuntu/repo/learning-os`. Authority order: `accepted ADRs → docs/kernel-contracts.md → docs/architecture.md + docs/evidence-model.md → design docs`. |
 
 ## 3. Public Commands Reference
 
 ```bash
-npm run -s kernel -- [--profile <id> | --db <path>] <method> '<json-arg>'
-npm run tutor -- profile create "<name>" | list | checkpoint [profile-id]
+# Fast local CLI (preferred when dist/ is built; run `npm run build` once if missing)
+node dist/kernel-cli.js [--profile <id> | --db <path>] <method> [json-arg ...]
+node dist/cli.js profile list | show | checkpoint [profile-id]
+
+# TypeScript fallback (no build needed)
+npm run -s kernel -- [--profile <id> | --db <path>] <method> [json-arg ...]
 npm run tutor -- onboard | continue <goal-id> [--minutes <n> | --one-episode] | due | stats
 npm test && npm run typecheck
 ```
