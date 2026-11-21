@@ -114,7 +114,7 @@ export function createTeacherKernel(db: Database.Database, options: { knowledgeR
     prepareScaffoldPresentation: (sessionId: number, input: ScaffoldPresentationInput) =>
       prepareScaffoldPresentation(db, knowledgeRoot, sessionId, input),
     getSessionScaffoldPresentations: (sessionId: number) => getSessionScaffoldPresentations(db, sessionId),
-    getStudyContinuation: (input: StudyContinuationInput) =>
+    getStudyContinuation: (input: StudyContinuationInput = {}) =>
       getStudyContinuation(db, input),
     getSessionQuestionPresentation: (sessionId: number) => getSessionQuestionPresentation(db, sessionId),
     getSessionFeedback: (sessionId: number) => getSessionFeedback(db, sessionId),

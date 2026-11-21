@@ -19,6 +19,7 @@ import type {
   WeaknessLifecycle,
 } from "../db/types.js";
 import { selectNextChallenge } from "../selection/selector.js";
+import { getEffectiveEvidenceEventsByObjective } from "../kernel/evidence.js";
 import type {
   BlockedSelectionCandidate,
   ChallengeIntent,
@@ -111,6 +112,7 @@ type GoalObjectiveState = {
   dueAt: string | null;
   weaknesses: Array<{
     key: string;
+    category: string;
     lifecycle: WeaknessLifecycle;
   }>;
 };
@@ -144,6 +146,7 @@ const MIN_TASK_START_MINUTES: Record<TaskForm, number> = {
 };
 
 const MAX_INITIAL_DIAGNOSTICS_PER_MISSION = 1;
+const AUTO_RETEST_DELAY_MS = 7 * 86_400_000;
 
 const IMPORTANCE_RANK: Record<GoalObjective["importance"], number> = {
   core: 0,
@@ -209,12 +212,16 @@ function loadGoalObjectiveState(
 
   const weaknesses = db
     .prepare(
-      `SELECT key, lifecycle
+      `SELECT key, category, lifecycle
        FROM weakness_projections
        WHERE objective_id = ?
        ORDER BY key`,
     )
-    .all(config.objective_id) as Array<{ key: string; lifecycle: WeaknessLifecycle }>;
+    .all(config.objective_id) as Array<{
+      key: string;
+      category: string;
+      lifecycle: WeaknessLifecycle;
+    }>;
 
   return {
     config,
@@ -236,6 +243,104 @@ function loadGoalObjectiveState(
 
 function activeWeakness(state: GoalObjectiveState): boolean {
   return state.weaknesses.some((weakness) => weakness.lifecycle !== "resolved");
+}
+
+function deriveAutoRetestWeaknessKeys(
+  db: Database.Database,
+  states: readonly GoalObjectiveState[],
+  now: string,
+): string[] {
+  const nowMs = Date.parse(now);
+  const eligible: string[] = [];
+  const misconceptionObsStmt = db.prepare(
+    `SELECT observation.disposition,
+            evidence.performed_at AS source_performed_at,
+            evidence.seq AS source_event_seq
+     FROM misconception_observations observation
+     JOIN evidence_events evidence ON evidence.id = observation.evidence_event_id
+     WHERE observation.objective_id = ?
+       AND observation.misconception_id = ?
+       AND COALESCE((
+         SELECT revision.action
+         FROM evidence_revisions revision
+         WHERE revision.evidence_event_id = evidence.id
+         ORDER BY revision.seq DESC
+         LIMIT 1
+       ), 'restore') <> 'invalidate'
+     ORDER BY evidence.performed_at, evidence.seq, observation.seq`,
+  );
+
+  for (const state of states) {
+    // Respect FSRS timing: never pull an objective forward ahead of a future due date.
+    if (state.dueAt !== null && state.dueAt > now) continue;
+    const resolved = state.weaknesses.filter((w) => w.lifecycle === "resolved");
+    if (resolved.length === 0) continue;
+
+    const objectiveId = state.config.objective_id;
+    const events = getEffectiveEvidenceEventsByObjective(db, objectiveId);
+    for (const weakness of resolved) {
+      if (weakness.category.startsWith("error:")) {
+        const errorCat = weakness.category.slice("error:".length);
+        let lastOccurrenceIdx = -1;
+        for (let i = events.length - 1; i >= 0; i -= 1) {
+          if (events[i]!.observed_errors_json.includes(errorCat)) {
+            lastOccurrenceIdx = i;
+            break;
+          }
+        }
+        if (lastOccurrenceIdx === -1) continue;
+        const laterCorrect = events
+          .slice(lastOccurrenceIdx + 1)
+          .filter((event) => event.result === "correct");
+        const distinctTasks = new Set(
+          laterCorrect.map((event) => `${event.task_id}@${event.task_version}`),
+        );
+        const lastResolved = laterCorrect.at(-1);
+        if (
+          lastResolved &&
+          (distinctTasks.size <= 1 || !lastResolved.retrieval_valid) &&
+          nowMs - Date.parse(lastResolved.performed_at) >= AUTO_RETEST_DELAY_MS
+        ) {
+          eligible.push(weakness.key);
+        }
+      } else if (weakness.category.startsWith("misconception:")) {
+        const misconceptionId = weakness.category.slice("misconception:".length);
+        const obs = misconceptionObsStmt.all(objectiveId, misconceptionId) as Array<{
+          disposition: "observed" | "cleared";
+          source_performed_at: string;
+          source_event_seq: number;
+        }>;
+        const latest = obs.at(-1);
+        if (!latest || latest.disposition !== "cleared") continue;
+        let lastObserved: { source_performed_at: string; source_event_seq: number } | undefined;
+        for (let i = obs.length - 1; i >= 0; i -= 1) {
+          if (obs[i]!.disposition === "observed") {
+            lastObserved = obs[i];
+            break;
+          }
+        }
+        if (!lastObserved) continue;
+        const laterCorrect = events.filter(
+          (event) =>
+            event.result === "correct" &&
+            (event.performed_at > lastObserved!.source_performed_at ||
+              (event.performed_at === lastObserved!.source_performed_at &&
+                event.seq > lastObserved!.source_event_seq)),
+        );
+        const distinctTasks = new Set(
+          laterCorrect.map((event) => `${event.task_id}@${event.task_version}`),
+        );
+        const lastResolved = laterCorrect.at(-1);
+        if (
+          (distinctTasks.size <= 1 || !lastResolved?.retrieval_valid) &&
+          nowMs - Date.parse(latest.source_performed_at) >= AUTO_RETEST_DELAY_MS
+        ) {
+          eligible.push(weakness.key);
+        }
+      }
+    }
+  }
+  return eligible;
 }
 
 function eligibleResolvedWeaknesses(
@@ -613,6 +718,9 @@ export function resolveRequestedChallenge(
     throw new Error(`Active goal objective not found: ${input.goalId}/${input.objectiveId}`);
   }
   const state = loadGoalObjectiveState(db, config);
+  const eligibleRetestKeys = new Set(
+    input.retestEligibleWeaknessKeys ?? deriveAutoRetestWeaknessKeys(db, [state], now),
+  );
   const result = selectNextChallenge(db, {
     goalId: input.goalId,
     now,
@@ -623,7 +731,7 @@ export function resolveRequestedChallenge(
       candidateFor(
         state,
         deadlineUrgency(normalizeDeadline(topic.deadline), now),
-        new Set(input.retestEligibleWeaknessKeys ?? []),
+        eligibleRetestKeys,
       ),
     ],
   });
@@ -670,9 +778,12 @@ export function getTodayMission(
     throw new Error(`Goal topic not found: ${input.goalId}`);
   }
   const deadlineAt = normalizeDeadline(topic.deadline);
-  const eligibleRetestKeys = new Set(input.retestEligibleWeaknessKeys ?? []);
   const allGoalObjectives = getGoalObjectives(db, input.goalId, { includeInactive: true });
   const goalObjectives = allGoalObjectives.filter((config) => config.is_active);
+  const loadedStates = goalObjectives.map((config) => loadGoalObjectiveState(db, config));
+  const eligibleRetestKeys = new Set(
+    input.retestEligibleWeaknessKeys ?? deriveAutoRetestWeaknessKeys(db, loadedStates, now),
+  );
   const inactiveGoalObjectiveIds = new Set(
     allGoalObjectives.filter((config) => !config.is_active).map((config) => config.objective_id),
   );
@@ -703,9 +814,9 @@ export function getTodayMission(
     (db.prepare(`SELECT id FROM learning_objectives WHERE capability_id = 'implement'`).all() as
       Array<{ id: string }>).map((row) => row.id),
   );
-  const relevantStates = goalObjectives
-    .map((config) => loadGoalObjectiveState(db, config))
-    .filter((state) => isRelevant(state, now, eligibleRetestKeys));
+  const relevantStates = loadedStates.filter((state) =>
+    isRelevant(state, now, eligibleRetestKeys),
+  );
   const deferredPracticalObjectiveIds = practicalWork === "conversation_only"
     ? [...new Set([
         ...relevantStates.map((state) => state.config.objective_id),

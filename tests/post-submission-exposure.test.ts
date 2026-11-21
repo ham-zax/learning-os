@@ -183,4 +183,63 @@ describe("post-submission exposure causality", () => {
       db.close();
     }
   });
+
+  it("does not taint a new attempt when a prior attempt's feedback exposure shares the new attempt's start millisecond", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-01T12:00:00.000Z"));
+    const { db } = createKernelFixture();
+    const kernel = createTeacherKernel(db);
+    try {
+      const template = kernel.getChallenge("challenge", 1)!;
+      kernel.registerChallenge({ ...template, id: "challenge-next" });
+
+      const s1 = kernel.createSession(GOAL_ID, "practice");
+      const a1 = kernel.openAttempt("challenge", 1, s1.id).attempt;
+      kernel.submitAndAssess(a1.id, {
+        response: { responseText: "Wrong initial guess." },
+        assessment: {
+          evaluatorType: "agent",
+          assessmentBasis: "frozen_rubric",
+          objectiveResults: [{
+            objectiveId: OBJECTIVE_ID,
+            result: "incorrect",
+            criteriaMet: [],
+            criteriaUnmet: ["mechanism"],
+            rationale: "Incorrect.",
+          }],
+        },
+      });
+      const exp = kernel.recordExposure(s1.id, {
+        attemptId: a1.id,
+        objectiveIds: [OBJECTIVE_ID],
+        exposureType: "corrective_feedback_shown",
+        teachingMaterial: { content: "Prior attempt repair." },
+      });
+      kernel.completeSessionFeedback(s1.id);
+
+      // Open attempt 2 at the exact same millisecond as attempt 1's feedback exposure
+      vi.setSystemTime(new Date(exp[0]!.occurred_at));
+      const s2 = kernel.createSession(GOAL_ID, "practice");
+      const a2 = kernel.openAttempt("challenge-next", 1, s2.id).attempt;
+      vi.setSystemTime(new Date(Date.parse(exp[0]!.occurred_at) + 5000));
+      const assessed = kernel.submitAndAssess(a2.id, {
+        closeIfComplete: true,
+        response: { responseText: "Clean independent answer on next attempt." },
+        assessment: {
+          evaluatorType: "agent",
+          assessmentBasis: "frozen_rubric",
+          objectiveResults: [{
+            objectiveId: OBJECTIVE_ID,
+            result: "correct",
+            criteriaMet: ["mechanism"],
+            criteriaUnmet: [],
+            rationale: "Clean answer.",
+          }],
+        },
+      });
+      expect(assessed.evidenceEvents[0]!.retrieval_valid).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
 });

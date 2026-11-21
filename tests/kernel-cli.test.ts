@@ -33,6 +33,10 @@ describe("kernel JSON CLI", () => {
       JSON.stringify({ goalId: GOAL_ID, now: new Date().toISOString(), oneEpisode: true }));
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({ kind: "recommend" });
+
+    const defaulted = run("getStudyContinuation");
+    expect(defaulted.status).toBe(0);
+    expect(JSON.parse(defaulted.stdout)).toMatchObject({ kind: "needs_budget", goalId: GOAL_ID });
   });
 
   it("lists kernel methods and the calibrated pack helpers", () => {

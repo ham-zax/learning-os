@@ -497,9 +497,10 @@ function hasPreResponseExposure(
          WHERE objective_id = ?
            AND occurred_at >= ?
            AND occurred_at <= ?
+           AND NOT (attempt_id IS NOT NULL AND attempt_id < ? AND occurred_at = ?)
          LIMIT 1`,
       )
-      .get(objectiveId, attempt.started_at, performedAt),
+      .get(objectiveId, attempt.started_at, performedAt, attempt.id, attempt.started_at),
   );
 }
 

@@ -13,8 +13,10 @@ import { getTodayMission } from "../plan/today.js";
 import type { DailyMission, DailyMissionItem, OneEpisodeMission } from "../plan/today.js";
 
 export interface StudyContinuationInput {
-  goalId: string;
-  now: string;
+  /** Goal topic ID; when omitted, defaults to the profile's sole confirmed or active goal. */
+  goalId?: string;
+  /** Current ISO-8601 instant; defaults to current wall clock when omitted. */
+  now?: string;
   availableMinutes?: number;
   /** Explicit one-episode request; mutually exclusive with availableMinutes. */
   oneEpisode?: boolean;
@@ -50,12 +52,48 @@ export type StudyContinuation = {
       mission: DailyMission | OneEpisodeMission;
     });
 
+function resolveDefaultGoalId(db: Database.Database): string {
+  const prepared = db
+    .prepare(`SELECT goal_id FROM goal_preparation ORDER BY confirmed_at DESC, goal_id`)
+    .all() as Array<{ goal_id: string }>;
+  if (prepared.length === 1) return prepared[0]!.goal_id;
+  if (prepared.length > 1) {
+    throw new Error(
+      `Multiple goals found (${prepared.map((row) => row.goal_id).join(", ")}); specify goalId.`,
+    );
+  }
+
+  const activeGoals = db
+    .prepare(`SELECT DISTINCT goal_id FROM goal_objectives WHERE is_active = 1 ORDER BY goal_id`)
+    .all() as Array<{ goal_id: string }>;
+  if (activeGoals.length === 1) return activeGoals[0]!.goal_id;
+  if (activeGoals.length > 1) {
+    throw new Error(
+      `Multiple active goals found (${activeGoals.map((row) => row.goal_id).join(", ")}); specify goalId.`,
+    );
+  }
+
+  const topics = db
+    .prepare(`SELECT id FROM topics ORDER BY id`)
+    .all() as Array<{ id: string }>;
+  if (topics.length === 1) return topics[0]!.id;
+  if (topics.length > 1) {
+    throw new Error(
+      `Multiple topics found (${topics.map((row) => row.id).join(", ")}); specify goalId.`,
+    );
+  }
+
+  throw new Error("No goals found in this profile; onboard a goal first.");
+}
+
 export function getStudyContinuation(
   db: Database.Database,
-  input: StudyContinuationInput,
+  input: StudyContinuationInput = {},
 ): StudyContinuation {
-  if (!getTopic(db, input.goalId)) {
-    throw new Error(`Goal topic not found: ${input.goalId}`);
+  const goalId = input.goalId ?? resolveDefaultGoalId(db);
+  const now = input.now ?? new Date().toISOString();
+  if (!getTopic(db, goalId)) {
+    throw new Error(`Goal topic not found: ${goalId}`);
   }
 
   if (input.oneEpisode && input.availableMinutes !== undefined) {
@@ -63,7 +101,7 @@ export function getStudyContinuation(
   }
   const requestedPracticalWork = input.practicalWork === undefined
     ? undefined : PracticalWorkPreference.parse(input.practicalWork);
-  const resumable = listResumableSessions(db, input.goalId);
+  const resumable = listResumableSessions(db, goalId);
   const requiredReconstruction = resumable.find((entry) => entry.reconstructionRequired);
   const session = requiredReconstruction ?? resumable[0];
   if (session) {
@@ -86,15 +124,15 @@ export function getStudyContinuation(
   if (input.availableMinutes === undefined && !input.oneEpisode) {
     return {
       kind: "needs_budget",
-      goalId: input.goalId,
-      suggestedMinutes: getGoalPreparation(db, input.goalId)?.minutes_per_day ?? null,
+      goalId,
+      suggestedMinutes: getGoalPreparation(db, goalId)?.minutes_per_day ?? null,
       practicalWork,
     };
   }
 
   const mission = getTodayMission(db, {
-    goalId: input.goalId,
-    now: input.now,
+    goalId,
+    now,
     availableMinutes: input.oneEpisode ? null : input.availableMinutes!,
     maxItems: 1,
     retestEligibleWeaknessKeys: input.retestEligibleWeaknessKeys,

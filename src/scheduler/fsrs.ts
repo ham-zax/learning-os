@@ -13,7 +13,9 @@ import type { ReviewRating, SchedulerSnapshot } from "./types.js";
 import { SCHEDULER_VERSION } from "./types.js";
 
 const CURRENT_PARAMETERS: FSRSParameters = generatorParameters({
-  enable_fuzz: false,
+  // ts-fsrs seeds fuzzing deterministically from (review_time, reps, difficulty * stability),
+  // preserving replayable scheduling while avoiding same-day review clumping.
+  enable_fuzz: true,
 });
 
 function toJsonRecord(value: unknown): Record<string, unknown> {
