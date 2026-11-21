@@ -1,0 +1,88 @@
+{
+  "objective": {
+    "conceptId": "resource-saturation-and-backpressure",
+    "capabilityId": "predict",
+    "taskForm": "runtime_trace"
+  },
+  "environment": "This is a deterministic in-memory Node.js model of discrete ticks and request admission, not a live load balancer or network stack. Predict before running; we can run it after your answer.",
+  "cases": [
+    {
+      "id": "unbounded-queue-growth",
+      "novelty": "same",
+      "surface": "bounded worker with an unbounded queue under sustained overload (2 arrivals/tick, 1 completion/tick)",
+      "source": "baseline.mjs",
+      "question": "Predict every printed line. Explain why completed stays bounded at 1/tick while queuedAtTick5 grows and wait latency rises.",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts completed:5, queuedAtTick5:5, maxQueueDepth:5, and latencies:[1,2,2,3,3]."
+        },
+        {
+          "id": "saturation_mechanism",
+          "required": true,
+          "description": "Explains that a queue buffers bursts without adding completion capacity, so sustained arrival above service rate grows queue depth and wait time."
+        }
+      ],
+      "expectedOutput": ["completed:5", "queuedAtTick5:5", "maxQueueDepth:5", "latencies:[1,2,2,3,3]"],
+      "wrongModels": [
+        {
+          "claim": "Adding an unbounded queue lets the worker drain all 10 requests in 5 ticks.",
+          "predictedOutput": ["completed:10", "queuedAtTick5:0", "maxQueueDepth:2", "latencies:[1,1,1,1,1]"]
+        }
+      ]
+    },
+    {
+      "id": "bounded-queue-shedding",
+      "novelty": "variant",
+      "surface": "bounded queue (maxQueue=2) rejecting excess arrivals under the same 2-vs-1 overload",
+      "source": "bounded-shedding-variant.mjs",
+      "question": "Predict every printed line. Contrast how bounded shedding caps queue depth and latency versus the unbounded queue.",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts completed:5, rejected:4, queuedAtTick5:1, and maxLatency:2."
+        },
+        {
+          "id": "backpressure_tradeoff",
+          "required": true,
+          "description": "Explains that explicit rejection trades dropped excess requests for bounded backlog and capped wait time instead of unbounded queue growth."
+        }
+      ],
+      "expectedOutput": ["completed:5", "rejected:4", "queuedAtTick5:1", "maxLatency:2"],
+      "wrongModels": [
+        {
+          "claim": "Rejecting excess arrivals reduces completed work below the service capacity per tick.",
+          "predictedOutput": ["completed:2", "rejected:8", "queuedAtTick5:0", "maxLatency:1"]
+        }
+      ]
+    },
+    {
+      "id": "retry-amplification",
+      "novelty": "transfer",
+      "surface": "timed-out queued requests retrying once against a saturated single-tick worker",
+      "source": "retry-amplification-transfer.mjs",
+      "question": "Predict every printed line. Explain how retries under saturation amplify admitted load even when service rate is unchanged.",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts admitted:5, completed:4, timedOutAndRetried:1, and remainingQueued:1."
+        },
+        {
+          "id": "retry_amplification_boundary",
+          "required": true,
+          "description": "Explains that retrying queued/slow work injects extra demand into an already saturated bottleneck, increasing admitted load without creating capacity."
+        }
+      ],
+      "expectedOutput": ["admitted:5", "completed:4", "timedOutAndRetried:1", "remainingQueued:1"],
+      "wrongModels": [
+        {
+          "claim": "Retries clear the backlog faster because retried requests get served ahead of new arrivals.",
+          "predictedOutput": ["admitted:4", "completed:4", "timedOutAndRetried:0", "remainingQueued:0"]
+        }
+      ]
+    }
+  ]
+}

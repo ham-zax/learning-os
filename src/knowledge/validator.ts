@@ -99,12 +99,21 @@ export function validateManifest(manifest: Manifest): ValidationResult {
   // Build a set of valid IDs for prerequisite lookup
   const idSet = new Set(ids);
 
-  // 2. All prerequisites reference existing concept IDs
+  // 2. All prerequisites and confusableWith links reference existing concept IDs
   for (const concept of manifest.concepts) {
     for (const prereq of concept.prerequisites) {
       if (!idSet.has(prereq)) {
         errors.push(
           `Concept "${concept.id}" has prerequisite "${prereq}" which does not exist in the manifest.`,
+        );
+      }
+    }
+    for (const confusable of concept.confusableWith ?? []) {
+      if (confusable === concept.id) {
+        errors.push(`Concept "${concept.id}" cannot list itself in confusableWith.`);
+      } else if (!idSet.has(confusable)) {
+        errors.push(
+          `Concept "${concept.id}" has confusableWith "${confusable}" which does not exist in the manifest.`,
         );
       }
     }

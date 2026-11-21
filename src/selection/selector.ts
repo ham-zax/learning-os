@@ -10,6 +10,7 @@ import type {
   ChallengeIntent,
   ChallengeSelectionInput,
   ChallengeSelectionResult,
+  DiscriminationHint,
   ObjectiveImportance,
   ObjectiveSelectionCandidate,
   RecentChallengeRef,
@@ -559,7 +560,50 @@ function reasonFor(
   };
 }
 
+function deriveDiscriminationHint(
+  db: Database.Database,
+  evaluation: CandidateEvaluation,
+): DiscriminationHint | null {
+  if (READINESS_RANK[evaluation.state.readiness] < READINESS_RANK.guided) {
+    return null;
+  }
+  const confusableIds = evaluation.candidate.confusableConceptIds ?? [];
+  if (confusableIds.length === 0) return null;
+
+  const stmt = db.prepare(
+    `SELECT concept.id AS concept_id, concept.title AS concept_title, projection.readiness
+     FROM concepts concept
+     JOIN learning_objectives objective ON objective.concept_id = concept.id
+     JOIN objective_projections projection ON projection.objective_id = objective.id
+     WHERE concept.id = ?
+     ORDER BY CASE projection.readiness
+       WHEN 'independent' THEN 3
+       WHEN 'guided' THEN 2
+       WHEN 'exposed' THEN 1
+       ELSE 0
+     END DESC
+     LIMIT 1`,
+  );
+
+  for (const peerId of confusableIds) {
+    if (peerId === evaluation.state.conceptId) continue;
+    const row = stmt.get(peerId) as
+      | { concept_id: string; concept_title: string; readiness: Readiness }
+      | undefined;
+    if (!row) continue;
+    if (READINESS_RANK[row.readiness] >= READINESS_RANK.guided) {
+      return {
+        contrastConceptId: row.concept_id,
+        contrastConceptTitle: row.concept_title,
+        reason: `Both ${evaluation.state.conceptTitle} and ${row.concept_title} have reached at least guided readiness; author a contrasting discrimination case without chapter cues.`,
+      };
+    }
+  }
+  return null;
+}
+
 function intentFor(
+  db: Database.Database,
   evaluation: CandidateEvaluation,
   input: ChallengeSelectionInput,
 ): ChallengeIntent {
@@ -591,6 +635,7 @@ function intentFor(
   }
 
   const reason = reasonFor(evaluation);
+  const discriminationHint = deriveDiscriminationHint(db, evaluation);
   return {
     goalId: input.goalId,
     objectiveId: evaluation.state.objectiveId,
@@ -605,6 +650,7 @@ function intentFor(
     weakness: selectedWeakness(evaluation),
     requiresChangedSurface: novelty !== "same",
     avoidRecentChallenges: evaluation.history,
+    ...(discriminationHint ? { discriminationHint } : {}),
   };
 }
 
@@ -652,7 +698,7 @@ export function selectNextChallenge(
   blocked.sort((left, right) => left.objectiveId.localeCompare(right.objectiveId));
 
   return {
-    intent: eligible.length > 0 ? intentFor(eligible[0], input) : null,
+    intent: eligible.length > 0 ? intentFor(db, eligible[0], input) : null,
     blocked,
   };
 }

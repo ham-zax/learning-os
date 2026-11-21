@@ -1,0 +1,128 @@
+{
+  "objective": {
+    "conceptId": "runtime-request-execution-and-concurrency",
+    "capabilityId": "predict",
+    "taskForm": "runtime_trace"
+  },
+  "environment": "This is a deterministic in-memory Node.js model of synchronous steps, microtasks, and timers, not a full browser or multi-worker runtime. Predict before running; we can run it after your answer.",
+  "cases": [
+    {
+      "id": "sync-vs-microtask-and-timer",
+      "novelty": "same",
+      "surface": "single-threaded handler scheduling a promise microtask and a zero-delay timer around synchronous work",
+      "source": "baseline.mjs",
+      "question": "Predict every printed line in order. Explain why reqA:microtask runs before reqA:io-callback and why reqB:start appears when it does.",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts reqA:start, reqA:sync-cpu-done, reqB:start, reqA:microtask, and reqA:io-callback in order."
+        },
+        {
+          "id": "event_loop_ordering",
+          "required": true,
+          "description": "Explains that synchronous code runs to completion before queued microtasks drain, and microtasks run before timer callbacks."
+        }
+      ],
+      "expectedOutput": [
+        "reqA:start",
+        "reqA:sync-cpu-done",
+        "reqB:start",
+        "reqA:microtask",
+        "reqA:io-callback"
+      ],
+      "wrongModels": [
+        {
+          "claim": "A zero-delay timer callback runs immediately at the point where it is scheduled, ahead of following synchronous code.",
+          "predictedOutput": [
+            "reqA:start",
+            "reqA:io-callback",
+            "reqA:sync-cpu-done",
+            "reqB:start",
+            "reqA:microtask"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sync-cpu-blocks-later-io-issuance",
+      "novelty": "variant",
+      "surface": "synchronous CPU work delaying when a subsequent handler can issue its database query",
+      "source": "blocked-issuance-variant.mjs",
+      "question": "Predict every printed line. Explain why B:db-issued cannot occur while A's synchronous work is still running.",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts A:enter, A:yield, B:enter, B:db-issued, B:yield, thread:free, and B:db-callback in order."
+        },
+        {
+          "id": "single_thread_issuance",
+          "required": true,
+          "description": "Explains that B's handler cannot execute or issue its DB operation until the single JS thread finishes A's synchronous work and yields."
+        }
+      ],
+      "expectedOutput": [
+        "A:enter",
+        "A:yield",
+        "B:enter",
+        "B:db-issued",
+        "B:yield",
+        "thread:free",
+        "B:db-callback"
+      ],
+      "wrongModels": [
+        {
+          "claim": "B issues its database query concurrently while A is still executing its synchronous loop.",
+          "predictedOutput": [
+            "A:enter",
+            "B:enter",
+            "B:db-issued",
+            "A:yield",
+            "B:yield",
+            "thread:free",
+            "B:db-callback"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "io-completion-vs-callback-execution",
+      "novelty": "transfer",
+      "surface": "external I/O completing during synchronous work while callback execution waits for yield",
+      "source": "io-completion-transfer.mjs",
+      "question": "Predict every printed line. Distinguish external I/O completion from callback execution on the JS thread.",
+      "criteria": [
+        {
+          "id": "observable_outcome",
+          "required": true,
+          "description": "Predicts io:issued, sync:still-running(ioDone=true), sync:yield, io:callback-run, and resp:sent in order."
+        },
+        {
+          "id": "completion_vs_callback",
+          "required": true,
+          "description": "Explains that external I/O completion can occur while synchronous work runs, but the callback still waits until current synchronous execution yields."
+        }
+      ],
+      "expectedOutput": [
+        "io:issued",
+        "sync:still-running(ioDone=true)",
+        "sync:yield",
+        "io:callback-run",
+        "resp:sent"
+      ],
+      "wrongModels": [
+        {
+          "claim": "External I/O completion preempts synchronous execution immediately or only starts after synchronous code finishes.",
+          "predictedOutput": [
+            "io:issued",
+            "io:callback-run",
+            "resp:sent",
+            "sync:still-running(ioDone=true)",
+            "sync:yield"
+          ]
+        }
+      ]
+    }
+  ]
+}

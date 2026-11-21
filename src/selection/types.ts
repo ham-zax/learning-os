@@ -36,6 +36,8 @@ export interface ObjectiveSelectionCandidate {
   preferred?: boolean;
   /** Real task forms the caller/teacher knows can assess this objective. */
   availableTaskForms?: readonly TaskForm[];
+  /** Optional confusable concept IDs from curriculum metadata for discrimination authoring hints. */
+  confusableConceptIds?: readonly string[];
 }
 
 export interface ChallengeSelectionInput {
@@ -80,6 +82,13 @@ export const SelectionReasonKindSchema = z.enum([
 ]);
 export type SelectionReasonKind = z.infer<typeof SelectionReasonKindSchema>;
 
+export const DiscriminationHintSchema = z.object({
+  contrastConceptId: z.string().min(1),
+  contrastConceptTitle: z.string().min(1),
+  reason: z.string().min(1),
+}).strict();
+export type DiscriminationHint = z.infer<typeof DiscriminationHintSchema>;
+
 export const ChallengeIntentSchema = z.object({
   /** Goal execution scope that authorized this selected intent. */
   goalId: z.string().min(1),
@@ -95,6 +104,8 @@ export const ChallengeIntentSchema = z.object({
   weakness: SelectedWeaknessContextSchema.nullable(),
   requiresChangedSurface: z.boolean(),
   avoidRecentChallenges: z.array(RecentChallengeRefSchema),
+  /** Optional discrimination authoring cue when both this concept and a confusable peer have reached >= guided readiness. */
+  discriminationHint: DiscriminationHintSchema.nullable().optional(),
 }).strict();
 export type ChallengeIntent = z.infer<typeof ChallengeIntentSchema>;
 

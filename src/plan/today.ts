@@ -147,6 +147,8 @@ const MIN_TASK_START_MINUTES: Record<TaskForm, number> = {
 
 const MAX_INITIAL_DIAGNOSTICS_PER_MISSION = 1;
 const AUTO_RETEST_DELAY_MS = 7 * 86_400_000;
+const FIRE_LITE_IMPLICIT_WINDOW_MS = 7 * 86_400_000;
+const IMPLICIT_CREDIT_CAPABILITIES = new Set(["debug", "design", "implement"]);
 
 const IMPORTANCE_RANK: Record<GoalObjective["importance"], number> = {
   core: 0,
@@ -354,8 +356,82 @@ function eligibleResolvedWeaknesses(
     .map((weakness) => weakness.key);
 }
 
-function isDue(state: GoalObjectiveState, now: string): boolean {
-  return state.dueAt !== null && state.dueAt <= now;
+/**
+ * FIRe-Lite (Fractional Implicit Repetition) read-only compression:
+ * If a prerequisite `explain` objective is already `independent` with no recent failure
+ * or active weakness, and a direct dependent concept has a clean independent `correct`
+ * on `debug` | `design` | `implement` after this prerequisite's due date (and within the
+ * implicit credit window), treat the routine prerequisite review as implicitly covered
+ * without altering the underlying FSRS card or evidence stream.
+ */
+function hasRecentDependentImplicitCredit(
+  db: Database.Database,
+  state: GoalObjectiveState,
+  now: string,
+): boolean {
+  if (
+    state.readiness !== "independent" ||
+    state.recentFailure ||
+    activeWeakness(state) ||
+    state.dueAt === null
+  ) {
+    return false;
+  }
+  const objRow = db
+    .prepare(`SELECT concept_id, capability_id FROM learning_objectives WHERE id = ?`)
+    .get(state.config.objective_id) as { concept_id: string; capability_id: string } | undefined;
+  if (!objRow || objRow.capability_id !== "explain") return false;
+
+  const nowMs = Date.parse(now);
+  const minWindowIso = new Date(nowMs - FIRE_LITE_IMPLICIT_WINDOW_MS).toISOString();
+  const minThreshold = state.dueAt > minWindowIso ? state.dueAt : minWindowIso;
+
+  const dependents = db
+    .prepare(`SELECT id, prerequisites FROM concepts`)
+    .all() as Array<{ id: string; prerequisites: string }>;
+  const dependentConceptIds: string[] = [];
+  for (const row of dependents) {
+    try {
+      const prereqs = JSON.parse(row.prerequisites) as unknown;
+      if (Array.isArray(prereqs) && prereqs.includes(objRow.concept_id)) {
+        dependentConceptIds.push(row.id);
+      }
+    } catch {
+      continue;
+    }
+  }
+  if (dependentConceptIds.length === 0) return false;
+
+  const placeholders = dependentConceptIds.map(() => "?").join(", ");
+  const credit = db
+    .prepare(
+      `SELECT evidence.id
+       FROM evidence_events evidence
+       JOIN learning_objectives objective ON objective.id = evidence.objective_id
+       WHERE objective.concept_id IN (${placeholders})
+         AND objective.capability_id IN ('debug', 'design', 'implement')
+         AND evidence.result = 'correct'
+         AND evidence.retrieval_valid = 1
+         AND evidence.hint_level = 0
+         AND evidence.performed_at >= ?
+         AND evidence.performed_at <= ?
+         AND COALESCE((
+           SELECT revision.action
+           FROM evidence_revisions revision
+           WHERE revision.evidence_event_id = evidence.id
+           ORDER BY revision.seq DESC
+           LIMIT 1
+         ), 'restore') <> 'invalidate'
+       LIMIT 1`,
+    )
+    .get(...dependentConceptIds, minThreshold, now);
+  return Boolean(credit && IMPLICIT_CREDIT_CAPABILITIES.size > 0);
+}
+
+function isDue(state: GoalObjectiveState, now: string, db?: Database.Database): boolean {
+  if (state.dueAt === null || state.dueAt > now) return false;
+  if (db && hasRecentDependentImplicitCredit(db, state, now)) return false;
+  return true;
 }
 
 function needsForwardProgress(
@@ -380,8 +456,9 @@ function isRelevant(
   state: GoalObjectiveState,
   now: string,
   eligibleRetestKeys: ReadonlySet<string>,
+  db?: Database.Database,
 ): boolean {
-  return isDue(state, now) || needsForwardProgress(state, eligibleRetestKeys);
+  return isDue(state, now, db) || needsForwardProgress(state, eligibleRetestKeys);
 }
 
 function canInterruptStudyFocus(
@@ -815,7 +892,7 @@ export function getTodayMission(
       Array<{ id: string }>).map((row) => row.id),
   );
   const relevantStates = loadedStates.filter((state) =>
-    isRelevant(state, now, eligibleRetestKeys),
+    isRelevant(state, now, eligibleRetestKeys, db),
   );
   const deferredPracticalObjectiveIds = practicalWork === "conversation_only"
     ? [...new Set([
@@ -846,7 +923,7 @@ export function getTodayMission(
   // objective also needs ordinary forward progress; it does not displace the focus main block.
   let warmupBudget = Math.min(5, remaining);
   const routineDue = states.filter((state) => {
-    if (!isDue(state, now)) return false;
+    if (!isDue(state, now, db)) return false;
     const outsideFocus =
       focusTargetObjectiveIds.size > 0 &&
       !preferredObjectiveIds.has(state.config.objective_id);

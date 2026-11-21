@@ -347,8 +347,8 @@ export async function generateConceptFiles(
     topicId, topicName: topic.name, description: conceptMap.description,
     concepts: [...getConceptsByTopic(db, topicId).map((concept) => ({
       id: concept.id, title: concept.title, difficulty: concept.difficulty,
-      prerequisites: concept.prerequisites, tags: concept.tags,
-    })), ...conceptMap.concepts.map((proposal) => ({ ...proposal, tags: [] }))],
+      prerequisites: concept.prerequisites, confusableWith: [], tags: concept.tags,
+    })), ...conceptMap.concepts.map((proposal) => ({ ...proposal, confusableWith: [], tags: [] }))],
   });
   if (!validation.valid) throw new Error(validation.errors.join("; "));
   for (const proposal of conceptMap.concepts) {

@@ -10,6 +10,9 @@
       "title": "Runtime request execution and concurrency",
       "difficulty": 3,
       "prerequisites": [],
+      "confusableWith": [
+        "resource-saturation-and-backpressure"
+      ],
       "file": "concepts/runtime-request-execution-and-concurrency.md",
       "tags": [
         "coding-course",
@@ -22,6 +25,10 @@
       "difficulty": 3,
       "prerequisites": [
         "runtime-request-execution-and-concurrency"
+      ],
+      "confusableWith": [
+        "runtime-request-execution-and-concurrency",
+        "database-connection-and-resource-pressure"
       ],
       "file": "concepts/resource-saturation-and-backpressure.md",
       "tags": [
@@ -69,6 +76,9 @@
       "title": "Queue delivery and worker failure",
       "difficulty": 3,
       "prerequisites": [],
+      "confusableWith": [
+        "retries-idempotency-and-uncertain-outcomes"
+      ],
       "file": "concepts/queue-delivery-and-worker-failure.md",
       "tags": [
         "coding-course",
@@ -81,6 +91,10 @@
       "difficulty": 3,
       "prerequisites": [
         "queue-delivery-and-worker-failure"
+      ],
+      "confusableWith": [
+        "queue-delivery-and-worker-failure",
+        "database-transactions-and-concurrent-correctness"
       ],
       "file": "concepts/retries-idempotency-and-uncertain-outcomes.md",
       "tags": [

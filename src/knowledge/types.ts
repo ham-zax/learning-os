@@ -52,6 +52,7 @@ export const ManifestEntrySchema = z.object({
   source: z.string().optional(),
   sourceId: z.string().optional(),
   prerequisites: z.array(SafeIdSchema).default([]),
+  confusableWith: z.array(SafeIdSchema).default([]),
   difficulty: z.number().int().min(1).max(5),
   tags: z.array(z.string()).default([]),
 });

@@ -51,6 +51,7 @@ import type {
 import { submitAndAssess } from "./kernel/composite.js";
 import type { SubmitAndAssessInput } from "./kernel/composite.js";
 import {
+  getEffectiveEvidenceEventsByObjective,
   recordAssessment,
   reviseEvidence,
 } from "./kernel/evidence.js";
@@ -94,6 +95,7 @@ import type {
   ReplaceAttemptSubquestionInput,
 } from "./kernel/questions.js";
 import { derivePedagogyDirective } from "./teacher-pedagogy.js";
+import type { LearnerConfidence } from "./teacher-pedagogy.js";
 import type {
   RevisionNoteContextInput,
   SaveRevisionNoteInput,
@@ -130,15 +132,29 @@ export function createTeacherKernel(db: Database.Database, options: { knowledgeR
     getPreparationContext: (goalId: string) => getDurablePreparationContext(db, goalId),
     // Tiny, pure execution directive for an already-selected intent.
     // It prevents cross-teacher drift without modeling the teaching process.
-    getPedagogyRecommendation: (intent: ChallengeIntent) => {
+    getPedagogyRecommendation: (
+      intent: ChallengeIntent,
+      options?: { learnerConfidence?: LearnerConfidence },
+    ) => {
       const context = getDurablePreparationContext(db, intent.goalId);
       const objective = context?.objectives.find(
         (candidate) => candidate.objectiveId === intent.objectiveId,
       );
+      const gradable = getEffectiveEvidenceEventsByObjective(db, intent.objectiveId).filter(
+        (event) => event.result !== "ungradable",
+      );
+      let consecutiveFailures = 0;
+      for (let i = gradable.length - 1; i >= 0; i -= 1) {
+        if (gradable[i]!.result === "correct") break;
+        consecutiveFailures += 1;
+      }
       return derivePedagogyDirective({
         intent,
         objective,
         interactionPreferences: getInteractionPreferences(db),
+        consecutiveFailures,
+        learnerConfidence: options?.learnerConfidence ?? null,
+        latestResult: gradable.at(-1)?.result ?? null,
       });
     },
     setInteractionPreferences: (input: SetInteractionPreferencesInput) =>

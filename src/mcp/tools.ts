@@ -21,6 +21,11 @@ import {
 import { ScaffoldStageSchema } from "../knowledge/scaffolds.js";
 import { getActiveProfile, listProfiles, openProfileDatabase } from "../profile/index.js";
 import { getDueObjectives } from "../scheduler/index.js";
+import {
+  deriveConfidenceFeedbackDirective,
+  type LearnerConfidence,
+} from "../teacher-pedagogy.js";
+
 import { createTeacherKernel } from "../teacher.js";
 
 export interface McpToolDefinition {
@@ -84,6 +89,7 @@ const StudySubmitInputSchema = z.discriminatedUnion("action", [
     artifactRef: z.record(z.string(), z.unknown()).optional(),
     assessment: AssessmentResultSchema,
     closeIfComplete: z.boolean().default(true),
+    learnerConfidence: z.enum(["low", "medium", "high"]).optional(),
   }).strict(),
   z.object({
     ...DbSelectorFields,
@@ -249,6 +255,11 @@ export const MCP_TOOLS: readonly McpToolDefinition[] = [
         artifactRef: { type: "object" },
         assessment: { type: "object", description: "AssessmentResult object for action='assess'." },
         closeIfComplete: { type: "boolean", default: true },
+        learnerConfidence: {
+          type: "string",
+          enum: ["low", "medium", "high"],
+          description: "Optional non-evidence self-reported confidence for Butler affirmation or hypercorrection repair.",
+        },
         followUpQuestion: { type: "object", description: "Neutral clarification subquestion for action='clarify'." },
         promptText: { type: "string", description: "Single-step prompt for action='split'." },
         scopeCriterionId: { type: "string", description: "Frozen criterion ID for action='split'." },
@@ -564,12 +575,17 @@ function handleStudySubmit(
             ? kernel.getSessionFeedback(result.attempt.session_id)
             : null;
         const primaryObjectiveId = input.assessment.objectiveResults[0]?.objectiveId;
+        const primaryResult = input.assessment.objectiveResults[0]?.result ?? null;
         return {
           profile: resolvedProfileId,
           action: "assess",
           ...result,
           feedback,
           relianceSummary: computeRelianceSummary(db, primaryObjectiveId),
+          confidenceGuidance: deriveConfidenceFeedbackDirective(
+            input.learnerConfidence as LearnerConfidence | undefined,
+            primaryResult,
+          ),
         };
       }
       case "clarify": {
