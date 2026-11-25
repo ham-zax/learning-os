@@ -2,16 +2,67 @@
   "topic": "backend-systems",
   "topicId": "backend-systems",
   "topicName": "Backend Systems: Invariants, Failures, Recovery",
-  "version": "1.0.0",
-  "description": "Seven conceptual phases for backend reasoning, practical concurrency work and interview transfer. No prescribed calendar duration.",
+  "version": "1.1.0",
+  "description": "Progressive backend systems map for frontend-to-backend engineers: foundation bridge, single-node and database core, distributed resilience, and replication transfer.",
   "concepts": [
+    {
+      "id": "server-request-lifecycle-and-network-boundaries",
+      "title": "Server request lifecycle and network boundaries",
+      "difficulty": 1,
+      "prerequisites": [],
+      "confusableWith": [
+        "runtime-request-execution-and-concurrency"
+      ],
+      "file": "concepts/server-request-lifecycle-and-network-boundaries.md",
+      "tags": [
+        "coding-course",
+        "foundation",
+        "fe-bridge"
+      ]
+    },
+    {
+      "id": "relational-constraints-and-index-cost",
+      "title": "Relational constraints and index cost",
+      "difficulty": 2,
+      "prerequisites": [],
+      "confusableWith": [
+        "database-transactions-and-concurrent-correctness"
+      ],
+      "file": "concepts/relational-constraints-and-index-cost.md",
+      "tags": [
+        "coding-course",
+        "foundation",
+        "fe-bridge"
+      ]
+    },
+    {
+      "id": "latency-percentiles-and-capacity-metrics",
+      "title": "Latency percentiles and capacity metrics",
+      "difficulty": 1,
+      "prerequisites": [
+        "server-request-lifecycle-and-network-boundaries"
+      ],
+      "confusableWith": [
+        "resource-saturation-and-backpressure",
+        "production-latency-localization"
+      ],
+      "file": "concepts/latency-percentiles-and-capacity-metrics.md",
+      "tags": [
+        "coding-course",
+        "foundation",
+        "fe-bridge"
+      ]
+    },
     {
       "id": "runtime-request-execution-and-concurrency",
       "title": "Runtime request execution and concurrency",
-      "difficulty": 3,
-      "prerequisites": [],
+      "difficulty": 2,
+      "prerequisites": [
+        "server-request-lifecycle-and-network-boundaries"
+      ],
       "confusableWith": [
-        "resource-saturation-and-backpressure"
+        "resource-saturation-and-backpressure",
+        "server-request-lifecycle-and-network-boundaries"
       ],
       "file": "concepts/runtime-request-execution-and-concurrency.md",
       "tags": [
@@ -24,11 +75,13 @@
       "title": "Resource saturation and backpressure",
       "difficulty": 3,
       "prerequisites": [
-        "runtime-request-execution-and-concurrency"
+        "runtime-request-execution-and-concurrency",
+        "latency-percentiles-and-capacity-metrics"
       ],
       "confusableWith": [
         "runtime-request-execution-and-concurrency",
-        "database-connection-and-resource-pressure"
+        "database-connection-and-resource-pressure",
+        "latency-percentiles-and-capacity-metrics"
       ],
       "file": "concepts/resource-saturation-and-backpressure.md",
       "tags": [
@@ -40,7 +93,14 @@
       "id": "database-transactions-and-concurrent-correctness",
       "title": "Database transactions and concurrent correctness",
       "difficulty": 3,
-      "prerequisites": [],
+      "prerequisites": [
+        "relational-constraints-and-index-cost"
+      ],
+      "confusableWith": [
+        "relational-constraints-and-index-cost",
+        "state-ownership-and-cache-consistency",
+        "retries-idempotency-and-uncertain-outcomes"
+      ],
       "file": "concepts/database-transactions-and-concurrent-correctness.md",
       "tags": [
         "coding-course",
@@ -52,7 +112,12 @@
       "title": "Database connection and resource pressure",
       "difficulty": 3,
       "prerequisites": [
-        "resource-saturation-and-backpressure"
+        "resource-saturation-and-backpressure",
+        "database-transactions-and-concurrent-correctness"
+      ],
+      "confusableWith": [
+        "resource-saturation-and-backpressure",
+        "production-latency-localization"
       ],
       "file": "concepts/database-connection-and-resource-pressure.md",
       "tags": [
@@ -61,52 +126,15 @@
       ]
     },
     {
-      "id": "state-ownership-and-cache-consistency",
-      "title": "State ownership and cache consistency",
-      "difficulty": 3,
-      "prerequisites": [],
-      "file": "concepts/state-ownership-and-cache-consistency.md",
-      "tags": [
-        "coding-course",
-        "revision-first"
-      ]
-    },
-    {
-      "id": "queue-delivery-and-worker-failure",
-      "title": "Queue delivery and worker failure",
-      "difficulty": 3,
-      "prerequisites": [],
-      "confusableWith": [
-        "retries-idempotency-and-uncertain-outcomes"
-      ],
-      "file": "concepts/queue-delivery-and-worker-failure.md",
-      "tags": [
-        "coding-course",
-        "revision-first"
-      ]
-    },
-    {
-      "id": "retries-idempotency-and-uncertain-outcomes",
-      "title": "Retries, idempotency and uncertain outcomes",
-      "difficulty": 3,
-      "prerequisites": [
-        "queue-delivery-and-worker-failure"
-      ],
-      "confusableWith": [
-        "queue-delivery-and-worker-failure",
-        "database-transactions-and-concurrent-correctness"
-      ],
-      "file": "concepts/retries-idempotency-and-uncertain-outcomes.md",
-      "tags": [
-        "coding-course",
-        "revision-first"
-      ]
-    },
-    {
       "id": "authorization-and-tenant-isolation",
       "title": "Authorization and tenant isolation",
-      "difficulty": 3,
-      "prerequisites": [],
+      "difficulty": 2,
+      "prerequisites": [
+        "server-request-lifecycle-and-network-boundaries"
+      ],
+      "confusableWith": [
+        "long-lived-connection-authorization"
+      ],
       "file": "concepts/authorization-and-tenant-isolation.md",
       "tags": [
         "coding-course",
@@ -120,7 +148,61 @@
       "prerequisites": [
         "authorization-and-tenant-isolation"
       ],
+      "confusableWith": [
+        "authorization-and-tenant-isolation"
+      ],
       "file": "concepts/long-lived-connection-authorization.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "state-ownership-and-cache-consistency",
+      "title": "State ownership and cache consistency",
+      "difficulty": 3,
+      "prerequisites": [
+        "database-transactions-and-concurrent-correctness"
+      ],
+      "confusableWith": [
+        "database-transactions-and-concurrent-correctness",
+        "replication-and-distributed-consistency"
+      ],
+      "file": "concepts/state-ownership-and-cache-consistency.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "queue-delivery-and-worker-failure",
+      "title": "Queue delivery and worker failure",
+      "difficulty": 3,
+      "prerequisites": [
+        "resource-saturation-and-backpressure"
+      ],
+      "confusableWith": [
+        "retries-idempotency-and-uncertain-outcomes"
+      ],
+      "file": "concepts/queue-delivery-and-worker-failure.md",
+      "tags": [
+        "coding-course",
+        "revision-first"
+      ]
+    },
+    {
+      "id": "retries-idempotency-and-uncertain-outcomes",
+      "title": "Retries, idempotency and uncertain outcomes",
+      "difficulty": 4,
+      "prerequisites": [
+        "queue-delivery-and-worker-failure",
+        "database-transactions-and-concurrent-correctness"
+      ],
+      "confusableWith": [
+        "queue-delivery-and-worker-failure",
+        "database-transactions-and-concurrent-correctness"
+      ],
+      "file": "concepts/retries-idempotency-and-uncertain-outcomes.md",
       "tags": [
         "coding-course",
         "revision-first"
@@ -129,10 +211,15 @@
     {
       "id": "production-latency-localization",
       "title": "Production latency localization",
-      "difficulty": 3,
+      "difficulty": 4,
       "prerequisites": [
         "resource-saturation-and-backpressure",
-        "runtime-request-execution-and-concurrency"
+        "runtime-request-execution-and-concurrency",
+        "database-connection-and-resource-pressure"
+      ],
+      "confusableWith": [
+        "database-connection-and-resource-pressure",
+        "latency-percentiles-and-capacity-metrics"
       ],
       "file": "concepts/production-latency-localization.md",
       "tags": [
@@ -143,8 +230,16 @@
     {
       "id": "architecture-boundaries-and-scaling",
       "title": "Architecture boundaries and scaling",
-      "difficulty": 3,
-      "prerequisites": [],
+      "difficulty": 4,
+      "prerequisites": [
+        "production-latency-localization",
+        "state-ownership-and-cache-consistency",
+        "queue-delivery-and-worker-failure"
+      ],
+      "confusableWith": [
+        "resource-saturation-and-backpressure",
+        "state-ownership-and-cache-consistency"
+      ],
       "file": "concepts/architecture-boundaries-and-scaling.md",
       "tags": [
         "coding-course",
@@ -154,9 +249,12 @@
     {
       "id": "replication-and-distributed-consistency",
       "title": "Replication and distributed consistency",
-      "difficulty": 3,
+      "difficulty": 5,
       "prerequisites": [
         "retries-idempotency-and-uncertain-outcomes",
+        "state-ownership-and-cache-consistency"
+      ],
+      "confusableWith": [
         "state-ownership-and-cache-consistency"
       ],
       "file": "concepts/replication-and-distributed-consistency.md",

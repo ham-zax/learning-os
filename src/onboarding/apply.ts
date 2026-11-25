@@ -625,18 +625,34 @@ function derivePrerequisiteDiagnosticGaps(
     visit(objectiveId, objective.concept_id);
   }
 
+  const conceptObjectivesStmt = db.prepare(
+    `SELECT objective.id, projection.readiness
+     FROM learning_objectives objective
+     JOIN objective_projections projection ON projection.objective_id = objective.id
+     WHERE objective.concept_id = ?`,
+  );
+
   return [...requiredFor.entries()]
     .map(([objectiveId, dependents]) => {
       const objective = getLearningObjective(db, objectiveId)!;
       const projection = getObjectiveProjection(db, objectiveId)!;
+      const conceptObjectives = conceptObjectivesStmt.all(objective.concept_id) as Array<{
+        id: string;
+        readiness: Readiness;
+      }>;
+      const satisfiedByAnyCapability = conceptObjectives.some(
+        (candidate) => candidate.readiness === "guided" || candidate.readiness === "independent",
+      );
       return {
         objectiveId,
         conceptId: objective.concept_id,
         requiredForObjectiveIds: [...dependents].sort(),
         readiness: projection.readiness,
-      } satisfies PrerequisiteDiagnosticGap;
+        satisfiedByAnyCapability,
+      };
     })
-    .filter((gap) => gap.readiness !== "guided" && gap.readiness !== "independent")
+    .filter((gap) => !gap.satisfiedByAnyCapability)
+    .map(({ satisfiedByAnyCapability: _ignored, ...gap }) => gap satisfies PrerequisiteDiagnosticGap)
     .sort((left, right) => left.objectiveId.localeCompare(right.objectiveId));
 }
 

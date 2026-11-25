@@ -414,4 +414,86 @@ describe("Scope 3 & 4 pedagogy, FIRe-Lite compression, and confusion-pair discri
       db.close();
     }
   });
+
+  it("unlocks dependent objectives when a prerequisite concept reaches guided on any capability under allowAnyQualifyingCapability", () => {
+    const db = createDatabase(":memory:");
+    try {
+      const kernel = createTeacherKernel(db);
+      createTopic(db, { id: "g-prereq", name: "Backend" });
+      createConcept(db, { id: "rt", topicId: "g-prereq", title: "Runtime", prerequisites: [] });
+      createConcept(db, { id: "bp", topicId: "g-prereq", title: "Backpressure", prerequisites: ["rt"] });
+      createLearningObjective(db, { id: "rt:predict", conceptId: "rt", capabilityId: "predict" });
+      createLearningObjective(db, { id: "bp:predict", conceptId: "bp", capabilityId: "predict" });
+      setGoalObjective(db, { goalId: "g-prereq", objectiveId: "rt:predict", importance: "core", targetReadiness: "independent" });
+      setGoalObjective(db, { goalId: "g-prereq", objectiveId: "bp:predict", importance: "core", targetReadiness: "independent" });
+
+      // Before rt:predict has any evidence, bp:predict is blocked even with allowAnyQualifyingCapability
+      const blockedBefore = selectNextChallenge(db, {
+        goalId: "g-prereq",
+        now: "2026-09-10T00:00:00Z",
+        deliveryContext: "practice",
+        prerequisitePolicy: { capabilityId: "explain", minimumReadiness: "guided", allowAnyQualifyingCapability: true },
+        recentChallengeLimit: 5,
+        candidates: [{ objectiveId: "bp:predict", importance: "core", urgency: 1, transfer: "none" }],
+      });
+      expect(blockedBefore.intent).toBeNull();
+      expect(blockedBefore.blocked).toHaveLength(1);
+
+      // Advance rt:predict (not rt:explain) to guided
+      registerChallenge(db, {
+        id: "ch-rt-unlock",
+        version: 1,
+        publicPrompt: "Trace runtime.",
+        taskForm: "runtime_trace",
+        deliveryContext: "practice",
+        targets: [{ objectiveId: "rt:predict", novelty: "same", criterionIds: ["o"] }],
+        rubric: { id: "r-rt-unlock", version: 1, criteria: [{ id: "o", objectiveId: "rt:predict", required: true, description: "ok" }] },
+        verification: { required: false, basis: "frozen_rubric" },
+      });
+      const sess = kernel.createSession("g-prereq", "practice");
+      const att = openAttempt(db, "ch-rt-unlock", 1, sess.id).attempt;
+      submitAndAssess(db, att.id, {
+        closeIfComplete: true,
+        response: { responseText: "trace" },
+        assessment: {
+          evaluatorType: "agent",
+          assessmentBasis: "frozen_rubric",
+          objectiveResults: [{ objectiveId: "rt:predict", result: "correct", criteriaMet: ["o"], criteriaUnmet: [], rationale: "ok" }],
+        },
+      });
+
+      // Strict explain-only policy still blocks bp:predict
+      const strictBlocked = selectNextChallenge(db, {
+        goalId: "g-prereq",
+        now: "2026-09-10T00:00:00Z",
+        deliveryContext: "practice",
+        prerequisitePolicy: { capabilityId: "explain", minimumReadiness: "guided", allowAnyQualifyingCapability: false },
+        recentChallengeLimit: 5,
+        candidates: [{ objectiveId: "bp:predict", importance: "core", urgency: 1, transfer: "none" }],
+      });
+      expect(strictBlocked.intent).toBeNull();
+
+      // Any-capability policy (and getTodayMission default) unlocks bp:predict
+      const unlocked = selectNextChallenge(db, {
+        goalId: "g-prereq",
+        now: "2026-09-10T00:00:00Z",
+        deliveryContext: "practice",
+        prerequisitePolicy: { capabilityId: "explain", minimumReadiness: "guided", allowAnyQualifyingCapability: true },
+        recentChallengeLimit: 5,
+        candidates: [{ objectiveId: "bp:predict", importance: "core", urgency: 1, transfer: "none" }],
+      });
+      expect(unlocked.intent?.objectiveId).toBe("bp:predict");
+      expect(unlocked.blocked).toEqual([]);
+
+      const mission = getTodayMission(db, {
+        goalId: "g-prereq",
+        now: "2026-09-10T00:00:00Z",
+        availableMinutes: 30,
+      });
+      expect(mission.blocked).toEqual([]);
+      expect(mission.items.some((item) => item.objectiveId === "bp:predict")).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
 });

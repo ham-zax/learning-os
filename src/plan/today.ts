@@ -133,6 +133,7 @@ const READINESS_RANK: Record<Readiness, number> = {
 const DEFAULT_PREREQUISITE_POLICY: PrerequisiteSelectionPolicy = {
   capabilityId: "explain",
   minimumReadiness: "guided",
+  allowAnyQualifyingCapability: true,
 };
 
 const DEFAULT_TASK_MINUTES: Record<TaskForm, number> = {
@@ -605,6 +606,13 @@ function deriveFocusPrerequisites(
      JOIN objective_projections projection ON projection.objective_id = objective.id
      WHERE objective.concept_id = ? AND objective.capability_id = ?`,
   );
+  const conceptObjectives = db.prepare(
+    `SELECT objective.id AS objective_id, objective.capability_id, projection.readiness
+     FROM learning_objectives objective
+     JOIN objective_projections projection ON projection.objective_id = objective.id
+     WHERE objective.concept_id = ?
+     ORDER BY objective.id`,
+  );
 
   while (queue.length > 0) {
     const current = queue.shift()!;
@@ -625,9 +633,29 @@ function deriveFocusPrerequisites(
     }
 
     for (const prerequisiteId of prerequisites) {
-      const objective = prerequisiteObjective.get(prerequisiteId, policy.capabilityId) as
-        | { objective_id: string; readiness: Readiness }
-        | undefined;
+      let objective: { objective_id: string; readiness: Readiness } | undefined;
+      if (policy.allowAnyQualifyingCapability) {
+        const allForConcept = conceptObjectives.all(prerequisiteId) as Array<{
+          objective_id: string;
+          capability_id: string;
+          readiness: Readiness;
+        }>;
+        if (
+          allForConcept.some(
+            (item) => READINESS_RANK[item.readiness] >= READINESS_RANK[policy.minimumReadiness],
+          )
+        ) {
+          continue;
+        }
+        objective =
+          allForConcept.find((item) => goalObjectiveIds.has(item.objective_id)) ??
+          allForConcept.find((item) => item.capability_id === policy.capabilityId) ??
+          allForConcept[0];
+      } else {
+        objective = prerequisiteObjective.get(prerequisiteId, policy.capabilityId) as
+          | { objective_id: string; readiness: Readiness }
+          | undefined;
+      }
       if (!objective) continue;
       if (inactiveGoalObjectiveIds.has(objective.objective_id)) continue;
       if (READINESS_RANK[objective.readiness] >= READINESS_RANK[policy.minimumReadiness]) continue;

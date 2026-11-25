@@ -1,20 +1,36 @@
 {
   "id": "backend-systems",
   "title": "Backend Systems: Invariants, Failures, Recovery",
-  "version": "1.0.0",
-  "scope": "Seven conceptual phases for backend reasoning, practical concurrency work and interview transfer. No prescribed calendar duration.",
+  "version": "1.1.0",
+  "scope": "Progressive backend systems map designed for frontend-to-backend engineers: a foundation bridge (network, SQL constraints/indexes, latency metrics), a single-node and database core, and selectable distributed and replication tracks.",
   "entry": "INDEX.md",
   "sourceMap": "SOURCES.md",
   "defaultUnits": [
+    "b00",
     "b01",
     "b02",
-    "b03",
-    "b04",
     "b05",
-    "b06",
-    "b07"
+    "b03"
   ],
   "sources": [
+    {
+      "id": "mdn-http-overview",
+      "title": "MDN: Overview of HTTP and connection management",
+      "role": "Request/response boundary, reverse proxies, persistent connections and transport vs application failures",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Overview"
+    },
+    {
+      "id": "postgres-constraints-indexes",
+      "title": "PostgreSQL: Constraints and indexes",
+      "role": "Database-enforced invariants (UNIQUE, CHECK, foreign keys) and how index scans vs sequential scans shape query cost and lock scope",
+      "url": "https://www.postgresql.org/docs/current/ddl-constraints.html"
+    },
+    {
+      "id": "sre-monitoring-latency",
+      "title": "Google SRE Book: Monitoring Distributed Systems",
+      "role": "Four golden signals, tail latency percentiles (p50/p95/p99), utilization vs saturation and error budgets",
+      "url": "https://sre.google/sre-book/monitoring-distributed-systems/"
+    },
     {
       "id": "node-runtime",
       "title": "Node.js: Event loop and worker pool",
@@ -72,6 +88,23 @@
   ],
   "units": [
     {
+      "id": "b00",
+      "title": "Server boundary, relational data and latency metrics",
+      "lane": "foundation",
+      "objectiveIds": [
+        "server-request-lifecycle-and-network-boundaries:explain",
+        "relational-constraints-and-index-cost:explain",
+        "latency-percentiles-and-capacity-metrics:explain"
+      ],
+      "sourceIds": [
+        "mdn-http-overview",
+        "postgres-constraints-indexes",
+        "sre-monitoring-latency"
+      ],
+      "outcome": "Bridge browser-side intuition to server request hops, database-enforced invariants/indexes, and tail-latency saturation vocabulary.",
+      "file": "units/b00.md"
+    },
+    {
       "id": "b01",
       "title": "Runtime, concurrency and backpressure",
       "lane": "core",
@@ -80,7 +113,8 @@
         "resource-saturation-and-backpressure:predict"
       ],
       "sourceIds": [
-        "node-runtime"
+        "node-runtime",
+        "sre-monitoring-latency"
       ],
       "outcome": "Locate execution, waiting and capacity limits in a request path.",
       "file": "units/b01.md"
@@ -95,41 +129,11 @@
         "database-connection-and-resource-pressure:debug"
       ],
       "sourceIds": [
-        "postgres-isolation"
+        "postgres-isolation",
+        "postgres-constraints-indexes"
       ],
       "outcome": "Protect a business invariant under concurrency and separate pool wait from query execution.",
       "file": "units/b02.md"
-    },
-    {
-      "id": "b03",
-      "title": "State ownership, cache visibility and replicas",
-      "lane": "core",
-      "objectiveIds": [
-        "state-ownership-and-cache-consistency:predict",
-        "state-ownership-and-cache-consistency:design"
-      ],
-      "sourceIds": [
-        "redis-cache-tracking",
-        "postgres-replication"
-      ],
-      "outcome": "State an explicit freshness contract and reason about stale cache publication.",
-      "file": "units/b03.md"
-    },
-    {
-      "id": "b04",
-      "title": "Queue delivery, retries and uncertain outcomes",
-      "lane": "core",
-      "objectiveIds": [
-        "queue-delivery-and-worker-failure:predict",
-        "retries-idempotency-and-uncertain-outcomes:predict",
-        "retries-idempotency-and-uncertain-outcomes:design"
-      ],
-      "sourceIds": [
-        "rabbitmq-acks",
-        "stripe-idempotency"
-      ],
-      "outcome": "Separate transport acknowledgement from business-effect duplication safety.",
-      "file": "units/b04.md"
     },
     {
       "id": "b05",
@@ -147,9 +151,39 @@
       "file": "units/b05.md"
     },
     {
+      "id": "b03",
+      "title": "State ownership and cache visibility",
+      "lane": "core",
+      "objectiveIds": [
+        "state-ownership-and-cache-consistency:predict",
+        "state-ownership-and-cache-consistency:design"
+      ],
+      "sourceIds": [
+        "redis-cache-tracking"
+      ],
+      "outcome": "State an explicit freshness contract and reason about stale cache publication.",
+      "file": "units/b03.md"
+    },
+    {
+      "id": "b04",
+      "title": "Queue delivery, retries and uncertain outcomes",
+      "lane": "distributed",
+      "objectiveIds": [
+        "queue-delivery-and-worker-failure:predict",
+        "retries-idempotency-and-uncertain-outcomes:predict",
+        "retries-idempotency-and-uncertain-outcomes:design"
+      ],
+      "sourceIds": [
+        "rabbitmq-acks",
+        "stripe-idempotency"
+      ],
+      "outcome": "Separate transport acknowledgement from business-effect duplication safety.",
+      "file": "units/b04.md"
+    },
+    {
       "id": "b06",
       "title": "Production diagnosis and architecture boundaries",
-      "lane": "core",
+      "lane": "distributed",
       "objectiveIds": [
         "production-latency-localization:debug",
         "architecture-boundaries-and-scaling:design"
@@ -157,7 +191,8 @@
       "sourceIds": [
         "node-runtime",
         "postgres-isolation",
-        "otel-traces"
+        "otel-traces",
+        "sre-monitoring-latency"
       ],
       "outcome": "Choose one discriminating measurement and scale the demonstrated bottleneck.",
       "file": "units/b06.md"
@@ -165,7 +200,7 @@
     {
       "id": "b07",
       "title": "Replication, integration and interview transfer",
-      "lane": "core",
+      "lane": "extension",
       "objectiveIds": [
         "replication-and-distributed-consistency:predict",
         "replication-and-distributed-consistency:design"

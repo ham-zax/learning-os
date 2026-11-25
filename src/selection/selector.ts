@@ -258,6 +258,41 @@ function prerequisiteBlockers(
 ): string[] {
   const blockers: string[] = [];
   for (const prerequisiteId of state.prerequisites) {
+    if (input.prerequisitePolicy.allowAnyQualifyingCapability) {
+      const rows = db
+        .prepare(
+          `SELECT objective.capability_id, projection.readiness
+           FROM learning_objectives objective
+           JOIN objective_projections projection ON projection.objective_id = objective.id
+           WHERE objective.concept_id = ?`,
+        )
+        .all(prerequisiteId) as Array<{ capability_id: string; readiness: Readiness }>;
+
+      if (
+        rows.some(
+          (candidate) =>
+            READINESS_RANK[candidate.readiness] >=
+            READINESS_RANK[input.prerequisitePolicy.minimumReadiness],
+        )
+      ) {
+        continue;
+      }
+
+      const preferred =
+        rows.find((candidate) => candidate.capability_id === input.prerequisitePolicy.capabilityId) ??
+        rows[0];
+      if (!preferred) {
+        blockers.push(
+          `Prerequisite ${prerequisiteId} has no ${input.prerequisitePolicy.capabilityId} objective.`,
+        );
+        continue;
+      }
+      blockers.push(
+        `Prerequisite ${prerequisiteId}:${preferred.capability_id} readiness ${preferred.readiness} is below ${input.prerequisitePolicy.minimumReadiness}.`,
+      );
+      continue;
+    }
+
     const row = db
       .prepare(
         `SELECT projection.readiness

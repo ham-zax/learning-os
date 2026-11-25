@@ -5,7 +5,7 @@
       "id": "backend-systems",
       "name": "Backend Systems: Invariants, Failures, Recovery",
       "manifest": "knowledge/backend-systems/manifest.json",
-      "conceptCount": 12
+      "conceptCount": 15
     },
     {
       "id": "coding-interview",

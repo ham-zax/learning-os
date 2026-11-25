@@ -22,6 +22,8 @@ export type TransferSelectionPolicy = "none" | "eligible" | "required";
 export interface PrerequisiteSelectionPolicy {
   capabilityId: SelectionCapabilityId;
   minimumReadiness: Readiness;
+  /** When true, any objective on the prerequisite concept at >= minimumReadiness clears the gate. */
+  allowAnyQualifyingCapability?: boolean;
 }
 
 export interface ObjectiveSelectionCandidate {

@@ -31,7 +31,7 @@ export const CodingCourseSchema = z.object({
     id,
     title: text,
     file: text,
-    lane: z.enum(["core", "react", "angular", "extension"]),
+    lane: z.enum(["foundation", "core", "distributed", "react", "angular", "extension"]),
     outcome: text,
     objectiveIds: z.array(objectiveId).min(1),
     sourceIds: z.array(id).min(1),

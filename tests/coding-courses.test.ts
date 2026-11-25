@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createConcept, getConcept, setGoalObjective } from "../src/db/database.js";
 import { createLearningObjective } from "../src/kernel/foundation.js";
 import { codingCourseFile } from "../src/knowledge/courses.js";
+import { loadAllConcepts, loadManifest } from "../src/knowledge/loader.js";
+import { validateConcept, validateManifest } from "../src/knowledge/validator.js";
 import { createProfile, openProfileDatabase } from "../src/profile/index.js";
 import { createTeacherWorkspace } from "../src/workspace.js";
 import { createKernelFixture, GOAL_ID } from "./helpers/kernel-fixture.js";
@@ -102,5 +104,35 @@ describe("coding course workspace", () => {
     symlinkSync(outside, join(courseDir, "linked.md"));
     expect(() => codingCourseFile(courseDir, "../outside.md")).toThrow("outside-course");
     expect(() => codingCourseFile(courseDir, "linked.md")).toThrow("outside-course");
+  });
+
+  it("exposes progressive lanes, acyclic prerequisites, and validated frontend-to-backend concept cards in backend-systems", () => {
+    const workspace = createTeacherWorkspace({ knowledgeRoot, dataDir });
+    const { course } = workspace.getCourse("backend-systems");
+    expect(course.defaultUnits).toEqual(["b00", "b01", "b02", "b05", "b03"]);
+    expect(course.units.map((unit) => [unit.id, unit.lane])).toEqual([
+      ["b00", "foundation"],
+      ["b01", "core"],
+      ["b02", "core"],
+      ["b05", "core"],
+      ["b03", "core"],
+      ["b04", "distributed"],
+      ["b06", "distributed"],
+      ["b07", "extension"],
+    ]);
+
+    const manifest = loadManifest(join(knowledgeRoot, "backend-systems", "manifest.json"));
+    expect(manifest.concepts).toHaveLength(15);
+    const manifestValidation = validateManifest(manifest);
+    expect(manifestValidation.valid).toBe(true);
+    expect(manifestValidation.errors).toEqual([]);
+
+    const concepts = loadAllConcepts(join(knowledgeRoot, "backend-systems", "concepts"));
+    expect(concepts).toHaveLength(15);
+    for (const concept of concepts) {
+      const check = validateConcept(concept);
+      expect(check.valid, `${concept.frontmatter.id}: ${check.errors.join("; ")}`).toBe(true);
+      expect(concept.sections["Frontend-to-Backend Transfer"]).toBeTruthy();
+    }
   });
 });
