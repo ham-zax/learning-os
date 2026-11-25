@@ -86,6 +86,10 @@ import {
   recordExposure,
   submitAttempt,
 } from "./kernel/foundation.js";
+import {
+  answerAttemptSubquestion,
+  openAttemptSubquestion,
+} from "./kernel/questions.js";
 
 import {
   loadConcept,
@@ -93,7 +97,10 @@ import {
   extraSectionHeadings,
 } from "./knowledge/loader.js";
 import { generateGuidedDiscoverySequence } from "./session/modes/guided-discovery.js";
-import { generateTeachBackSession } from "./session/modes/teach-back.js";
+import {
+  generateTeachBackSession,
+  selectFeynmanFollowUp,
+} from "./session/modes/teach-back.js";
 import { generateRetrievalBatch } from "./session/modes/retrieval.js";
 
 import type { ConceptMap, ConceptProposal, ConceptFile } from "./knowledge/types.js";
@@ -501,7 +508,34 @@ async function runSession(
         rl,
         chalk.yellow(`\n  ${opened.challenge.publicPrompt.replace(/\*\*/g, "")}\n  > `),
       );
-      submitAttempt(db, opened.attempt.id, { responseText: response });
+
+      const followUp = mode === "practice" ? selectFeynmanFollowUp(response, file) : null;
+      if (followUp) {
+        const openingSubq = openAttemptSubquestion(db, opened.attempt.id, {
+          promptText: opened.challenge.publicPrompt,
+        });
+        const followUpSubq = answerAttemptSubquestion(db, opened.attempt.id, {
+          seq: openingSubq.seq,
+          responseText: response,
+          followUpQuestion: { promptText: followUp.prompt },
+        });
+        const clarification = await ask(
+          rl,
+          chalk.cyan(
+            `\n  [Feynman probe] ${followUp.prompt}\n  (press Enter to keep your initial answer)\n  > `,
+          ),
+        );
+        const clarificationText = clarification.trim();
+        answerAttemptSubquestion(db, opened.attempt.id, {
+          seq: followUpSubq.seq,
+          responseText: clarificationText || "(kept initial explanation)",
+        });
+        submitAttempt(db, opened.attempt.id, {
+          responseText: clarificationText ? `${response}\n\n${clarificationText}` : response,
+        });
+      } else {
+        submitAttempt(db, opened.attempt.id, { responseText: response });
+      }
 
       if (mode === "practice") {
         revealTeachBackReference(file, recordPostResponseExposure);

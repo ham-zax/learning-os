@@ -12,6 +12,7 @@ Use this reference when the current Learning OS-selected episode needs specializ
 - Cognitive-direction rotation
 - Retrieval-first study
 - Retrieval and brain dump
+- Feynman teach-back
 - Pattern noticing and guided discovery
 - Confusion-pair discrimination
 - Repair the right thing
@@ -82,6 +83,7 @@ Rules:
 | Current model is unknown | brief free recall or brain dump | definition-first lecture |
 | Learner can plausibly infer a principle | pattern noticing or one guided-discovery probe | long Socratic sequence |
 | Learner confuses two nearby concepts | confusion-pair discrimination | two independent definition questions |
+| Learner uses buzzwords or vague jargon that masks a causal gap (especially on `:explain`) | Feynman teach-back (1–2 targeted jargon probes, then minimal repair + plain-language reconstruction) | accepting slogan definitions or chaining endless Socratic follow-ups |
 | Causal behavior can be observed | prediction before reveal | showing decisive output first |
 | Learner's prediction conflicts with evidence | self-verification | immediately replacing their reasoning with yours |
 | Learner wants deeper understanding | one boundary test or thought experiment | automatic multi-stage lesson |
@@ -153,6 +155,27 @@ Use clean retrieval before teaching in tracked work or adopted practice when an 
 - **Brain dump:** ask the learner to externalize what they currently think, especially for a new concept whose model is uncertain.
 - Keep the surface small. Do not ask for every detail when one discriminating relationship is enough.
 - If retrieval failure is the only blocker and a hint is allowed, use the frozen challenge hint lifecycle instead of converting the failure into a conceptual diagnosis.
+
+## Feynman teach-back
+
+Use on `:explain` objectives, foundation-bridge concepts, learner-requested teach-back, or whenever an answer leans on buzzwords, slogans, or vague shorthand (*"it handles it automatically"*, *"BEGIN/COMMIT makes it safe"*, *"the cache stays consistent"*) that could hide a missing causal link.
+
+```text
+plain-language teach-back
+-> probe 1–2 vague terms or missing causal links neutrally
+-> assess honestly; repair only the broken/missing relation
+-> one plain-language reconstruction
+-> stop
+```
+
+1. **Ask for plain mechanism, not recitation:** frame the prompt around explaining *how and why* the mechanism works to a peer or junior engineer using a concrete scenario rather than memorized definitions.
+2. **Probe vague jargon neutrally (max 1–2 follow-ups):** pick the single phrase doing the most hand-waving and ask what concretely happens there (e.g., *"You said 'it keeps it consistent automatically' — what actually happens if a write and a slow read overlap?"*). In tracked mode, preserve the verbatim initial answer and open one neutral clarification subquestion via `answerAttemptSubquestion` with `followUpQuestion`—do not grade ambiguity as failure and do not hint the answer while clarifying.
+3. **Stop probing and repair the actual gap:** if the follow-up reveals a real missing link or wrong causal model, assess against the frozen criteria and teach only that missing/broken relation (recording `recordExposure` before displaying corrective material in tracked mode). Never keep probing past two follow-ups when direct teaching is needed.
+4. **Simplify and rebuild once:** invite one concise, jargon-free reconstruction in the learner's own words (`requireReconstruction: true` + `resolveSessionReconstruction` in tracked mode), then stop.
+
+Boundaries:
+- **Honor the stop rule:** if the first explanation is already clear, concrete, and satisfies every frozen criterion, confirm and close—never tack on a Feynman interrogation for its own sake.
+- **Keep boundaries clean:** do not use Feynman teach-back during `interview`/`mock` runs, and never turn an ad-hoc explanation-only request into an unsolicited teach-back quiz.
 
 ## Pattern noticing and guided discovery
 
