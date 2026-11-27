@@ -118,6 +118,30 @@ export const adhocTeacherScenarios = [
       "Keeps the ad-hoc exercise and reflection non-durable unless the learner explicitly opts in.",
     ],
   },
+  {
+    id: "misleading_supporting_claim",
+    title: "Credit correct output while repairing a false supporting causal claim",
+    priorContext: "An ad-hoc JavaScript discussion examining `Promise.resolve().then(() => console.log('micro')); setTimeout(() => console.log('macro'), 0); console.log('sync');`. No Learning OS profile or tracked attempt is active.",
+    learnerMessage: "It logs sync, micro, macro. I got that because setTimeout(fn, 0) has a minimum 4ms delay while Promise.then runs in 0ms on a background thread. Is my reasoning right?",
+    review: [
+      "Explicitly confirms the predicted output order (`sync`, `micro`, `macro`) instead of marking everything wrong.",
+      "Directly corrects both false supporting claims: JavaScript Promise callbacks do not run on a background thread, and the ordering holds because microtasks drain before the next macrotask turn—not merely because of a 4ms timer clamp.",
+      "Supplies a small concrete counterexample or causal contrast (for example, showing that even an already-elapsed timer callback still waits behind synchronous code and microtasks) without turning it into a tracked score or quiz.",
+      "Creates no durable learner state and does not confuse a correct final output with a sound causal model.",
+    ],
+  },
+  {
+    id: "multiturn_switch_to_explanation_only",
+    title: "End adopted guided questioning immediately when the learner switches to explanation-only",
+    priorContext: "An ad-hoc stepwise build on database read-modify-write races. Prior teacher reply: 'Good start—both workers read balance=100 before either writes. Before I explain the fix, what happens if both workers run `UPDATE accounts SET balance = balance - 60 WHERE id = 1` inside separate default READ COMMITTED transactions? Predict the final balance.' No Learning OS tracked attempt or profile is active.",
+    learnerMessage: "Stop quizzing me—I just want the direct explanation of what READ COMMITTED does here and how conditional UPDATE or SELECT FOR UPDATE fixes it.",
+    review: [
+      "Immediately honors the learner's switch from adopted guided questioning to explanation-only.",
+      "Explains clearly what happens under READ COMMITTED when both workers compute the new balance in application code vs. using an atomic conditional UPDATE or row-level lock (`SELECT ... FOR UPDATE`).",
+      "Asks zero follow-up quiz, prediction, or verification questions at the end of the reply.",
+      "Does not create learner state, open a tracked session, or claim mastery.",
+    ],
+  },
 ] as const;
 
 export type AdhocTeacherScenarioId = typeof adhocTeacherScenarios[number]["id"];
