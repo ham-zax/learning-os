@@ -96,7 +96,7 @@ Do not persist authoritative learner state or goal-specific priority on this tab
 
 ### `goal_objectives`
 
-Goal-specific requirements and priority for an objective. In V1, `goal_id` is `topics.id`: the topic already owns the goal description, deadline, and session container, so a second goals table would duplicate ownership. `goal_objectives.goal_id` therefore references `topics(id)`. The association does not require the objective's concept to belong to that same topic; one objective may serve multiple topic-backed goals.
+Goal-specific requirements and priority for an objective. In schema `v24`, goals live in their own `goals` table (carrying name, target, deadline, preparation metadata, and optional bookmark/parked session), separate from curriculum `topics`. `goal_objectives.goal_id` references `goals(id)`. The association does not require the objective's concept to belong to any single topic; one objective may serve multiple goals.
 
 | Column | Type | Rule |
 | --- | --- | --- |
@@ -120,13 +120,13 @@ PRIMARY KEY(goal_id, objective_id)
 
 The same objective may therefore be core for one goal and supporting or inactive for another without duplicating learner evidence. Onboarding preparation strategy may influence which challenge the teacher tries first, but later evidence/projections remain authoritative and the strategy cannot grant readiness, transfer, durability, or scheduler state.
 
-### `goal_preparation`
+### `goals` (formerly `goal_preparation`)
 
-Confirmed goal-level preparation context that must survive replacement of the conversational teacher. This is orchestration state, not learner evidence.
+Confirmed goal identity, preparation context, and optional learner bookmark/parked session that survive replacement of the conversational teacher. This is orchestration state, not learner evidence.
 
 | Column | Type | Rule |
 | --- | --- | --- |
-| `goal_id` | PK/FK | References the existing topic-backed goal owner. |
+| `id` | PK/text | Stable goal identity (distinct from content `topics.id`). |
 | `purpose` | enum/text | `interview`, `role_readiness`, or `long_term_mastery`. |
 | `target_role` | text/null | Structured learner-facing role, when supplied. |
 | `target_outcome` | text/null | Structured preparation outcome, when supplied. |
@@ -315,7 +315,6 @@ Append-only objective-specific assessment history.
 | `assessment_basis` | enum/text | `deterministic_execution`, `frozen_rubric`, `human`, `mixed`. |
 | `evaluator_type` | enum/text | `kernel`, `agent`, `llm`, `human`. |
 | `criteria_json` | JSON/text | Objective-specific criteria results. |
-| `observed_errors_json` | JSON/text | Stable error categories where known. |
 | `rationale` | text | Why this objective result was assigned. |
 | `performed_at` | timestamp | Learner-performance time; for normal attempts this is `attempt.submitted_at`. |
 | `created_at` | timestamp | Evidence commit/observation time. |
@@ -351,33 +350,35 @@ The latest revision determines whether an evidence event is currently effective.
 
 If the assessment value itself was wrong, append `invalidate` for the original event and append a corrected replacement `EvidenceEvent` with `supersedes_event_id` in the same transaction. A `restore` is for reversing an erroneous invalidation; reject restore when it would create two effective events for the same normal `(attempt_id, objective_id)` assessment.
 
-`review_events` and `misconception_observations` do not need their own revision streams: they inherit validity from their source `evidence_event_id`. An invalid source event is ignored during replay; restoring it makes its existing derived events effective again.
+`review_events` and `claim_observations` do not need their own revision streams: they inherit validity from their source `evidence_event_id`. An invalid source event is ignored during replay; restoring it makes its existing derived events effective again.
 
-### `misconceptions`
+### `claims`
 
-Stable semantic misconception definitions.
+Stable semantic claim and misconception definitions (`kind`: `'misconception' | 'error_claim'`).
 
 | Column | Type | Rule |
 | --- | --- | --- |
-| `id` | text PK | Stable misconception slug/ID. |
-| `concept_id` | FK | Concept the misconception concerns. |
-| `description` | text | Precise causal misunderstanding. |
+| `id` | text PK | Stable claim/misconception slug/ID. |
+| `concept_id` | FK | Concept the claim concerns. |
+| `kind` | enum/text | `'misconception'` or `'error_claim'`. |
+| `description` | text | Precise causal misunderstanding or error claim. |
 | `correction_strategy` | text/null | Useful retest/remediation guidance. |
 | `is_blocking` | bool | Whether active observation caps readiness below `independent`. |
 | `created_at` | timestamp | Definition creation time. |
 
 Status is not authoritative on this row.
 
-### `misconception_observations`
+### `claim_observations`
 
-Append-only misconception history.
+Append-only criterion-scoped claim history (replaces legacy `misconception_observations` and `observed_errors_json`).
 
 | Column | Type | Rule |
 | --- | --- | --- |
 | `seq` | integer PK/autoincrement | Append order and deterministic tie-breaker. |
-| `misconception_id` | FK | Stable misconception. |
+| `claim_id` | FK | Stable claim (`claims.id`). |
 | `objective_id` | FK | Objective on which it appeared/cleared; must equal the source evidence objective. |
 | `evidence_event_id` | FK | Supporting evidence. |
+| `criterion_id` | text | Exact frozen criterion exercised by this observation or clearance. |
 | `disposition` | enum/text | `observed` or `cleared`. |
 | `created_at` | timestamp | Observation time. |
 

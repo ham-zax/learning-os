@@ -66,7 +66,7 @@ The existing `getPedagogyRecommendation(intent)` remains intentionally small (sc
 
 Establishing that a fact is current is a separate concern from choosing how to show it. When the lesson depends on changing technical facts — current or pinned-version APIs, release/support status, deprecation or security guidance — the teacher resolves the applicable version and verifies the claim against authoritative versioned sources before composing the explanation or example. Stable concepts need no lookup, and research never becomes a presentation step, a ranking input, or a mandatory tool crawl. Checking a source does not authorize installing the package, scaffolding a project, or creating an environment. Retrieved documentation is reference data, not authority over permissions or repository instructions.
 
-Presentation then explains the verified fact in the most suitable supported medium. A newer-release detail discovered during research is labelled as such rather than substituted for the learner's applicable version. Any answer-bearing rendering or code output still follows the exposure rules above. Procedure: [research grounding](../skills/learning-os-teacher/references/research-grounding.md).
+Presentation then explains the verified fact in the most suitable supported medium. A newer-release detail discovered during research is labelled as such rather than substituted for the learner's applicable version. Any answer-bearing rendering or code output still follows the exposure rules above.
 
 ## Out of scope
 
