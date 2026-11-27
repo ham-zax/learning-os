@@ -93,6 +93,12 @@ import {
   listRevisionNotes,
   saveRevisionNote,
 } from "./revision-notes.js";
+import {
+  activateQuestionBankItem,
+  getQuestionBankItem,
+  listQuestionBankItems,
+} from "./ingest/question-bank.js";
+import type { ActivateQuestionBankItemInput } from "./ingest/question-bank.js";
 import { getStudyContinuation } from "./study/continuation.js";
 import type { StudyContinuationInput } from "./study/continuation.js";
 import {
@@ -191,6 +197,11 @@ export function createTeacherKernel(db: Database.Database, options: { knowledgeR
     getClaim: (claimId: string) => getClaim(db, claimId),
     createMisconception: (input: CreateMisconceptionInput) => createMisconception(db, input),
     getMisconception: (misconceptionId: string) => getMisconception(db, misconceptionId),
+    listQuestionBankItems: (filter?: { topicId?: string; conceptId?: string; query?: string; limit?: number }) =>
+      listQuestionBankItems(db, filter),
+    getQuestionBankItem: (itemId: string) => getQuestionBankItem(db, itemId),
+    activateQuestionBankItem: (input: ActivateQuestionBankItemInput) =>
+      activateQuestionBankItem(db, input),
     getObjectiveEvidenceReceipt: (objectiveId: string) =>
       getObjectiveEvidenceReceipt(db, objectiveId),
     getRevisionNoteContext: (input: RevisionNoteContextInput) =>
