@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,7 +16,7 @@ import { loadKnowledgeCatalog } from "../src/onboarding/catalog.js";
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const knowledgeRoot = join(repoRoot, "knowledge");
 
-function verifyManagedProfilePaths(): number {
+async function verifyManagedProfilePaths(): Promise<number> {
   const profilesRoot = join(repoRoot, "data", "profiles");
   if (!existsSync(profilesRoot)) return 0;
 
@@ -66,7 +66,7 @@ function verifyManagedProfilePaths(): number {
       const smokeDir = mkdtempSync(join(tmpdir(), "learning-os-verify-profile-"));
       try {
         const smokeDbPath = join(smokeDir, "tutor.db");
-        copyFileSync(dbPath, smokeDbPath);
+        await db.backup(smokeDbPath);
         for (const goal of goals) {
           const next = callLearningOsTool(
             "study_next",
@@ -88,7 +88,7 @@ function verifyManagedProfilePaths(): number {
   return checked;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const catalog = loadKnowledgeCatalog(knowledgeRoot);
   if (catalog.topics.length === 0) {
     throw new Error("No curriculum topics discovered under knowledge/.");
@@ -157,11 +157,14 @@ function main(): void {
     getScaffoldMaterial(knowledgeRoot, pack.packId, "completion");
   }
 
-  const profilesChecked = verifyManagedProfilePaths();
+  const profilesChecked = await verifyManagedProfilePaths();
 
   console.log(
     `Curriculum verification passed (${catalog.topics.length} topics, ${totalConcepts} concepts, ${courses.length} courses, ${scaffolds.length} scaffold packs, ${profilesChecked} profile DBs).`,
   );
 }
 
-main();
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+});

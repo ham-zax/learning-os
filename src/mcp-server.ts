@@ -6,7 +6,7 @@
  * `study_status`, `study_notes`) over newline-delimited JSON-RPC 2.0 stdio with
  * zero additional runtime dependencies.
  */
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -26,11 +26,17 @@ const SUPPORTED_PROTOCOL_VERSIONS = new Set([
 ]);
 const DEFAULT_PROTOCOL_VERSION = "2025-03-26";
 
-const SERVER_INSTRUCTIONS =
-  "Learning OS owns durable learner truth, sequencing, frozen challenges, evidence, and FSRS scheduling. " +
-  "Use study_next to resume or select work, study_help BEFORE displaying any answer-bearing hint/scaffold/repair, " +
-  "study_submit to record verbatim answers/assessments/clarifications/reconstructions, study_status for progress dashboards, " +
-  "and study_notes for evidence-grounded revision notes and receipts.";
+export function loadPackagedSkillInstructions(): string {
+  const skillPath = fileURLToPath(new URL("../skills/learning-os-teacher/SKILL.md", import.meta.url));
+  const raw = readFileSync(skillPath, "utf8");
+  const stripped = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n*/u, "").trim();
+  if (!stripped) {
+    throw new Error(`Packaged teacher skill is empty: ${skillPath}`);
+  }
+  return stripped;
+}
+
+const SERVER_INSTRUCTIONS = loadPackagedSkillInstructions();
 
 export interface JsonRpcRequest {
   jsonrpc: string;

@@ -47,19 +47,17 @@ export interface StudyContinuationInput {
 }
 
 export type ContinuationActionId =
+  | "verify"
   | "assess"
-  | "assess_submitted"
-  | "revise_evidence"
+  | "revise"
   | "clarify"
   | "split"
   | "teach_first"
   | "park"
   | "unpark"
   | "abandon"
-  | "repair"
-  | "decline_instruction"
-  | "complete_reconstruction"
-  | "opt_out_reconstruction"
+  | "exposure"
+  | "reconstruct"
   | "close_feedback"
   | "finish_session"
   | "set_budget_or_one_episode"
@@ -109,6 +107,8 @@ export interface ResumeCommitment {
   pendingQuestionSeq: number | null;
   answeredSubquestions: AnsweredSubquestionSummary[];
   criteria: ChallengeCriterion[];
+  /** True once the active attempt has been submitted (use `assess` without re-submitting responseText). */
+  alreadySubmitted: boolean;
   /** Present once the learner has submitted work. */
   submittedWork?: SubmittedAttemptWork;
   /** Present when an assessed target was invalidated and must be revised rather than re-submitted. */
@@ -242,6 +242,7 @@ function buildResumeCommitment(
     pendingQuestionSeq: presentation.kind === "question" ? presentation.seq : null,
     answeredSubquestions,
     criteria: challenge ? challenge.rubric.criteria : [],
+    alreadySubmitted: attempt?.submitted_at !== null && attempt?.submitted_at !== undefined,
   };
 
   if (attempt && attempt.submitted_at !== null) {
@@ -275,12 +276,16 @@ function deriveResumeAllowedActions(
     case "assess_response": {
       const hasExistingHistory =
         feedback.objectives.length > 0 || (commitment.correctionTargets?.length ?? 0) > 0;
-      return hasExistingHistory ? ["revise_evidence"] : ["assess_submitted"];
+      if (hasExistingHistory) return ["revise"];
+      if (commitment.verificationRequired && !commitment.submittedWork?.verificationOutput) {
+        return ["verify", "assess"];
+      }
+      return ["assess"];
     }
     case "review_gap":
-      return ["repair", "decline_instruction"];
+      return ["exposure", "close_feedback"];
     case "reconstruct":
-      return ["complete_reconstruction", "opt_out_reconstruction"];
+      return ["reconstruct"];
     case "complete_feedback":
     case "review_ungradable":
       return ["close_feedback"];

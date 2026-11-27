@@ -21,6 +21,7 @@ import {
   buildCalibratedPredictionChallenge,
   findCalibratedPredictionCase,
   loadCalibratedPredictionPack,
+  verifyPackagedPredictionChallenge,
 } from "../knowledge/challenge-calibration.js";
 import { ScaffoldStageSchema } from "../knowledge/scaffolds.js";
 import { getActiveProfile, listProfiles, openProfileDatabase } from "../profile/index.js";
@@ -89,7 +90,79 @@ const SUBQUESTION_JSON_SCHEMA = {
   ],
 };
 
+const ASSESSMENT_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["evaluatorType", "assessmentBasis", "objectiveResults"],
+  properties: {
+    evaluatorType: { type: "string", enum: ["kernel", "agent", "llm", "human"] },
+    assessmentBasis: {
+      type: "string",
+      enum: ["deterministic_execution", "frozen_rubric", "human", "mixed"],
+      description: "Must match commitment.gradingBasis.",
+    },
+    verificationOutput: {
+      type: ["object", "null"],
+      additionalProperties: false,
+      required: ["outcome", "basis", "summary"],
+      properties: {
+        outcome: { type: "string", enum: ["passed", "failed", "not_run"] },
+        basis: { type: "string", minLength: 1 },
+        summary: { type: "string", minLength: 1 },
+        details: {
+          type: "object",
+          properties: {
+            stdout: {
+              oneOf: [
+                { type: "string" },
+                { type: "array", items: { type: "string" } },
+              ],
+            },
+          },
+        },
+      },
+      description: "Required when verificationRequired=true. Pass verificationOutput returned by action='verify' directly.",
+    },
+    objectiveResults: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["objectiveId", "result", "criteriaMet", "criteriaUnmet", "rationale"],
+        properties: {
+          objectiveId: { type: "string", minLength: 1 },
+          result: { type: "string", enum: ["correct", "partially_correct", "incorrect", "ungradable"] },
+          criteriaMet: { type: "array", items: { type: "string", minLength: 1 } },
+          criteriaUnmet: { type: "array", items: { type: "string", minLength: 1 } },
+          claimObservations: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["claimId", "criterionId", "disposition"],
+              properties: {
+                claimId: { type: "string", minLength: 1 },
+                criterionId: { type: "string", minLength: 1 },
+                disposition: { type: "string", enum: ["observed", "cleared"] },
+                kind: { type: "string", enum: ["misconception", "error_claim"] },
+                description: { type: "string", minLength: 1 },
+                correctionStrategy: { type: "string", minLength: 1 },
+                isBlocking: { type: "boolean" },
+              },
+            },
+          },
+          misconceptionsObserved: { type: "array", items: { type: "string", minLength: 1 } },
+          misconceptionsCleared: { type: "array", items: { type: "string", minLength: 1 } },
+          rationale: { type: "string", minLength: 1 },
+        },
+      },
+    },
+  },
+};
+
 const STUDY_SUBMIT_ACTIONS = [
+  "verify",
   "assess",
   "revise",
   "teach_first",
@@ -133,6 +206,17 @@ const StudyNextInputSchema = z
   .strict();
 
 const StudySubmitInputSchema = z.union([
+  z
+    .object({
+      ...DbSelectorFields,
+      action: z.literal("verify"),
+      attemptId: z.number().int().positive(),
+      responseText: z.string().min(1).optional(),
+      questionSeq: z.number().int().positive().optional(),
+      activeTimeSeconds: z.number().int().nonnegative().optional(),
+      artifactRef: z.record(z.string(), z.unknown()).optional(),
+    })
+    .strict(),
   z
     .object({
       ...DbSelectorFields,
@@ -386,12 +470,16 @@ export const MCP_TOOLS: readonly McpToolDefinition[] = [
   {
     name: "study_submit",
     description:
-      "Handle learner turn transitions in one atomic call: action='assess' (submit+assess unsubmitted attempt OR assess already-submitted attempt), 'revise' (invalidate/restore or replace invalidated evidence), 'teach_first' (record non-grading pre-answer teaching request and exposure), 'clarify', 'split', 'reconstruct', 'close_feedback', 'park' (save bookmark and park unsubmitted session), 'unpark' (clear parked session), or 'abandon' (explicitly abandon an unsubmitted session).",
+      "Execute learner turn transitions: 'verify' (run packaged deterministic verification after commitment and return ready verificationOutput), 'assess', 'revise', 'teach_first', 'clarify', 'split', 'reconstruct', 'close_feedback', 'park', 'unpark', or 'abandon'.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       required: ["action"],
       allOf: [
+        {
+          if: { properties: { action: { const: "verify" } }, required: ["action"] },
+          then: { required: ["attemptId"] },
+        },
         {
           if: { properties: { action: { const: "assess" } }, required: ["action"] },
           then: { required: ["attemptId", "assessment"] },
@@ -450,7 +538,11 @@ export const MCP_TOOLS: readonly McpToolDefinition[] = [
         learnerRequestText: { type: "string", minLength: 1, description: "Verbatim learner teaching request for action='teach_first'." },
         activeTimeSeconds: { type: "integer", minimum: 0 },
         artifactRef: { type: "object" },
-        assessment: { type: "object", description: "AssessmentResult object for action='assess'." },
+        assessment: {
+          ...ASSESSMENT_JSON_SCHEMA,
+          description:
+            "Assessment object for action='assess': { evaluatorType:'agent', assessmentBasis:<commitment.gradingBasis>, verificationOutput?, objectiveResults:[{ objectiveId, result, criteriaMet, criteriaUnmet, claimObservations?, rationale }] }.",
+        },
         closeIfComplete: { type: "boolean", default: true },
         learnerConfidence: {
           type: "string",
@@ -851,6 +943,59 @@ function handleStudySubmit(
   try {
     const kernel = createTeacherKernel(db, { knowledgeRoot });
     switch (input.action) {
+      case "verify": {
+        let attempt = getAttempt(db, input.attemptId);
+        if (!attempt) {
+          throw new OperationError("INVALID_ARGUMENT", `Attempt not found: ${input.attemptId}`);
+        }
+        if (attempt.challenge_id === null || attempt.challenge_version === null) {
+          throw new OperationError("INVALID_ARGUMENT", `Attempt ${input.attemptId} has no frozen challenge.`);
+        }
+        const challengeId = attempt.challenge_id;
+        const challengeVersion = attempt.challenge_version;
+        const alreadySubmitted = attempt.submitted_at !== null;
+        if (alreadySubmitted) {
+          if (input.responseText !== undefined && input.responseText !== attempt.response_text) {
+            throw new OperationError(
+              "INVALID_ARGUMENT",
+              "Attempt is already submitted; omit responseText or match the stored response when verifying submitted work.",
+            );
+          }
+          if (input.artifactRef !== undefined && !isDeepStrictEqual(input.artifactRef, attempt.artifact_ref_json)) {
+            throw new OperationError(
+              "INVALID_ARGUMENT",
+              "Attempt is already submitted; omit artifactRef or match the stored artifact when verifying submitted work.",
+            );
+          }
+        } else {
+          if (!input.responseText && !input.artifactRef) {
+            throw new OperationError(
+              "INVALID_ARGUMENT",
+              "Commit the learner's response (responseText or artifactRef) before running verification.",
+            );
+          }
+          attempt = kernel.submitAttempt(input.attemptId, {
+            responseText: input.responseText,
+            questionSeq: input.questionSeq,
+            activeTimeSeconds: input.activeTimeSeconds,
+            artifactRef: input.artifactRef,
+          });
+        }
+        const challenge = kernel.getChallenge(challengeId, challengeVersion);
+        if (!challenge) {
+          throw new OperationError("INVALID_ARGUMENT", `Frozen challenge not found for attempt ${input.attemptId}.`);
+        }
+        const verified = verifyPackagedPredictionChallenge(knowledgeRoot, challenge);
+        return {
+          profile: resolvedProfileId,
+          action: "verify",
+          attemptId: attempt.id,
+          alreadySubmitted,
+          packId: verified.packId,
+          caseId: verified.caseId,
+          verificationOutput: verified.verificationOutput,
+        };
+      }
       case "assess": {
         const existingAttempt = getAttempt(db, input.attemptId);
         if (!existingAttempt) {

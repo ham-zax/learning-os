@@ -1,8 +1,9 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { ChallengeSpecSchema } from "../db/types.js";
-import type { ChallengeSpec } from "../db/types.js";
+import type { ChallengeSpec, VerificationOutput } from "../db/types.js";
 import { ChallengeIntentSchema } from "../selection/types.js";
 import type { ChallengeIntent } from "../selection/types.js";
 import { codingCourseFile } from "./courses.js";
@@ -230,4 +231,66 @@ export function buildCalibratedAsyncPredictChallenge(
   input: Omit<BuildCalibratedChallengeInput, "packId">,
 ): BuiltCalibratedChallenge {
   return buildCalibratedPredictionChallenge({ ...input, packId: "async-predict" });
+}
+
+export interface PackagedVerificationResult {
+  packId: string;
+  caseId: string;
+  verificationOutput: VerificationOutput;
+}
+
+/**
+ * Safely execute a server-owned packaged prediction case matching a frozen challenge.
+ * Accepts no caller-supplied paths, commands, or source code.
+ */
+export function verifyPackagedPredictionChallenge(
+  knowledgeRoot: string,
+  challenge: ChallengeSpec,
+): PackagedVerificationResult {
+  for (const config of listCalibratedPredictionPacks(knowledgeRoot)) {
+    const expectedRef = `knowledge/${config.course}/${config.directory}/calibration.json`;
+    if (challenge.privateSolutionRef && challenge.privateSolutionRef !== expectedRef) continue;
+    const pack = loadCalibratedPredictionPack(knowledgeRoot, config.id);
+    for (const item of pack.cases) {
+      const sourcePath = codingCourseFile(
+        join(knowledgeRoot, config.course),
+        `${config.directory}/${item.source}`,
+      );
+      const code = readFileSync(sourcePath, "utf8").trimEnd();
+      if (!challenge.publicPrompt.includes(code)) continue;
+
+      const execRes = spawnSync(process.execPath, [sourcePath], {
+        encoding: "utf8",
+        timeout: 5000,
+        maxBuffer: 64 * 1024,
+      });
+      if (execRes.error) {
+        throw new Error(`Packaged verification execution failed: ${execRes.error.message}`);
+      }
+      if (execRes.status !== 0) {
+        const stderr = (execRes.stderr ?? "").trim().slice(0, 400);
+        throw new Error(
+          `Packaged verification exited with status ${String(execRes.status)}${stderr ? `: ${stderr}` : ""}`,
+        );
+      }
+      const stdoutLines = (execRes.stdout ?? "")
+        .replace(/\r\n/gu, "\n")
+        .trimEnd()
+        .split("\n")
+        .filter((line) => line.length > 0);
+      return {
+        packId: config.id,
+        caseId: item.id,
+        verificationOutput: {
+          outcome: "passed",
+          basis: "deterministic_execution",
+          summary: `Executed packaged case ${config.id}/${item.id} with Node (${stdoutLines.length} line(s)).`,
+          details: { stdout: stdoutLines },
+        },
+      };
+    }
+  }
+  throw new Error(
+    `No packaged deterministic case matches frozen challenge ${challenge.id}@${challenge.version}; execute in the declared environment instead.`,
+  );
 }

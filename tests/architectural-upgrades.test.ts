@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,11 +45,12 @@ import {
   submitAttempt,
 } from "../src/kernel/foundation.js";
 import { openAttemptSubquestion } from "../src/kernel/questions.js";
-import { handleJsonRpcMessage } from "../src/mcp-server.js";
+import { handleJsonRpcMessage, loadPackagedSkillInstructions } from "../src/mcp-server.js";
 import { callLearningOsTool, MCP_TOOLS } from "../src/mcp/tools.js";
 import { getObjectiveReviewCard } from "../src/scheduler/index.js";
+import Database from "better-sqlite3";
 import { getGoalSummary, getTopicSummary } from "../src/state.js";
-import { startSession } from "../src/session/engine.js";
+import { endSession, startSession } from "../src/session/engine.js";
 import { getStudyContinuation } from "../src/study/continuation.js";
 import { createTeacherWorkspace } from "../src/workspace.js";
 import { createKernelFixture, GOAL_ID, OBJECTIVE_ID } from "./helpers/kernel-fixture.js";
@@ -405,7 +406,7 @@ describe("v24 architectural upgrades & adversarial regressions", () => {
     submitAttempt(db, attemptId, { questionSeq: pendingSeq, responseText: submittedText });
     db.close();
 
-    // Fresh teacher resumes via study_next: sees exact submittedWork + assess_submitted action
+    // Fresh teacher resumes via study_next: sees exact submittedWork + alreadySubmitted + callable 'assess' action
     const afterDisconnect = callLearningOsTool("study_next", { dbPath, goalId: GOAL_ID });
     expect(afterDisconnect).toMatchObject({
       continuation: {
@@ -414,9 +415,10 @@ describe("v24 architectural upgrades & adversarial regressions", () => {
           sessionId,
           attemptId,
           pendingAction: "assess_response",
+          alreadySubmitted: true,
           submittedWork: { attemptId, responseText: submittedText },
         },
-        allowedActions: ["assess_submitted"],
+        allowedActions: ["assess"],
       },
     });
 
@@ -458,9 +460,10 @@ describe("v24 architectural upgrades & adversarial regressions", () => {
       continuation: {
         kind: "resume",
         commitment: {
+          alreadySubmitted: true,
           correctionTargets: [{ objectiveId: OBJECTIVE_ID, latestEvidenceEventId: evId }],
         },
-        allowedActions: ["revise_evidence"],
+        allowedActions: ["revise"],
       },
     });
     const restored = callLearningOsTool("study_submit", {
@@ -476,7 +479,7 @@ describe("v24 architectural upgrades & adversarial regressions", () => {
   it("enforces privacy-safe allowlisted validation errors, discriminator union branches, and schema parity", () => {
     const submitTool = MCP_TOOLS.find((t) => t.name === "study_submit")!;
     expect(submitTool.inputSchema).toHaveProperty("allOf");
-    expect((submitTool.inputSchema.allOf as unknown[]).length).toBe(8);
+    expect((submitTool.inputSchema.allOf as unknown[]).length).toBe(9);
     expect(submitTool.inputSchema).toMatchObject({ additionalProperties: false });
 
     const dir = mkdtempSync(join(tmpdir(), "learning-os-err-"));
@@ -1022,7 +1025,7 @@ describe("v24 architectural upgrades & adversarial regressions", () => {
     });
     db.close();
 
-    // Reconnect via study_next: must surface publicPrompt + submittedWork
+    // Reconnect via study_next: must surface publicPrompt + submittedWork + alreadySubmitted + callable 'assess'
     const resumed = callLearningOsTool("study_next", { dbPath, goalId: prepared.goalId }, { knowledgeRoot });
     expect(resumed).toMatchObject({
       continuation: {
@@ -1030,13 +1033,14 @@ describe("v24 architectural upgrades & adversarial regressions", () => {
         commitment: {
           publicPrompt: expect.stringContaining("Promise"),
           gradingBasis: "mixed",
+          alreadySubmitted: true,
           submittedWork: {
             attemptId: prepared.attemptId,
             responseText: "next got undefined; saved draft.",
             artifactRef: { file: "a.mjs", sha: "aaa" },
           },
         },
-        allowedActions: ["assess_submitted"],
+        allowedActions: ["verify", "assess"],
       },
     });
 
@@ -1211,13 +1215,57 @@ describe("v24 architectural upgrades & adversarial regressions", () => {
               criteriaMet: [],
               criteriaUnmet: ["mechanism"],
               misconceptionsCleared: [miscId],
-              rationale: "Cannot clear without met criterion.",
+              rationale: "Cannot clear without met linked criterion.",
             },
           ],
         }),
-      ).toThrow(/without a met criterion/);
+      ).toThrow(/without meeting a frozen criterion linked to it/);
       db.prepare("DELETE FROM attempts WHERE id = ?").run(a2.id);
       db.prepare("DELETE FROM sessions WHERE id = ?").run(s2.id);
+
+      // Unrelated CORRECT answer whose rubric has NO link to miscId MUST ALSO reject misconceptionsCleared
+      registerChallenge(db, {
+        id: "unrelated-correct-no-link",
+        version: 1,
+        publicPrompt: "Explain an unrelated callback ordering rule.",
+        taskForm: "explanation",
+        deliveryContext: "practice",
+        targets: [{ objectiveId: OBJECTIVE_ID, novelty: "variant", criterionIds: ["callback-order"] }],
+        rubric: {
+          id: "unrelated-correct-rubric",
+          version: 1,
+          criteria: [
+            { id: "callback-order", objectiveId: OBJECTIVE_ID, required: true, description: "Callback order." },
+          ],
+        },
+        verification: { required: false, basis: "frozen_rubric" },
+      });
+      const s2b = createSession(db, { goalId: GOAL_ID, mode: "practice" });
+      const a2b = openAttempt(db, "unrelated-correct-no-link", 1, s2b.id).attempt;
+      submitAttempt(db, a2b.id, { responseText: "Microtasks drain before timers." });
+      expect(() =>
+        recordAssessment(db, a2b.id, {
+          evaluatorType: "agent",
+          assessmentBasis: "frozen_rubric",
+          objectiveResults: [
+            {
+              objectiveId: OBJECTIVE_ID,
+              result: "correct",
+              criteriaMet: ["callback-order"],
+              criteriaUnmet: [],
+              misconceptionsCleared: [miscId],
+              rationale: "Unrelated correct answer must not clear saturation misconception.",
+            },
+          ],
+        }),
+      ).toThrow(/without meeting a frozen criterion linked to it/);
+      expect(
+        getWeaknessProjections(db, OBJECTIVE_ID).find(
+          (row) => row.category === `misconception:${miscId}`,
+        )?.lifecycle,
+      ).toBe("new");
+      db.prepare("DELETE FROM attempts WHERE id = ?").run(a2b.id);
+      db.prepare("DELETE FROM sessions WHERE id = ?").run(s2b.id);
 
       // Dual-criterion rubric-order independence: both [A, B] and [B, A] with A unmet & B met must keep claim unresolved
       const claimId = "dual-criterion-claim";
@@ -1345,7 +1393,8 @@ describe("v24 architectural upgrades & adversarial regressions", () => {
     const partialResume = getStudyContinuation(db2, { goalId: GOAL_ID });
     expect(partialResume).toMatchObject({
       kind: "resume",
-      allowedActions: ["revise_evidence"],
+      commitment: { alreadySubmitted: true },
+      allowedActions: ["revise"],
     });
     reviseEvidence(db2, committed.evidenceEvents[0]!.id, { action: "restore", reason: "OK" });
     completeSessionFeedback(db2, s1.id);
@@ -1378,9 +1427,24 @@ describe("v24 architectural upgrades & adversarial regressions", () => {
       expect(listGoals(db).map((g) => g.id)).toEqual(["goal-backend-systems"]);
 
       // Offline startSession for content topic reuses existing goal-backend-systems (no duplicate goal)
+      // and endSession returns goalId separately without mislabeling it as topicId
       const started = startSession(db, { topicId: "backend-systems", mode: "learn" });
       expect(started.sessionId).toBeGreaterThan(0);
+      expect(started.topicId).toBe("backend-systems");
+      expect(started.goalId).toBe("goal-backend-systems");
       expect(listGoals(db).map((g) => g.id)).toEqual(["goal-backend-systems"]);
+
+      const endedWithTopic = endSession(db, started.sessionId, started.topicId);
+      expect(endedWithTopic).toMatchObject({
+        sessionId: started.sessionId,
+        goalId: "goal-backend-systems",
+        topicId: "backend-systems",
+      });
+
+      const started2 = startSession(db, { topicId: "backend-systems", mode: "learn" });
+      const endedWithoutTopic = endSession(db, started2.sessionId);
+      expect(endedWithoutTopic.goalId).toBe("goal-backend-systems");
+      expect(endedWithoutTopic.topicId).toBeUndefined();
 
       // Reimporting question bank item with strengthened verification.required must throw
       materializeQuestionBank(db, {
@@ -1432,5 +1496,182 @@ describe("v24 architectural upgrades & adversarial regressions", () => {
     } finally {
       db.close();
     }
+  });
+
+  it("captures uncheckpointed WAL goals when backing up a live profile via SQLite backup API", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "learning-os-wal-backup-"));
+    dirs.push(dir);
+    const livePath = join(dir, "live.db");
+    const copyPath = join(dir, "smoke.db");
+    const live = createDatabase(livePath);
+    try {
+      createTopic(live, { id: "t-wal", name: "WAL Topic" });
+      createConcept(live, { id: "c-wal", topicId: "t-wal", title: "WAL Concept" });
+      createLearningObjective(live, { id: "c-wal:explain", conceptId: "c-wal", capabilityId: "explain" });
+      createGoal(live, { id: "goal-wal", name: "WAL Goal", purpose: "interview" });
+      setGoalObjective(live, { goalId: "goal-wal", objectiveId: "c-wal:explain", importance: "core" });
+
+      // Keep `live` open so committed rows remain in the WAL, then back up via readonly handle
+      const reader = new Database(livePath, { readonly: true });
+      try {
+        await reader.backup(copyPath);
+      } finally {
+        reader.close();
+      }
+
+      const next = callLearningOsTool(
+        "study_next",
+        { dbPath: copyPath, goalId: "goal-wal", oneEpisode: true },
+        { knowledgeRoot },
+      );
+      expect(next).toMatchObject({
+        continuation: { kind: "recommend", item: { objectiveId: "c-wal:explain" } },
+      });
+    } finally {
+      live.close();
+    }
+  });
+
+  it("verifies packaged prediction cases via MCP action='verify' (new & already-submitted), rejects unmatched custom cases, and serves packaged SKILL.md via MCP + CLI study", () => {
+    // 1. MCP initialize.instructions matches packaged SKILL.md body verbatim and publishes nested assessment schema
+    const skillRaw = readFileSync(join(repoRoot, "skills", "learning-os-teacher", "SKILL.md"), "utf8");
+    const skillBody = skillRaw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n*/u, "").trim();
+    expect(loadPackagedSkillInstructions()).toBe(skillBody);
+
+    const initResp = handleJsonRpcMessage({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2025-03-26" },
+    });
+    expect((initResp?.result as { instructions: string }).instructions).toBe(skillBody);
+
+    const submitSchema = MCP_TOOLS.find((t) => t.name === "study_submit")!.inputSchema as {
+      properties: { assessment: { required: string[]; properties: { objectiveResults: { items: { required: string[] } } } } };
+    };
+    expect(submitSchema.properties.assessment.required).toEqual([
+      "evaluatorType",
+      "assessmentBasis",
+      "objectiveResults",
+    ]);
+    expect(submitSchema.properties.assessment.properties.objectiveResults.items.required).toEqual(
+      expect.arrayContaining(["objectiveId", "result", "criteriaMet", "criteriaUnmet", "rationale"]),
+    );
+
+    // 2. action='verify' commits an unsubmitted response and executes the packaged Node case
+    const dir = mkdtempSync(join(tmpdir(), "learning-os-mcp-verify-"));
+    dirs.push(dir);
+    const dbPath = join(dir, "tutor.db");
+    const prepared = prepareTeacherScenario("calibrated_promises_missing_return_answer", dbPath);
+    const scenario = teacherScenarios.find((s) => s.id === "calibrated_promises_missing_return_answer")!;
+
+    const verifiedFirst = callLearningOsTool(
+      "study_submit",
+      {
+        dbPath,
+        action: "verify",
+        attemptId: prepared.attemptId,
+        questionSeq: prepared.initialQuestionSeq!,
+        responseText: scenario.learnerMessage,
+      },
+      { knowledgeRoot },
+    ) as { verificationOutput: Record<string, unknown>; alreadySubmitted: boolean };
+    expect(verifiedFirst).toMatchObject({
+      action: "verify",
+      attemptId: prepared.attemptId,
+      alreadySubmitted: false,
+      verificationOutput: {
+        outcome: "passed",
+        basis: "deterministic_execution",
+        details: { stdout: ["next got undefined", "saved draft"] },
+      },
+    });
+
+    // Idempotent retry on already-submitted attempt succeeds; conflicting text is rejected
+    const verifiedRetry = callLearningOsTool(
+      "study_submit",
+      { dbPath, action: "verify", attemptId: prepared.attemptId },
+      { knowledgeRoot },
+    );
+    expect(verifiedRetry).toMatchObject({
+      action: "verify",
+      alreadySubmitted: true,
+      verificationOutput: { details: { stdout: ["next got undefined", "saved draft"] } },
+    });
+    expect(() =>
+      callLearningOsTool(
+        "study_submit",
+        { dbPath, action: "verify", attemptId: prepared.attemptId, responseText: "altered" },
+        { knowledgeRoot },
+      ),
+    ).toThrow(/already submitted/i);
+
+    // Passing returned verificationOutput straight into assess closes feedback and passes all scenario checks
+    const assessed = callLearningOsTool(
+      "study_submit",
+      {
+        dbPath,
+        action: "assess",
+        attemptId: prepared.attemptId,
+        assessment: {
+          evaluatorType: "agent",
+          assessmentBasis: "mixed",
+          verificationOutput: verifiedFirst.verificationOutput,
+          objectiveResults: [
+            {
+              objectiveId: prepared.objectiveId,
+              result: "correct",
+              criteriaMet: ["output_order", "settlement_link"],
+              criteriaUnmet: [],
+              rationale: "Matched verified output and explained missing return settlement.",
+            },
+          ],
+        },
+      },
+      { knowledgeRoot },
+    );
+    expect(assessed).toMatchObject({ action: "assess", feedbackClosed: true });
+    expect(inspectTeacherScenario(dbPath, prepared).every((check) => check.passed)).toBe(true);
+
+    // 3. Unmatched custom challenge rejects verify cleanly while preserving committed response and 0 evidence
+    const customDbPath = join(dir, "custom.db");
+    const fixture = createKernelFixture(customDbPath);
+    const { attemptId } = fixture.openPracticeAttempt();
+    fixture.db.close();
+    expect(() =>
+      callLearningOsTool(
+        "study_submit",
+        { dbPath: customDbPath, action: "verify", attemptId, responseText: "My custom prediction." },
+        { knowledgeRoot },
+      ),
+    ).toThrow(/No packaged deterministic case matches/);
+    const customDb = createDatabase(customDbPath);
+    try {
+      expect(customDb.prepare("SELECT response_text FROM attempts WHERE id = ?").get(attemptId)).toEqual({
+        response_text: "My custom prediction.",
+      });
+      expect(customDb.prepare("SELECT COUNT(*) AS c FROM evidence_events").get()).toEqual({ c: 0 });
+    } finally {
+      customDb.close();
+    }
+
+    // 4. Local CLI `tutor study describe` & `tutor study study_next` forward cleanly to the shared 5-tool dispatcher
+    const cliTs = join(repoRoot, "src", "cli.ts");
+    const described = runSync(tsxBin, [cliTs, "study", "describe", "study_submit"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+    expect(described.status).toBe(0);
+    expect(JSON.parse(described.stdout)).toMatchObject({ name: "study_submit" });
+
+    const cliNext = runSync(
+      tsxBin,
+      [cliTs, "study", "study_next", JSON.stringify({ dbPath: customDbPath, goalId: GOAL_ID })],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    expect(cliNext.status).toBe(0);
+    expect(JSON.parse(cliNext.stdout)).toMatchObject({
+      continuation: { kind: "resume", commitment: { alreadySubmitted: true } },
+    });
   });
 });

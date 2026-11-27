@@ -381,19 +381,14 @@ function validateObjectiveResult(
   }
 
   for (const misconceptionId of result.misconceptionsCleared) {
-    if (met.size === 0) {
-      throw new Error(
-        `Cannot clear misconception ${misconceptionId} without a met criterion on ${result.objectiveId}`,
-      );
-    }
     if (linkedUnmetClaims.has(misconceptionId)) {
       throw new Error(
         `Cannot clear misconception ${misconceptionId} while a linked criterion is unmet on ${result.objectiveId}`,
       );
     }
-    if (linkedAnyClaims.has(misconceptionId) && !linkedMetClaims.has(misconceptionId)) {
+    if (!linkedMetClaims.has(misconceptionId)) {
       throw new Error(
-        `Cannot clear misconception ${misconceptionId} without meeting a criterion linked to it on ${result.objectiveId}`,
+        `Cannot clear misconception ${misconceptionId} without meeting a frozen criterion linked to it on ${result.objectiveId}`,
       );
     }
   }
@@ -824,9 +819,8 @@ function criterionForLegacyMisconception(
       (c) => c.claimIds.includes(claimId) && metSet.has(c.id),
     );
     if (linkedMet) return linkedMet.id;
-    if (result.criteriaMet.length > 0) return result.criteriaMet[0]!;
     throw new Error(
-      `Cannot clear misconception ${claimId} without a met criterion on ${result.objectiveId}`,
+      `Cannot clear misconception ${claimId} without meeting a frozen criterion linked to it on ${result.objectiveId}`,
     );
   }
 

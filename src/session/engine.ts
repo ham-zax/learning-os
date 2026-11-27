@@ -38,6 +38,7 @@ export interface SessionConfig {
 
 export interface SessionState {
   sessionId: number;
+  goalId: string;
   topicId: string;
   mode: DeliveryContext;
   concepts: Concept[]; // selected for this session
@@ -58,7 +59,8 @@ export interface PreparedOrdinaryChallenge {
 
 export interface SessionSummary {
   sessionId: number;
-  topicId: string;
+  goalId: string;
+  topicId?: string;
   mode: DeliveryContext;
   challengesAttempted: number;
   submittedAttempts: number;
@@ -206,6 +208,7 @@ export function startSession(
 
   return {
     sessionId: session.id,
+    goalId,
     topicId,
     mode,
     concepts,
@@ -363,6 +366,7 @@ export function prepareOrdinaryChallenge(
 export function endSession(
   db: Database.Database,
   sessionId: number,
+  topicId?: string,
 ): SessionSummary {
   const session = getSession(db, sessionId);
   if (!session) {
@@ -409,7 +413,8 @@ export function endSession(
 
   return {
     sessionId,
-    topicId: session.goal_id,
+    goalId: session.goal_id,
+    ...(topicId !== undefined ? { topicId } : {}),
     mode: session.mode,
     challengesAttempted: attemptCounts.challenges_attempted,
     submittedAttempts,

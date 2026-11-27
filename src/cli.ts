@@ -115,6 +115,8 @@ import {
   resolveKnowledgeDir,
 } from "./knowledge/resolve-concept-file.js";
 import { inspectProfileHealth } from "./diagnostics.js";
+import { serializeOperationError } from "./errors.js";
+import { callLearningOsTool, MCP_TOOLS } from "./mcp/tools.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -549,7 +551,7 @@ async function runSession(
       info("  Response submitted. Assessment pending; no trusted evaluator is configured in this CLI.");
     }
 
-    const summary = endSession(db, sessionState.sessionId);
+    const summary = endSession(db, sessionState.sessionId, sessionState.topicId);
 
     header("Session Complete");
     if (missingFiles > 0) {
@@ -1681,6 +1683,53 @@ program
       }
     }),
   );
+
+// tutor study <tool> [json] | tutor study describe [tool]
+const studyCommand = program
+  .command("study")
+  .description("Invoke the shared 5-tool Learning OS teacher interface directly over JSON");
+
+studyCommand
+  .command("describe [tool]")
+  .description("Print JSON schema for one study tool (or all 5 tools)")
+  .action((tool?: string) => {
+    if (!tool) {
+      console.log(JSON.stringify(MCP_TOOLS, null, 2));
+      return;
+    }
+    const found = MCP_TOOLS.find((entry) => entry.name === tool);
+    if (!found) {
+      console.error(
+        JSON.stringify({
+          error: `Unknown study tool: ${tool}`,
+          code: "UNKNOWN_TOOL",
+          available: MCP_TOOLS.map((entry) => entry.name),
+        }),
+      );
+      process.exitCode = 1;
+      return;
+    }
+    console.log(JSON.stringify(found, null, 2));
+  });
+
+for (const toolDef of MCP_TOOLS) {
+  studyCommand
+    .command(`${toolDef.name} [json]`)
+    .description(toolDef.description)
+    .action((rawJson?: string) => {
+      try {
+        const parsed = rawJson ? (JSON.parse(rawJson) as unknown) : {};
+        const result = callLearningOsTool(toolDef.name, parsed, {
+          dataDir: PROFILE_DATA_DIR,
+          knowledgeRoot: WORKSPACE_KNOWLEDGE_DIR,
+        });
+        console.log(JSON.stringify(result));
+      } catch (err) {
+        console.error(JSON.stringify(serializeOperationError(err, `study:${toolDef.name}`)));
+        process.exitCode = 1;
+      }
+    });
+}
 
 // ─── Parse and run ───────────────────────────────────────────────────────────
 
