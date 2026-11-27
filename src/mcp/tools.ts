@@ -41,6 +41,8 @@ export interface McpToolDefinition {
 export interface McpToolRuntimeContext {
   dataDir?: string;
   knowledgeRoot?: string;
+  /** Allow callers to pass raw filesystem `dbPath`. Defaults to true for local stdio/tests; set false on remote HTTP. */
+  allowDbPath?: boolean;
 }
 
 const DEFAULT_KNOWLEDGE_ROOT = fileURLToPath(new URL("../../knowledge", import.meta.url));
@@ -726,6 +728,12 @@ function openTargetDatabase(
 ): { db: Database.Database; resolvedProfileId: string | null } {
   if (selector.profile && selector.dbPath) {
     throw new OperationError("INVALID_ARGUMENT", "Use either profile or dbPath, not both.");
+  }
+  if (selector.dbPath && context.allowDbPath === false) {
+    throw new OperationError(
+      "INVALID_ARGUMENT",
+      "Direct dbPath access is disabled on this remote MCP endpoint; specify a managed profile ID instead.",
+    );
   }
   const dataDir = context.dataDir ?? DEFAULT_DATA_DIR;
   if (selector.dbPath) {

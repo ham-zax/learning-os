@@ -20,11 +20,13 @@ const SERVER_INFO = {
 };
 
 const SUPPORTED_PROTOCOL_VERSIONS = new Set([
+  "2026-07-28",
+  "2025-11-25",
   "2025-06-18",
   "2025-03-26",
   "2024-11-05",
 ]);
-const DEFAULT_PROTOCOL_VERSION = "2025-03-26";
+const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
 
 export function loadPackagedSkillInstructions(): string {
   const skillPath = fileURLToPath(new URL("../skills/learning-os-teacher/SKILL.md", import.meta.url));

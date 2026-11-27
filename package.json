@@ -5,7 +5,8 @@
   "description": "Agent-native, local-first learning system with durable learner state, evidence-driven progress, adaptive technical study, and interview preparation",
   "bin": {
     "tutor": "./dist/cli.js",
-    "learning-os-mcp": "./dist/mcp-server.js"
+    "learning-os-mcp": "./dist/mcp-server.js",
+    "learning-os-mcp-http": "./dist/mcp-http.js"
   },
   "main": "./dist/cli.js",
   "scripts": {
@@ -23,6 +24,7 @@
     "kernel": "tsx src/kernel-cli.ts",
     "kernel:fast": "node dist/kernel-cli.js",
     "mcp": "node dist/mcp-server.js",
+    "mcp:http": "node dist/mcp-http.js",
     "present:teaching": "tsx src/presentation-cli.ts",
     "check:package": "node scripts/check-package.mjs"
   },
