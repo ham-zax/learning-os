@@ -756,7 +756,7 @@ function handleStudyStatus(
 
     const openSessions = kernel.listResumableSessions(activeGoal?.goalId).map((entry) => ({
       sessionId: entry.session.id,
-      goalId: entry.session.topic_id,
+      goalId: entry.session.goal_id,
       mode: entry.session.mode,
       phase: entry.phase,
       pendingAction: entry.pendingAction,

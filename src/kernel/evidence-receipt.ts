@@ -24,7 +24,8 @@ import {
   getLearningObjective,
   getObjectiveProjection,
 } from "./foundation.js";
-import { getWeaknessProjections } from "./evidence.js";
+import { getClaimObservationsForEvidence, getWeaknessProjections } from "./evidence.js";
+import type { EvidenceClaimObservationSummary } from "./evidence.js";
 
 export interface EvidenceReceiptChallengeSurface {
   challengeId: string;
@@ -60,6 +61,7 @@ export interface ObjectiveEvidenceReceiptEvent {
   assessmentBasis: VerificationBasis;
   evaluatorType: EvaluatorType;
   criteria: EvidenceEvent["criteria_json"];
+  claimObservations: EvidenceClaimObservationSummary[];
   observedErrors: string[];
   rationale: string;
   performedAt: string;
@@ -149,6 +151,7 @@ function getEvidenceHistory(
       throw new Error(`Attempt not found for evidence ${evidence.id}: ${evidence.attempt_id}`);
     }
 
+    const claimObservations = getClaimObservationsForEvidence(db, evidence.id);
     return {
       evidenceEventId: evidence.id,
       supersedesEventId: evidence.supersedes_event_id,
@@ -189,7 +192,10 @@ function getEvidenceHistory(
       assessmentBasis: evidence.assessment_basis,
       evaluatorType: evidence.evaluator_type,
       criteria: evidence.criteria_json,
-      observedErrors: evidence.observed_errors_json,
+      claimObservations,
+      observedErrors: claimObservations
+        .filter((obs) => obs.disposition === "observed")
+        .map((obs) => obs.claimId),
       rationale: evidence.rationale,
       performedAt: evidence.performed_at,
     };

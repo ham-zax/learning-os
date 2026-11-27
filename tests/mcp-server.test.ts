@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createConcept,
   createDatabase,
+  createGoal,
   createTopic,
   setGoalObjective,
   setGoalPreparation,
@@ -25,6 +26,13 @@ function createCalibratedTransactionDb(dbPath: string): void {
   const db = createDatabase(dbPath);
   try {
     createTopic(db, { id: "goal-tx", name: "Backend Transactions" });
+    createGoal(db, {
+      id: "goal-tx",
+      name: "Backend Transactions",
+      purpose: "interview",
+      minutesPerDay: 30,
+      confirmedAt: "2026-09-01T00:00:00.000Z",
+    });
     createConcept(db, {
       id: "database-transactions-and-concurrent-correctness",
       topicId: "goal-tx",
@@ -41,12 +49,6 @@ function createCalibratedTransactionDb(dbPath: string): void {
       objectiveId,
       importance: "core",
       targetReadiness: "independent",
-    });
-    setGoalPreparation(db, {
-      goalId: "goal-tx",
-      purpose: "interview",
-      minutesPerDay: 30,
-      confirmedAt: "2026-09-01T00:00:00.000Z",
     });
   } finally {
     db.close();
@@ -156,7 +158,7 @@ describe("Learning OS 5-tool MCP server", () => {
       ctx,
     );
     expect(resumed).toMatchObject({
-      continuation: { kind: "resume", session: { session: { id: sessionId } } },
+      continuation: { kind: "resume", commitment: { sessionId } },
     });
 
     // 4. Ambiguous answer -> clarify in 1 call
@@ -186,7 +188,7 @@ describe("Learning OS 5-tool MCP server", () => {
         responseText: "A accepted, B rejected, seats 0 because updates are atomic.",
         assessment: {
           evaluatorType: "agent",
-          assessmentBasis: "deterministic_execution",
+          assessmentBasis: "mixed",
           verificationOutput: {
             outcome: "passed",
             basis: "deterministic_execution",
@@ -198,7 +200,11 @@ describe("Learning OS 5-tool MCP server", () => {
             result: "incorrect",
             criteriaMet: [],
             criteriaUnmet: ["observable_outcome", "invariant_boundary"],
-            observedErrors: ["atomic_write_implies_atomic_check_and_act"],
+            claimObservations: [{
+              claimId: "atomic_write_implies_atomic_check_and_act",
+              criterionId: "invariant_boundary",
+              disposition: "observed",
+            }],
             rationale: "Conflated single write atomicity with check-then-act interleaving.",
           }],
         },

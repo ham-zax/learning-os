@@ -38,7 +38,9 @@ describe("repair followed by selected transfer and scheduled retention", () => {
           evaluatorType: "agent", assessmentBasis: "frozen_rubric",
           objectiveResults: [{ objectiveId: OBJECTIVE_ID, result: correct ? "correct" : "incorrect",
             criteriaMet: correct ? ["mechanism"] : [], criteriaUnmet: correct ? [] : ["mechanism"],
-            observedErrors: correct ? [] : ["whole_async_call_deferred"],
+            claimObservations: correct
+              ? [{ claimId: "whole_async_call_deferred", criterionId: "mechanism", disposition: "cleared" }]
+              : [{ claimId: "whole_async_call_deferred", criterionId: "mechanism", disposition: "observed" }],
             rationale: correct ? "Explains the causal ordering in this situation." : "Defers the synchronous prefix too." }],
         }).evidenceEvents[0]!;
       }

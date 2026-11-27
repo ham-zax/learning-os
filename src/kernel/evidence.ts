@@ -2,11 +2,11 @@ import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import {
   AssessmentResultSchema,
+  ClaimObservationSchema,
+  ClaimSchema,
   EvidenceEventSchema,
   EvidenceRevisionAction,
   EvidenceRevisionSchema,
-  MisconceptionObservationSchema,
-  MisconceptionSchema,
   ObjectiveAssessmentResultSchema,
   ObjectiveProjectionSchema,
   VerificationOutputSchema,
@@ -17,10 +17,12 @@ import type {
   AssessmentResultInput,
   Attempt,
   ChallengeSpec,
+  Claim,
+  ClaimKind,
+  ClaimObservation,
   EvidenceEvent,
   EvidenceRevision,
   Misconception,
-  MisconceptionObservation,
   ObjectiveAssessmentResult,
   ObjectiveProjection,
   VerificationOutput,
@@ -31,6 +33,7 @@ import {
   advanceObjectiveReviewCard,
   rebuildObjectiveReviewCard,
 } from "../scheduler/index.js";
+import { parseRequestInput } from "../errors.js";
 import {
   advanceSessionToFeedback,
   getAttempt,
@@ -40,15 +43,28 @@ import {
   syncSessionAfterEvidenceChange,
 } from "./foundation.js";
 
-const PROJECTOR_VERSION = "v1";
+const PROJECTOR_VERSION = "v2";
+const WEAKNESS_PROJECTOR_VERSION = "v2";
 const DURABILITY_FLOOR_SECONDS = 7 * 24 * 60 * 60;
 
-export interface CreateMisconceptionInput {
+export interface CreateClaimInput {
   id: string;
   conceptId: string;
+  kind?: ClaimKind;
   description: string;
   correctionStrategy?: string;
   isBlocking?: boolean;
+}
+
+export type CreateMisconceptionInput = Omit<CreateClaimInput, "kind">;
+
+export interface EvidenceClaimObservationSummary {
+  claimId: string;
+  kind: ClaimKind;
+  criterionId: string;
+  disposition: "observed" | "cleared";
+  description: string;
+  isBlocking: boolean;
 }
 
 export interface AssessmentCommitResult {
@@ -71,7 +87,8 @@ export interface EvidenceRevisionResult {
 }
 
 type EffectiveObservation = {
-  observation: MisconceptionObservation;
+  observation: ClaimObservation;
+  claimKind: ClaimKind;
   sourcePerformedAt: string;
   sourceEventSeq: number;
   isBlocking: boolean;
@@ -177,13 +194,14 @@ export function getEffectiveEvidenceEventsByObjective(
   return EvidenceEventSchema.array().parse(rows);
 }
 
-export function createMisconception(
+export function createClaim(
   db: Database.Database,
-  input: CreateMisconceptionInput,
-): Misconception {
-  const id = requireNonEmpty(input.id, "Misconception id");
-  const conceptId = requireNonEmpty(input.conceptId, "Misconception concept id");
-  const description = requireNonEmpty(input.description, "Misconception description");
+  input: CreateClaimInput,
+): Claim {
+  const id = requireNonEmpty(input.id, "Claim id");
+  const conceptId = requireNonEmpty(input.conceptId, "Claim concept id");
+  const description = requireNonEmpty(input.description, "Claim description");
+  const kind: ClaimKind = input.kind ?? "error_claim";
   const correctionStrategy = input.correctionStrategy?.trim() || null;
   const createdAt = new Date().toISOString();
 
@@ -192,24 +210,73 @@ export function createMisconception(
   }
 
   db.prepare(
-    `INSERT INTO misconceptions (
-       id, concept_id, description, correction_strategy, is_blocking, created_at
-     ) VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(id, conceptId, description, correctionStrategy, input.isBlocking ? 1 : 0, createdAt);
+    `INSERT INTO claims (
+       id, concept_id, kind, description, correction_strategy, is_blocking, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, conceptId, kind, description, correctionStrategy, input.isBlocking ? 1 : 0, createdAt);
 
-  return getMisconception(db, id)!;
+  return getClaim(db, id)!;
+}
+
+export function getClaim(
+  db: Database.Database,
+  claimId: string,
+): Claim | undefined {
+  const row = db.prepare(`SELECT * FROM claims WHERE id = ?`).get(claimId);
+  return row === undefined ? undefined : ClaimSchema.parse(row);
+}
+
+export function createMisconception(
+  db: Database.Database,
+  input: CreateMisconceptionInput,
+): Misconception {
+  return createClaim(db, { ...input, kind: "misconception" });
 }
 
 export function getMisconception(
   db: Database.Database,
   misconceptionId: string,
 ): Misconception | undefined {
-  const row = db.prepare(`SELECT * FROM misconceptions WHERE id = ?`).get(misconceptionId);
-  return row === undefined ? undefined : MisconceptionSchema.parse(row);
+  return getClaim(db, misconceptionId);
+}
+
+export function getClaimObservationsForEvidence(
+  db: Database.Database,
+  evidenceEventId: string,
+): EvidenceClaimObservationSummary[] {
+  const rows = db
+    .prepare(
+      `SELECT obs.claim_id,
+              obs.criterion_id,
+              obs.disposition,
+              claim.kind,
+              claim.description,
+              claim.is_blocking
+       FROM claim_observations obs
+       JOIN claims claim ON claim.id = obs.claim_id
+       WHERE obs.evidence_event_id = ?
+       ORDER BY obs.seq`,
+    )
+    .all(evidenceEventId) as Array<{
+    claim_id: string;
+    criterion_id: string;
+    disposition: "observed" | "cleared";
+    kind: ClaimKind;
+    description: string;
+    is_blocking: number;
+  }>;
+  return rows.map((row) => ({
+    claimId: row.claim_id,
+    kind: row.kind,
+    criterionId: row.criterion_id,
+    disposition: row.disposition,
+    description: row.description,
+    isBlocking: row.is_blocking === 1,
+  }));
 }
 
 function parseAssessment(input: AssessmentResultInput): AssessmentResult {
-  return AssessmentResultSchema.parse(input);
+  return parseRequestInput(AssessmentResultSchema, input, { label: "assessment" });
 }
 
 function validateObjectiveResult(
@@ -228,7 +295,10 @@ function validateObjectiveResult(
   assertUnique(result.criteriaUnmet, `criteriaUnmet for ${result.objectiveId}`);
   assertUnique(result.misconceptionsObserved, `misconceptionsObserved for ${result.objectiveId}`);
   assertUnique(result.misconceptionsCleared, `misconceptionsCleared for ${result.objectiveId}`);
-  assertUnique(result.observedErrors, `observedErrors for ${result.objectiveId}`);
+  assertUnique(
+    result.claimObservations.map((obs) => `${obs.claimId}@${obs.criterionId}`),
+    `claimObservations for ${result.objectiveId}`,
+  );
 
   const met = new Set(result.criteriaMet);
   const unmet = new Set(result.criteriaUnmet);
@@ -274,11 +344,64 @@ function validateObjectiveResult(
     }
   }
 
-  const observed = new Set(result.misconceptionsObserved);
-  for (const misconceptionId of result.misconceptionsCleared) {
-    if (observed.has(misconceptionId)) {
+  const observedIds = new Set<string>(result.misconceptionsObserved);
+  const clearedIds = new Set<string>(result.misconceptionsCleared);
+  const linkedUnmetClaims = new Set<string>();
+  const linkedMetClaims = new Set<string>();
+  const linkedAnyClaims = new Set<string>();
+  for (const criterion of challenge.rubric.criteria) {
+    if (criterion.objectiveId !== result.objectiveId || criterion.claimIds.length === 0) continue;
+    for (const claimId of criterion.claimIds) {
+      linkedAnyClaims.add(claimId);
+      if (unmet.has(criterion.id)) linkedUnmetClaims.add(claimId);
+      if (met.has(criterion.id)) linkedMetClaims.add(claimId);
+    }
+  }
+
+  for (const obs of result.claimObservations) {
+    if (!frozenCriteria.has(obs.criterionId)) {
       throw new Error(
-        `Misconception cannot be observed and cleared in one objective result: ${misconceptionId}`,
+        `Claim observation criterion is not owned by frozen target ${result.objectiveId}: ${obs.criterionId}`,
+      );
+    }
+    if (obs.disposition === "cleared") {
+      if (!met.has(obs.criterionId)) {
+        throw new Error(
+          `Cannot clear claim ${obs.claimId} via unmet/unassessed criterion ${obs.criterionId}`,
+        );
+      }
+      if (linkedUnmetClaims.has(obs.claimId)) {
+        throw new Error(
+          `Cannot clear claim ${obs.claimId} while another linked criterion is unmet on ${result.objectiveId}`,
+        );
+      }
+    }
+    if (obs.disposition === "observed") observedIds.add(obs.claimId);
+    else clearedIds.add(obs.claimId);
+  }
+
+  for (const misconceptionId of result.misconceptionsCleared) {
+    if (met.size === 0) {
+      throw new Error(
+        `Cannot clear misconception ${misconceptionId} without a met criterion on ${result.objectiveId}`,
+      );
+    }
+    if (linkedUnmetClaims.has(misconceptionId)) {
+      throw new Error(
+        `Cannot clear misconception ${misconceptionId} while a linked criterion is unmet on ${result.objectiveId}`,
+      );
+    }
+    if (linkedAnyClaims.has(misconceptionId) && !linkedMetClaims.has(misconceptionId)) {
+      throw new Error(
+        `Cannot clear misconception ${misconceptionId} without meeting a criterion linked to it on ${result.objectiveId}`,
+      );
+    }
+  }
+
+  for (const claimId of clearedIds) {
+    if (observedIds.has(claimId)) {
+      throw new Error(
+        `Claim/misconception cannot be observed and cleared in one objective result: ${claimId}`,
       );
     }
   }
@@ -294,16 +417,31 @@ function validateObjectiveResult(
     ...result.misconceptionsObserved,
     ...result.misconceptionsCleared,
   ]) {
-    const misconception = db
-      .prepare(`SELECT concept_id FROM misconceptions WHERE id = ?`)
+    const claim = db
+      .prepare(`SELECT concept_id FROM claims WHERE id = ?`)
       .get(misconceptionId) as { concept_id: string } | undefined;
-    if (!misconception) {
+    if (!claim) {
       throw new Error(`Misconception definition not found: ${misconceptionId}`);
     }
-    if (misconception.concept_id !== objective.concept_id) {
+    if (claim.concept_id !== objective.concept_id) {
       throw new Error(
         `Misconception ${misconceptionId} does not belong to objective concept ${objective.concept_id}`,
       );
+    }
+  }
+
+  for (const obs of result.claimObservations) {
+    const existing = db
+      .prepare(`SELECT concept_id FROM claims WHERE id = ?`)
+      .get(obs.claimId) as { concept_id: string } | undefined;
+    if (existing) {
+      if (existing.concept_id !== objective.concept_id) {
+        throw new Error(
+          `Claim ${obs.claimId} does not belong to objective concept ${objective.concept_id}`,
+        );
+      }
+    } else if (obs.kind === "misconception") {
+      throw new Error(`Misconception definition not found: ${obs.claimId}`);
     }
   }
 }
@@ -364,6 +502,15 @@ function normalizeVerificationOutput(
   return resolved;
 }
 
+function hasRecordedVerificationStdout(verificationOutput: VerificationOutput): boolean {
+  const details = verificationOutput.details ?? {};
+  return [details.stdout, details.output].some(
+    (value) =>
+      typeof value === "string" ||
+      (Array.isArray(value) && value.every((line) => typeof line === "string")),
+  );
+}
+
 function validateVerificationContract(
   challenge: ChallengeSpec,
   assessment: AssessmentResult,
@@ -376,8 +523,15 @@ function validateVerificationContract(
     assessment.assessmentBasis === "deterministic_execution" ||
     assessment.assessmentBasis === "mixed";
 
-  if (hasGradableResult && executionBasis && !verificationOutput) {
-    throw new Error("Gradable deterministic/mixed assessment requires verification output");
+  if (hasGradableResult && executionBasis) {
+    if (!verificationOutput) {
+      throw new Error("Gradable deterministic/mixed assessment requires verification output");
+    }
+    if (!hasRecordedVerificationStdout(verificationOutput)) {
+      throw new Error(
+        "Deterministic verification must record the run output in details.stdout or details.output",
+      );
+    }
   }
 
   if (hasGradableResult && challenge.verification.required) {
@@ -389,6 +543,12 @@ function validateVerificationContract(
         "Frozen challenge requiring verification must use deterministic_execution or mixed assessment basis",
       );
     }
+  }
+
+  if (hasGradableResult && challenge.gradingBasis && assessment.assessmentBasis !== challenge.gradingBasis) {
+    throw new Error(
+      `Frozen challenge requires assessmentBasis '${challenge.gradingBasis}', received '${assessment.assessmentBasis}'`,
+    );
   }
 
   // The frozen verification contract is challenge-wide while assessment is
@@ -609,11 +769,10 @@ function insertEvidenceEvent(
          assessment_basis,
          evaluator_type,
          criteria_json,
-         observed_errors_json,
          rationale,
          performed_at,
          created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -637,7 +796,6 @@ function insertEvidenceEvent(
       assessmentBasis,
       evaluatorType,
       JSON.stringify({ met: objectiveResult.criteriaMet, unmet: objectiveResult.criteriaUnmet }),
-      JSON.stringify(objectiveResult.observedErrors),
       objectiveResult.rationale,
       performedAt,
       createdAt,
@@ -649,54 +807,183 @@ function insertEvidenceEvent(
   return EvidenceEventSchema.parse(row);
 }
 
-function appendMisconceptionObservations(
+function criterionForLegacyMisconception(
+  challenge: ChallengeSpec,
+  result: ObjectiveAssessmentResult,
+  claimId: string,
+  disposition: "observed" | "cleared",
+): string {
+  const targetCriteria = challenge.rubric.criteria.filter(
+    (c) => c.objectiveId === result.objectiveId,
+  );
+  const metSet = new Set(result.criteriaMet);
+  const unmetSet = new Set(result.criteriaUnmet);
+
+  if (disposition === "cleared") {
+    const linkedMet = targetCriteria.find(
+      (c) => c.claimIds.includes(claimId) && metSet.has(c.id),
+    );
+    if (linkedMet) return linkedMet.id;
+    if (result.criteriaMet.length > 0) return result.criteriaMet[0]!;
+    throw new Error(
+      `Cannot clear misconception ${claimId} without a met criterion on ${result.objectiveId}`,
+    );
+  }
+
+  const linkedUnmet = targetCriteria.find(
+    (c) => c.claimIds.includes(claimId) && unmetSet.has(c.id),
+  );
+  if (linkedUnmet) return linkedUnmet.id;
+  if (result.criteriaUnmet.length > 0) return result.criteriaUnmet[0]!;
+  const linkedAny = targetCriteria.find((c) => c.claimIds.includes(claimId));
+  if (linkedAny) return linkedAny.id;
+  return targetCriteria[0]!.id;
+}
+
+function appendClaimObservations(
   db: Database.Database,
+  challenge: ChallengeSpec,
   evidence: EvidenceEvent,
   result: ObjectiveAssessmentResult,
 ): void {
+  const objective = db
+    .prepare(`SELECT concept_id FROM learning_objectives WHERE id = ?`)
+    .get(result.objectiveId) as { concept_id: string };
   const insert = db.prepare(
-    `INSERT INTO misconception_observations (
-       misconception_id,
+    `INSERT INTO claim_observations (
+       claim_id,
        objective_id,
        evidence_event_id,
+       criterion_id,
        disposition,
        created_at
-     ) VALUES (?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?)`,
   );
 
+  // Compute exactly ONE order-independent disposition per claim for this evidence event.
+  // If any criterion linked to a claim failed ("observed"), the claim stays "observed"
+  // regardless of rubric ordering.
+  const perClaim = new Map<
+    string,
+    {
+      disposition: "observed" | "cleared";
+      criterionId: string;
+      definition?: {
+        kind: ClaimKind;
+        description: string;
+        correctionStrategy?: string;
+        isBlocking: boolean;
+      };
+    }
+  >();
+
+  const mergeClaim = (
+    claimId: string,
+    criterionId: string,
+    disposition: "observed" | "cleared",
+    definition?: {
+      kind: ClaimKind;
+      description: string;
+      correctionStrategy?: string;
+      isBlocking: boolean;
+    },
+  ) => {
+    const existing = perClaim.get(claimId);
+    if (!existing) {
+      perClaim.set(claimId, { disposition, criterionId, definition });
+      return;
+    }
+    if (disposition === "observed" && existing.disposition !== "observed") {
+      perClaim.set(claimId, {
+        disposition: "observed",
+        criterionId,
+        definition: definition ?? existing.definition,
+      });
+    } else if (!existing.definition && definition) {
+      existing.definition = definition;
+    }
+  };
+
+  for (const obs of result.claimObservations) {
+    mergeClaim(obs.claimId, obs.criterionId, obs.disposition, {
+      kind: obs.kind ?? "error_claim",
+      description: obs.description ?? obs.claimId,
+      correctionStrategy: obs.correctionStrategy,
+      isBlocking: obs.isBlocking ?? false,
+    });
+  }
+
   for (const misconceptionId of result.misconceptionsObserved) {
-    insert.run(
+    const criterionId = criterionForLegacyMisconception(
+      challenge,
+      result,
       misconceptionId,
-      result.objectiveId,
-      evidence.id,
       "observed",
-      evidence.created_at,
     );
+    mergeClaim(misconceptionId, criterionId, "observed");
   }
   for (const misconceptionId of result.misconceptionsCleared) {
-    insert.run(
+    const criterionId = criterionForLegacyMisconception(
+      challenge,
+      result,
       misconceptionId,
+      "cleared",
+    );
+    mergeClaim(misconceptionId, criterionId, "cleared");
+  }
+
+  // Propagate frozen criterion -> claim links in an order-independent manner.
+  const metSet = new Set(result.criteriaMet);
+  const unmetSet = new Set(result.criteriaUnmet);
+  for (const criterion of challenge.rubric.criteria) {
+    if (criterion.objectiveId !== result.objectiveId || criterion.claimIds.length === 0) continue;
+    const disposition = unmetSet.has(criterion.id)
+      ? "observed"
+      : metSet.has(criterion.id)
+        ? "cleared"
+        : null;
+    if (!disposition) continue;
+    for (const claimId of criterion.claimIds) {
+      mergeClaim(claimId, criterion.id, disposition);
+    }
+  }
+
+  for (const [claimId, entry] of perClaim) {
+    if (!getClaim(db, claimId)) {
+      createClaim(db, {
+        id: claimId,
+        conceptId: objective.concept_id,
+        kind: entry.definition?.kind ?? "error_claim",
+        description: entry.definition?.description ?? claimId,
+        correctionStrategy: entry.definition?.correctionStrategy,
+        isBlocking: entry.definition?.isBlocking ?? false,
+      });
+    }
+    insert.run(
+      claimId,
       result.objectiveId,
       evidence.id,
-      "cleared",
+      entry.criterionId,
+      entry.disposition,
       evidence.created_at,
     );
   }
 }
 
-function getEffectiveMisconceptionObservations(
+export function getEffectiveClaimObservations(
   db: Database.Database,
   objectiveId: string,
 ): EffectiveObservation[] {
   const rows = db
     .prepare(
       `SELECT observation.*,
+              claim.kind AS claim_kind,
               evidence.performed_at AS source_performed_at,
               evidence.seq AS source_event_seq,
-              misconception.is_blocking AS is_blocking
-       FROM misconception_observations observation
+              claim.is_blocking AS is_blocking
+       FROM claim_observations observation
        JOIN evidence_events evidence ON evidence.id = observation.evidence_event_id
-       JOIN misconceptions misconception ON misconception.id = observation.misconception_id
+       JOIN claims claim ON claim.id = observation.claim_id
        WHERE observation.objective_id = ?
          AND COALESCE((
            SELECT revision.action
@@ -710,7 +997,8 @@ function getEffectiveMisconceptionObservations(
     .all(objectiveId) as Array<Record<string, unknown>>;
 
   return rows.map((row) => ({
-    observation: MisconceptionObservationSchema.parse(row),
+    observation: ClaimObservationSchema.parse(row),
+    claimKind: row.claim_kind as ClaimKind,
     sourcePerformedAt: String(row.source_performed_at),
     sourceEventSeq: Number(row.source_event_seq),
     isBlocking: Number(row.is_blocking) === 1,
@@ -810,7 +1098,7 @@ function computeProjection(
     }
     for (const observation of observationsByEvidence.get(event.id) ?? []) {
       if (observation.isBlocking) {
-        const id = observation.observation.misconception_id;
+        const id = observation.observation.claim_id;
         const wasActive = activeBlocking.get(id) ?? false;
         const isActive = observation.observation.disposition === "observed";
         blockingMisconceptionCount += Number(isActive) - Number(wasActive);
@@ -882,15 +1170,9 @@ function persistProjection(db: Database.Database, projection: ObjectiveProjectio
   }
 }
 
-function compareEvidenceOrder(left: EvidenceEvent, right: EvidenceEvent): number {
-  const time = left.performed_at.localeCompare(right.performed_at);
-  return time !== 0 ? time : left.seq - right.seq;
-}
-
 function rebuildWeaknessesInternal(
   db: Database.Database,
   objectiveId: string,
-  events: EvidenceEvent[],
   observations: EffectiveObservation[],
 ): WeaknessProjection[] {
   const rebuiltAt = new Date().toISOString();
@@ -901,44 +1183,19 @@ function rebuildWeaknessesInternal(
     lastEventSeq: number;
   }> = [];
 
-  const errorCategories = new Set(events.flatMap((event) => event.observed_errors_json));
-  for (const category of errorCategories) {
-    const occurrences = events.filter((event) => event.observed_errors_json.includes(category));
-    const lastOccurrence = occurrences.at(-1)!;
-    const laterGradable = events.filter(
-      (event) =>
-        compareEvidenceOrder(event, lastOccurrence) > 0 && event.result !== "ungradable",
-    );
-    const latestFreshEvidence = laterGradable.at(-1);
-    let lifecycle: "new" | "recurring" | "improving" | "resolved" =
-      occurrences.length >= 2 ? "recurring" : "new";
-    if (latestFreshEvidence?.result === "correct") {
-      lifecycle = "resolved";
-    } else if (latestFreshEvidence?.result === "partially_correct") {
-      lifecycle = "improving";
-    }
-    rows.push({
-      key: `${objectiveId}:error:${encodeURIComponent(category)}`,
-      category: `error:${category}`,
-      lifecycle,
-      lastEventSeq: Math.max(
-        ...occurrences.map((event) => event.seq),
-        ...laterGradable.map((event) => event.seq),
-      ),
-    });
-  }
-
-  const misconceptionGroups = new Map<string, EffectiveObservation[]>();
+  const claimGroups = new Map<string, EffectiveObservation[]>();
   for (const observation of observations) {
-    const list = misconceptionGroups.get(observation.observation.misconception_id) ?? [];
+    const list = claimGroups.get(observation.observation.claim_id) ?? [];
     list.push(observation);
-    misconceptionGroups.set(observation.observation.misconception_id, list);
+    claimGroups.set(observation.observation.claim_id, list);
   }
-  for (const [misconceptionId, history] of misconceptionGroups) {
-    const latest = history.at(-1)!;
+  for (const [claimId, history] of claimGroups) {
     const observedCount = history.filter(
       (item) => item.observation.disposition === "observed",
     ).length;
+    if (observedCount === 0) continue;
+    const latest = history.at(-1)!;
+    const prefix = latest.claimKind === "misconception" ? "misconception" : "claim";
     const lifecycle =
       latest.observation.disposition === "cleared"
         ? "resolved"
@@ -946,8 +1203,8 @@ function rebuildWeaknessesInternal(
           ? "recurring"
           : "new";
     rows.push({
-      key: `${objectiveId}:misconception:${encodeURIComponent(misconceptionId)}`,
-      category: `misconception:${misconceptionId}`,
+      key: `${objectiveId}:${prefix}:${encodeURIComponent(claimId)}`,
+      category: `${prefix}:${claimId}`,
       lifecycle,
       lastEventSeq: Math.max(...history.map((item) => item.sourceEventSeq)),
     });
@@ -966,7 +1223,7 @@ function rebuildWeaknessesInternal(
       row.category,
       row.lifecycle,
       row.lastEventSeq,
-      PROJECTOR_VERSION,
+      WEAKNESS_PROJECTOR_VERSION,
       rebuiltAt,
     );
   }
@@ -987,10 +1244,10 @@ function rebuildObjectiveStateInternal(
   objectiveId: string,
 ): { projection: ObjectiveProjection; weaknesses: WeaknessProjection[] } {
   const events = getEffectiveEvidenceEventsByObjective(db, objectiveId);
-  const observations = getEffectiveMisconceptionObservations(db, objectiveId);
+  const observations = getEffectiveClaimObservations(db, objectiveId);
   const projection = computeProjection(objectiveId, events, observations);
   persistProjection(db, projection);
-  const weaknesses = rebuildWeaknessesInternal(db, objectiveId, events, observations);
+  const weaknesses = rebuildWeaknessesInternal(db, objectiveId, observations);
   return { projection, weaknesses };
 }
 
@@ -1067,7 +1324,7 @@ export function recordAssessment(
         assessment.assessmentBasis,
         verificationOutput,
       );
-      appendMisconceptionObservations(db, evidence, objectiveResult);
+      appendClaimObservations(db, challenge, evidence, objectiveResult);
       evidenceEvents.push(evidence);
     }
 
@@ -1213,7 +1470,7 @@ export function reviseEvidence(
         verificationOutput,
         evidence.id,
       );
-      appendMisconceptionObservations(db, replacementEvent, corrected);
+      appendClaimObservations(db, challenge, replacementEvent, corrected);
     }
 
     const rebuilt = rebuildObjectiveStateInternal(db, evidence.objective_id);

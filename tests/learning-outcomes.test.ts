@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runSync } from "./helpers/spawn.js";
 import { afterEach, describe, expect, it } from "vitest";
-import { createConcept, createDatabase, createTopic, setGoalObjective } from "../src/db/database.js";
+import { createConcept, createDatabase, createGoal, createTopic, setGoalObjective } from "../src/db/database.js";
 import {
   parseOutcomeManifest, summarizeLearningOutcomes, type OutcomeManifest,
 } from "../src/evaluation/learning-outcomes.js";
@@ -28,6 +28,7 @@ let counter = 0;
 function addObjective(db: ReturnType<typeof createDatabase>, kernel: Kernel, key: string): string {
   const objectiveId = `${key}:explain`;
   createTopic(db, { id: `goal-${key}`, name: `Goal ${key}` });
+  createGoal(db, { id: `goal-${key}`, name: `Goal ${key}`, purpose: "interview" });
   createConcept(db, { id: `concept-${key}`, topicId: `goal-${key}`, title: key });
   kernel.createLearningObjective({ id: objectiveId, conceptId: `concept-${key}`, capabilityId: "explain" });
   setGoalObjective(db, { goalId: `goal-${key}`, objectiveId, importance: "core", targetReadiness: "guided" });

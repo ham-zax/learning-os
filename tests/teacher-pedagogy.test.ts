@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createConcept,
   createDatabase,
+  createGoal,
   createTopic,
   setGoalObjective,
   setGoalPreparation,
@@ -99,10 +100,10 @@ describe("Scope 3 & 4 pedagogy, FIRe-Lite compression, and confusion-pair discri
     try {
       const kernel = createTeacherKernel(db);
       createTopic(db, { id: "g1", name: "Goal 1" });
+      createGoal(db, { id: "g1", name: "Goal 1", purpose: "interview", confirmedAt: "2026-09-01T00:00:00Z" });
       createConcept(db, { id: "c1", topicId: "g1", title: "Concept 1" });
       createLearningObjective(db, { id: "c1:explain", conceptId: "c1", capabilityId: "explain" });
       setGoalObjective(db, { goalId: "g1", objectiveId: "c1:explain", importance: "core" });
-      setGoalPreparation(db, { goalId: "g1", purpose: "interview", confirmedAt: "2026-09-01T00:00:00Z" });
       registerChallenge(db, {
         id: "ch1",
         version: 1,
@@ -144,6 +145,7 @@ describe("Scope 3 & 4 pedagogy, FIRe-Lite compression, and confusion-pair discri
     const db = createDatabase(":memory:");
     try {
       createTopic(db, { id: "g1", name: "Backend" });
+      createGoal(db, { id: "g1", name: "Backend", purpose: "interview" });
       createConcept(db, { id: "c-rt", topicId: "g1", title: "Runtime Execution" });
       createConcept(db, { id: "c-bp", topicId: "g1", title: "Backpressure" });
       createLearningObjective(db, { id: "c-rt:predict", conceptId: "c-rt", capabilityId: "predict" });
@@ -243,6 +245,7 @@ describe("Scope 3 & 4 pedagogy, FIRe-Lite compression, and confusion-pair discri
     try {
       const kernel = createTeacherKernel(db);
       createTopic(db, { id: "g1", name: "Systems" });
+      createGoal(db, { id: "g1", name: "Systems", purpose: "interview" });
       createConcept(db, { id: "base", topicId: "g1", title: "Base Concept", prerequisites: [] });
       createConcept(db, { id: "adv", topicId: "g1", title: "Advanced Concept", prerequisites: ["base"] });
       createLearningObjective(db, { id: "base:explain", conceptId: "base", capabilityId: "explain" });
@@ -333,6 +336,7 @@ describe("Scope 3 & 4 pedagogy, FIRe-Lite compression, and confusion-pair discri
     try {
       const kernel = createTeacherKernel(db, { knowledgeRoot });
       createTopic(db, { id: "backend-systems", name: "Backend Systems" });
+      createGoal(db, { id: "backend-systems", name: "Backend Systems", purpose: "interview" });
       createConcept(db, {
         id: "runtime-request-execution-and-concurrency",
         topicId: "backend-systems",
@@ -420,6 +424,7 @@ describe("Scope 3 & 4 pedagogy, FIRe-Lite compression, and confusion-pair discri
     try {
       const kernel = createTeacherKernel(db);
       createTopic(db, { id: "g-prereq", name: "Backend" });
+      createGoal(db, { id: "g-prereq", name: "Backend", purpose: "interview" });
       createConcept(db, { id: "rt", topicId: "g-prereq", title: "Runtime", prerequisites: [] });
       createConcept(db, { id: "bp", topicId: "g-prereq", title: "Backpressure", prerequisites: ["rt"] });
       createLearningObjective(db, { id: "rt:predict", conceptId: "rt", capabilityId: "predict" });

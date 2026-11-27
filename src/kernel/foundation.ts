@@ -6,7 +6,6 @@ import {
   AttemptSchema,
   CapabilitySchema,
   ChallengeAttemptDispositionRowSchema,
-  ChallengeAuthoringContractRowSchema,
   ChallengeCriterionRowSchema,
   ChallengeSpecSchema,
   ChallengeTargetRowSchema,
@@ -38,13 +37,16 @@ import type {
   SessionPendingAction,
   SessionPhase,
   ChallengeAttemptDispositionRow,
+  VerificationBasis,
 } from "../db/types.js";
 import {
+  clearGoalParkedSession,
   getActiveGoalStudyFocusEpisode,
   getGoalObjective,
   getGoalObjectives,
   getPracticalWorkPolicy,
 } from "../db/database.js";
+import { parseRequestInput } from "../errors.js";
 import {
   ChallengeAuthoringContractSchema,
   ChallengeIntentSchema,
@@ -402,16 +404,44 @@ export function getObjectiveProjection(
   return row === undefined ? undefined : ObjectiveProjectionSchema.parse(row);
 }
 
+export interface RecordTeachingRequestInput {
+  attemptId: number;
+  learnerRequestText: string;
+  objectiveIds?: string[];
+  exposureType?: "explanation_shown" | "worked_example_shown" | "solution_walkthrough" | "answer_revealed";
+  teachingMaterial: {
+    content: string;
+    format?: "text" | "markdown";
+  };
+  sourceRef?: string;
+}
+
+export interface TeachingRequestResult {
+  attemptId: number;
+  sessionId: number;
+  learnerRequestText: string;
+  exposures: ExposureEvent[];
+  assisted: true;
+  evidenceCreated: 0;
+  reviewEventsCreated: 0;
+}
+
 export function registerChallenge(
   db: Database.Database,
   input: ChallengeSpecInput,
   intent?: ChallengeIntent,
 ): ChallengeSpec {
-  const spec = ChallengeSpecSchema.parse(input);
+  const spec = parseRequestInput(ChallengeSpecSchema, input, { label: "challenge" });
   const authoringContract = intent === undefined
     ? null
-    : challengeAuthoringContract(ChallengeIntentSchema.parse(intent));
+    : challengeAuthoringContract(
+        parseRequestInput(ChallengeIntentSchema, intent, { label: "challenge_intent" }),
+      );
   validateChallengeRelationships(spec);
+
+  const gradingBasis: VerificationBasis =
+    spec.gradingBasis ??
+    (spec.verification.required ? spec.verification.basis : "frozen_rubric");
 
   db.transaction(() => {
     const existing = db
@@ -423,12 +453,35 @@ export function registerChallenge(
 
     if (spec.sourceProblemId) {
       const problem = db.prepare(`SELECT 1 FROM problems WHERE id = ?`).get(spec.sourceProblemId);
-      if (!problem) {
+      const bankItem = problem
+        ? problem
+        : db.prepare(`SELECT 1 FROM question_bank_items WHERE id = ?`).get(spec.sourceProblemId);
+      if (!bankItem) {
         throw new Error(`Source problem not found: ${spec.sourceProblemId}`);
       }
     }
 
     ensureChallengeObjectivesExist(db, spec);
+    for (const criterion of spec.rubric.criteria) {
+      if (criterion.claimIds.length === 0) continue;
+      const objective = db
+        .prepare(`SELECT concept_id FROM learning_objectives WHERE id = ?`)
+        .get(criterion.objectiveId) as { concept_id: string };
+      for (const claimId of criterion.claimIds) {
+        const claim = db
+          .prepare(`SELECT concept_id FROM claims WHERE id = ?`)
+          .get(claimId) as { concept_id: string } | undefined;
+        if (!claim) {
+          throw new Error(`Criterion ${criterion.id} references unknown claim: ${claimId}`);
+        }
+        if (claim.concept_id !== objective.concept_id) {
+          throw new Error(
+            `Claim ${claimId} does not belong to criterion objective concept ${objective.concept_id}`,
+          );
+        }
+      }
+    }
+
     if (authoringContract) {
       assertCurrentGoalAuthorizesIntent(db, authoringContract);
       validateChallengeAgainstAuthoringContract(db, spec, authoringContract);
@@ -449,10 +502,12 @@ export function registerChallenge(
          hint_ladder_json,
          verification_required,
          verification_basis,
+         grading_basis,
+         authoring_contract_json,
          private_solution_ref,
          is_frozen,
          created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
     ).run(
       spec.id,
       spec.version,
@@ -466,6 +521,8 @@ export function registerChallenge(
       JSON.stringify(spec.hintLadder),
       spec.verification.required ? 1 : 0,
       spec.verification.basis,
+      gradingBasis,
+      authoringContract ? JSON.stringify(authoringContract) : null,
       spec.privateSolutionRef ?? null,
       now,
     );
@@ -476,9 +533,8 @@ export function registerChallenge(
          version,
          objective_id,
          novelty,
-         criterion_ids_json,
          position
-       ) VALUES (?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?)`,
     );
     spec.targets.forEach((target: ChallengeTarget, position: number) => {
       insertTarget.run(
@@ -486,7 +542,6 @@ export function registerChallenge(
         spec.version,
         target.objectiveId,
         target.novelty,
-        JSON.stringify(target.criterionIds),
         position,
       );
     });
@@ -500,8 +555,9 @@ export function registerChallenge(
          required,
          description,
          acceptable_variants_json,
+         claim_ids_json,
          position
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     spec.rubric.criteria.forEach((criterion: ChallengeCriterion, position: number) => {
       insertCriterion.run(
@@ -512,23 +568,10 @@ export function registerChallenge(
         criterion.required ? 1 : 0,
         criterion.description,
         JSON.stringify(criterion.acceptableVariants),
+        JSON.stringify(criterion.claimIds),
         position,
       );
     });
-
-    if (authoringContract) {
-      db.prepare(
-        `INSERT INTO challenge_authoring_contracts (
-           challenge_id, version, contract_version, intent_json, created_at
-         ) VALUES (?, ?, ?, ?, ?)`,
-      ).run(
-        spec.id,
-        spec.version,
-        authoringContract.contractVersion,
-        JSON.stringify(authoringContract),
-        now,
-      );
-    }
 
     const freeze = db
       .prepare(
@@ -589,7 +632,9 @@ export function getChallenge(
     targets: targetRows.map((target: ChallengeTargetRow) => ({
       objectiveId: target.objective_id,
       novelty: target.novelty,
-      criterionIds: target.criterion_ids_json,
+      criterionIds: criterionRows
+        .filter((criterion) => criterion.objective_id === target.objective_id)
+        .map((criterion) => criterion.criterion_id),
     })),
     rubric: {
       id: parent.rubric_id,
@@ -600,6 +645,7 @@ export function getChallenge(
         required: criterion.required,
         description: criterion.description,
         acceptableVariants: criterion.acceptable_variants_json,
+        claimIds: criterion.claim_ids_json,
       })),
     },
     hintLadder: parent.hint_ladder_json,
@@ -607,6 +653,7 @@ export function getChallenge(
       required: parent.verification_required,
       basis: parent.verification_basis,
     },
+    gradingBasis: parent.grading_basis,
     privateSolutionRef: parent.private_solution_ref,
   });
 }
@@ -616,19 +663,15 @@ export function getChallengeAuthoringContract(
   challengeId: string,
   version: number,
 ): ChallengeAuthoringContract | null {
-  const raw = db
+  const row = db
     .prepare(
-      `SELECT * FROM challenge_authoring_contracts
+      `SELECT authoring_contract_json
+       FROM challenge_versions
        WHERE challenge_id = ? AND version = ?`,
     )
-    .get(challengeId, version);
-  if (raw === undefined) return null;
-  const row = ChallengeAuthoringContractRowSchema.parse(raw);
-  const parsed = ChallengeAuthoringContractSchema.parse(JSON.parse(row.intent_json));
-  if (parsed.contractVersion !== row.contract_version) {
-    throw new Error(`Challenge authoring contract version mismatch: ${challengeId}@${version}`);
-  }
-  return parsed;
+    .get(challengeId, version) as { authoring_contract_json: string | null } | undefined;
+  if (!row || row.authoring_contract_json === null) return null;
+  return ChallengeAuthoringContractSchema.parse(JSON.parse(row.authoring_contract_json));
 }
 
 export function getAttempt(
@@ -665,9 +708,9 @@ export function openAttempt(
       throw new Error(`Session ${sessionId} is complete`);
     }
     if (authoringContract) {
-      if (session.topic_id !== authoringContract.goalId) {
+      if (session.goal_id !== authoringContract.goalId) {
         throw new Error(
-          `Session goal ${session.topic_id} does not match selected challenge goal ${authoringContract.goalId}`,
+          `Session goal ${session.goal_id} does not match selected challenge goal ${authoringContract.goalId}`,
         );
       }
       assertCurrentGoalAuthorizesIntent(db, authoringContract);
@@ -1350,6 +1393,56 @@ function setSessionToNextUnresolvedOrComplete(
          active_challenge_id = NULL, active_challenge_version = NULL, active_attempt_id = NULL
      WHERE id = ?`,
   ).run(markEnded ? 1 : 0, now, sessionId);
+  const completedSession = SessionSchema.parse(
+    db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId),
+  );
+  clearGoalParkedSession(db, completedSession.goal_id, sessionId);
+}
+
+export function recordTeachingRequest(
+  db: Database.Database,
+  sessionId: number,
+  input: RecordTeachingRequestInput,
+): TeachingRequestResult {
+  const learnerRequestText = requireNonEmpty(input.learnerRequestText, "Learner teaching request");
+  const exposureType = input.exposureType ?? "explanation_shown";
+  return db.transaction(() => {
+    const session = SessionSchema.parse(db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId));
+    if (session.phase !== "awaiting_response" || session.pending_action !== "collect_response") {
+      throw new Error(`Session ${sessionId} is not awaiting a learner response`);
+    }
+    if (session.active_attempt_id !== input.attemptId) {
+      throw new Error(`Attempt ${input.attemptId} is not the active attempt for session ${sessionId}`);
+    }
+    const attempt = getAttemptOrThrow(db, input.attemptId);
+    if (attempt.submitted_at !== null) {
+      throw new Error(`Attempt ${input.attemptId} is already submitted; cannot treat as pre-answer teaching request`);
+    }
+    if (attempt.challenge_id === null || attempt.challenge_version === null) {
+      throw new Error(`Attempt ${input.attemptId} has no frozen challenge`);
+    }
+    const challenge = getFrozenChallengeOrThrow(db, attempt.challenge_id, attempt.challenge_version);
+    const objectiveIds =
+      input.objectiveIds && input.objectiveIds.length > 0
+        ? input.objectiveIds
+        : challenge.targets.map((target) => target.objectiveId);
+    const exposures = recordExposure(db, sessionId, {
+      attemptId: input.attemptId,
+      objectiveIds,
+      exposureType,
+      sourceRef: input.sourceRef ?? "learner_teaching_request",
+      teachingMaterial: input.teachingMaterial,
+    });
+    return {
+      attemptId: input.attemptId,
+      sessionId,
+      learnerRequestText,
+      exposures,
+      assisted: true as const,
+      evidenceCreated: 0 as const,
+      reviewEventsCreated: 0 as const,
+    };
+  })();
 }
 
 export function abandonUnsubmittedSession(
@@ -1376,6 +1469,7 @@ export function abandonUnsubmittedSession(
            active_challenge_id = NULL, active_challenge_version = NULL, active_attempt_id = NULL
        WHERE id = ?`,
     ).run(new Date().toISOString(), sessionId);
+    clearGoalParkedSession(db, session.goal_id, sessionId);
     return SessionSchema.parse(db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId));
   })();
 }
@@ -1407,6 +1501,7 @@ export function closeSessionAfterRejectedAttempt(
          reconstruction_status = 'not_required'
      WHERE id = ?`,
   ).run(new Date().toISOString(), sessionId);
+  clearGoalParkedSession(db, session.goal_id, sessionId);
   return SessionSchema.parse(db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(sessionId));
 }
 
@@ -1552,9 +1647,9 @@ export function resumeSession(db: Database.Database, sessionId: number): Resumed
 
 export function listResumableSessions(
   db: Database.Database,
-  topicId?: string,
+  goalId?: string,
 ): ResumedSession[] {
-  const rows = topicId === undefined
+  const rows = goalId === undefined
     ? db
         .prepare(
           `SELECT id FROM sessions
@@ -1565,10 +1660,10 @@ export function listResumableSessions(
     : db
         .prepare(
           `SELECT id FROM sessions
-           WHERE topic_id = ? AND phase <> 'complete'
+           WHERE goal_id = ? AND phase <> 'complete'
            ORDER BY COALESCE(started_at, '') DESC, id DESC`,
         )
-        .all(topicId);
+        .all(goalId);
   return (rows as Array<{ id: number }>)
     .map((row) => resumeSession(db, row.id))
     .filter((session) => session.phase !== "complete");

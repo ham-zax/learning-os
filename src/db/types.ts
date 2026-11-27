@@ -83,8 +83,14 @@ export type ChallengeDefectScope = z.infer<typeof ChallengeDefectScope>;
 export const ReviewRating = z.enum(["Again", "Hard", "Good"]);
 export type ReviewRating = z.infer<typeof ReviewRating>;
 
-export const MisconceptionDisposition = z.enum(["observed", "cleared"]);
-export type MisconceptionDisposition = z.infer<typeof MisconceptionDisposition>;
+export const ClaimKind = z.enum(["misconception", "error_claim"]);
+export type ClaimKind = z.infer<typeof ClaimKind>;
+
+export const ClaimDisposition = z.enum(["observed", "cleared"]);
+export type ClaimDisposition = z.infer<typeof ClaimDisposition>;
+
+export const MisconceptionDisposition = ClaimDisposition;
+export type MisconceptionDisposition = ClaimDisposition;
 
 export const WeaknessLifecycle = z.enum([
   "new",
@@ -251,14 +257,25 @@ const verificationOutputJson = z
   )
   .pipe(VerificationOutputSchema);
 
+export const ClaimObservationInputSchema = z.object({
+  claimId: z.string().min(1),
+  criterionId: z.string().min(1),
+  disposition: ClaimDisposition,
+  kind: ClaimKind.optional(),
+  description: z.string().min(1).optional(),
+  correctionStrategy: z.string().min(1).optional(),
+  isBlocking: z.boolean().optional(),
+}).strict();
+export type ClaimObservationInput = z.infer<typeof ClaimObservationInputSchema>;
+
 export const ObjectiveAssessmentResultSchema = z.object({
   objectiveId: z.string().min(1),
   result: EvidenceResult,
   criteriaMet: z.array(z.string().min(1)).default([]),
   criteriaUnmet: z.array(z.string().min(1)).default([]),
+  claimObservations: z.array(ClaimObservationInputSchema).default([]),
   misconceptionsObserved: z.array(z.string().min(1)).default([]),
   misconceptionsCleared: z.array(z.string().min(1)).default([]),
-  observedErrors: z.array(z.string().min(1)).default([]),
   rationale: z.string().min(1),
 }).strict();
 export type ObjectiveAssessmentResult = z.infer<typeof ObjectiveAssessmentResultSchema>;
@@ -300,6 +317,7 @@ export const ChallengeCriterionSchema = z.object({
   required: z.boolean(),
   description: z.string().min(1),
   acceptableVariants: z.array(z.string()).default([]),
+  claimIds: z.array(z.string().min(1)).default([]),
 }).strict();
 export type ChallengeCriterion = z.infer<typeof ChallengeCriterionSchema>;
 
@@ -337,6 +355,7 @@ export const ChallengeSpecSchema = z.object({
   rubric: ChallengeRubricSchema,
   hintLadder: HintLadderSchema.default({}),
   verification: VerificationSpecSchema,
+  gradingBasis: VerificationBasis.optional(),
   privateSolutionRef: z.string().min(1).nullable().optional(),
 }).strict();
 export type ChallengeSpec = z.infer<typeof ChallengeSpecSchema>;
@@ -357,9 +376,29 @@ export const TopicSchema = z.object({
   goal: z.string().nullable().default(null),
   deadline: z.string().nullable().default(null),
   created_at: z.string().nullable().default(null),
-  last_session: z.string().nullable().default(null),
 });
 export type Topic = z.infer<typeof TopicSchema>;
+
+export const GoalSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  target: z.string().nullable().default(null),
+  deadline: z.string().nullable().default(null),
+  purpose: PreparationPurpose,
+  target_role: z.string().nullable().default(null),
+  target_outcome: z.string().nullable().default(null),
+  minutes_per_day: z.number().int().positive().nullable().default(null),
+  days_per_week: z.number().int().min(1).max(7).nullable().default(null),
+  minutes_per_week: z.number().int().positive().nullable().default(null),
+  bookmark_note: z.string().nullable().default(null),
+  bookmark_next_move: z.string().nullable().default(null),
+  parked_session_id: z.number().int().positive().nullable().default(null),
+  bookmark_updated_at: z.string().nullable().default(null),
+  confirmed_at: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export type Goal = z.infer<typeof GoalSchema>;
 
 // ─── concepts ───────────────────────────────────────────────────────────────
 
@@ -475,7 +514,7 @@ export type SessionPendingAction = z.infer<typeof SessionPendingAction>;
 
 export const SessionSchema = z.object({
   id: z.number().int(),
-  topic_id: z.string(),
+  goal_id: z.string(),
   mode: DeliveryContext,
   started_at: z.string().nullable().default(null),
   ended_at: z.string().nullable().default(null),
@@ -542,6 +581,33 @@ export const ProblemSchema = z.object({
 });
 export type Problem = z.infer<typeof ProblemSchema>;
 
+export const QuestionBankItemRowSchema = z.object({
+  id: z.string(),
+  topic_id: z.string(),
+  concept_id: z.string(),
+  concept_title: z.string(),
+  concept_difficulty: z.number().int().default(1),
+  concept_prerequisites: jsonArrayOfStrings.default([]),
+  concept_tags: jsonArrayOfStrings.default([]),
+  capability_id: z.string(),
+  task_form: TaskForm,
+  delivery_context: DeliveryContext,
+  prompt: z.string(),
+  criterion: z.string(),
+  acceptable_variants_json: jsonArrayOfStrings.default([]),
+  difficulty: z.number().int().default(1),
+  tags_json: jsonArrayOfStrings.default([]),
+  time_budget_minutes: z.number().int().positive().nullable().default(null),
+  verification_required: sqliteBoolean,
+  verification_basis: VerificationBasis,
+  grading_basis: VerificationBasis,
+  private_solution_ref: z.string().nullable().default(null),
+  source: z.string(),
+  external_id: z.string(),
+  created_at: z.string(),
+});
+export type QuestionBankItemRow = z.infer<typeof QuestionBankItemRowSchema>;
+
 // ─── frozen challenge persistence ───────────────────────────────────────────
 
 export const ChallengeVersionRowSchema = z.object({
@@ -557,6 +623,8 @@ export const ChallengeVersionRowSchema = z.object({
   hint_ladder_json: jsonRecord,
   verification_required: sqliteBoolean,
   verification_basis: VerificationBasis,
+  grading_basis: VerificationBasis,
+  authoring_contract_json: z.string().nullable().default(null),
   private_solution_ref: z.string().nullable().default(null),
   is_frozen: sqliteBoolean,
   created_at: z.string(),
@@ -568,7 +636,6 @@ export const ChallengeTargetRowSchema = z.object({
   version: z.number().int().positive(),
   objective_id: z.string(),
   novelty: Novelty,
-  criterion_ids_json: jsonArrayOfStrings,
   position: z.number().int().nonnegative(),
 });
 export type ChallengeTargetRow = z.infer<typeof ChallengeTargetRowSchema>;
@@ -581,18 +648,10 @@ export const ChallengeCriterionRowSchema = z.object({
   required: sqliteBoolean,
   description: z.string(),
   acceptable_variants_json: jsonArrayOfStrings,
+  claim_ids_json: jsonArrayOfStrings,
   position: z.number().int().nonnegative(),
 });
 export type ChallengeCriterionRow = z.infer<typeof ChallengeCriterionRowSchema>;
-
-export const ChallengeAuthoringContractRowSchema = z.object({
-  challenge_id: z.string(),
-  version: z.number().int().positive(),
-  contract_version: z.literal(2),
-  intent_json: z.string(),
-  created_at: z.string(),
-});
-export type ChallengeAuthoringContractRow = z.infer<typeof ChallengeAuthoringContractRowSchema>;
 
 // ─── attempts ───────────────────────────────────────────────────────────────
 
@@ -720,7 +779,6 @@ export const EvidenceEventSchema = z.object({
   assessment_basis: VerificationBasis,
   evaluator_type: EvaluatorType,
   criteria_json: evidenceCriteriaJson,
-  observed_errors_json: jsonArrayOfStrings,
   rationale: z.string(),
   performed_at: z.string(),
   created_at: z.string(),
@@ -736,25 +794,33 @@ export const EvidenceRevisionSchema = z.object({
 });
 export type EvidenceRevision = z.infer<typeof EvidenceRevisionSchema>;
 
-export const MisconceptionSchema = z.object({
+export const ClaimSchema = z.object({
   id: z.string(),
   concept_id: z.string(),
+  kind: ClaimKind,
   description: z.string(),
   correction_strategy: z.string().nullable().default(null),
   is_blocking: sqliteBoolean,
   created_at: z.string(),
 });
-export type Misconception = z.infer<typeof MisconceptionSchema>;
+export type Claim = z.infer<typeof ClaimSchema>;
 
-export const MisconceptionObservationSchema = z.object({
+export const ClaimObservationSchema = z.object({
   seq: z.number().int(),
-  misconception_id: z.string(),
+  claim_id: z.string(),
   objective_id: z.string(),
   evidence_event_id: z.string(),
-  disposition: MisconceptionDisposition,
+  criterion_id: z.string(),
+  disposition: ClaimDisposition,
   created_at: z.string(),
 });
-export type MisconceptionObservation = z.infer<typeof MisconceptionObservationSchema>;
+export type ClaimObservation = z.infer<typeof ClaimObservationSchema>;
+
+export const MisconceptionSchema = ClaimSchema;
+export type Misconception = Claim;
+
+export const MisconceptionObservationSchema = ClaimObservationSchema;
+export type MisconceptionObservation = ClaimObservation;
 
 export const WeaknessProjectionSchema = z.object({
   key: z.string(),
@@ -796,11 +862,11 @@ export type ReviewCard = z.infer<typeof ReviewCardSchema>;
 
 export const schemas = {
   topics: TopicSchema,
+  goals: GoalSchema,
   concepts: ConceptSchema,
   capabilities: CapabilitySchema,
   learning_objectives: LearningObjectiveSchema,
   goal_objectives: GoalObjectiveSchema,
-  goal_preparation: GoalPreparationSchema,
   study_focus_episodes: StudyFocusEpisodeSchema,
   objective_projections: ObjectiveProjectionSchema,
   sessions: SessionSchema,
@@ -808,10 +874,10 @@ export const schemas = {
   synced_gaps: SyncedGapSchema,
   synced_signals: SyncedSignalSchema,
   problems: ProblemSchema,
+  question_bank_items: QuestionBankItemRowSchema,
   challenge_versions: ChallengeVersionRowSchema,
   challenge_targets: ChallengeTargetRowSchema,
   challenge_criteria: ChallengeCriterionRowSchema,
-  challenge_authoring_contracts: ChallengeAuthoringContractRowSchema,
   attempts: AttemptSchema,
   challenge_attempt_dispositions: ChallengeAttemptDispositionRowSchema,
   hint_observations: HintObservationSchema,
@@ -821,8 +887,8 @@ export const schemas = {
   revision_notes: RevisionNoteSchema,
   evidence_events: EvidenceEventSchema,
   evidence_revisions: EvidenceRevisionSchema,
-  misconceptions: MisconceptionSchema,
-  misconception_observations: MisconceptionObservationSchema,
+  claims: ClaimSchema,
+  claim_observations: ClaimObservationSchema,
   weakness_projections: WeaknessProjectionSchema,
   review_events: ReviewEventSchema,
   review_cards: ReviewCardSchema,

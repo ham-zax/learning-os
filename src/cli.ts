@@ -38,6 +38,7 @@ import {
   selectProfile,
 } from "./profile/index.js";
 import {
+  getGoalSummary,
   getTopicSummary,
   initializeTopic,
 } from "./state.js";
@@ -71,6 +72,8 @@ import {
   formatDesignResult,
 } from "./interview/system-design.js";
 import {
+  getGoal,
+  listGoals,
   getTopic,
   getConceptsByTopic,
   createTopic,
@@ -1042,11 +1045,11 @@ program
         switch (continuation.kind) {
           case "resume": {
             header("Resume Study");
-            console.log(`  Session: ${continuation.session.session.id}`);
-            console.log(`  Phase: ${continuation.session.phase}`);
-            console.log(`  Pending action: ${continuation.session.pendingAction}`);
-            if (continuation.session.activeChallenge) {
-              console.log(`  Challenge: ${continuation.session.activeChallenge.publicPrompt}`);
+            console.log(`  Session: ${continuation.commitment.sessionId}`);
+            console.log(`  Phase: ${continuation.commitment.phase}`);
+            console.log(`  Pending action: ${continuation.commitment.pendingAction}`);
+            if (continuation.presentation.kind === "question") {
+              console.log(`  Prompt: ${continuation.presentation.promptText}`);
             }
             if (continuation.additionalResumableSessionIds.length > 0) {
               console.log(
@@ -1259,9 +1262,10 @@ program
     ) =>
       withCliDatabase((db) => {
         const goalId = topic.toLowerCase().replace(/\s+/g, "-");
-        const topicRow = getTopic(db, goalId);
-        if (!topicRow) {
-          throw new Error(`Goal topic not found: ${goalId}`);
+        const goalRow = getGoal(db, goalId);
+        const topicRow = goalRow ? undefined : getTopic(db, goalId);
+        if (!goalRow && !topicRow) {
+          throw new Error(`Goal not found: ${goalId}`);
         }
 
         if (objective) {
@@ -1289,10 +1293,10 @@ program
           return;
         }
 
-        header(`Goal: ${topicRow.name}`);
-        console.log(`  Goal ID:  ${topicRow.id}`);
-        console.log(`  Goal:     ${topicRow.goal ?? "(not set)"}`);
-        console.log(`  Deadline: ${topicRow.deadline ?? "(none)"}`);
+        header(`Goal: ${goalRow?.name ?? topicRow!.name}`);
+        console.log(`  Goal ID:  ${goalId}`);
+        console.log(`  Goal:     ${goalRow?.target ?? topicRow?.goal ?? "(not set)"}`);
+        console.log(`  Deadline: ${goalRow?.deadline ?? topicRow?.deadline ?? "(none)"}`);
 
         const configured = getGoalObjectives(db, goalId, { includeInactive: true });
         if (configured.length > 0) {
@@ -1357,9 +1361,9 @@ program
     ) =>
       withCliDatabase((db) => {
         const goalId = topic.toLowerCase().replace(/\s+/g, "-");
-        const topicRow = getTopic(db, goalId);
-        if (!topicRow) {
-          throw new Error(`Goal topic not found: ${goalId}`);
+        const goalRow = getGoal(db, goalId);
+        if (!goalRow) {
+          throw new Error(`Goal not found: ${goalId}`);
         }
         const explicitMinutes = opts.minutes
           ? Number.parseInt(opts.minutes, 10)
@@ -1385,7 +1389,7 @@ program
           retestEligibleWeaknessKeys: opts.retest,
         });
 
-        header(`Today: ${topicRow.name}`);
+        header(`Today: ${goalRow.name}`);
         if (mission.goal) console.log(`  Goal: ${mission.goal}`);
         if (mission.deadlineAt) console.log(`  Deadline: ${mission.deadlineAt}`);
         console.log(
@@ -1478,10 +1482,36 @@ program
 // tutor stats
 program
   .command("stats")
-  .description("Show topic statistics")
-  .option("-t, --topic <topic>", "Topic to show stats for")
-  .action(async (opts: { topic?: string }) =>
+  .description("Show goal and content-topic statistics")
+  .option("-t, --topic <topic>", "Content topic ID to show stats for")
+  .option("-g, --goal <goal>", "Goal ID to show stats for")
+  .action(async (opts: { topic?: string; goal?: string }) =>
     withCliDatabase((db) => {
+      if (opts.goal) {
+        const goalId = opts.goal.toLowerCase().replace(/\s+/g, "-");
+        const summary = getGoalSummary(db, goalId);
+
+        header(`Goal: ${summary.goalName}`);
+        console.log(`  Goal ID:    ${summary.goalId}`);
+        console.log(`  Active:     ${summary.activeObjectives}/${summary.totalConfiguredObjectives} objectives`);
+        if (summary.parkedSessionId !== null) {
+          console.log(`  Parked:     session ${summary.parkedSessionId}`);
+        }
+        console.log();
+        console.log("  Active objective readiness:");
+        console.log(`    Unknown:     ${chalk.dim(String(summary.unknown))}`);
+        console.log(`    Exposed:     ${chalk.yellow(String(summary.exposed))}`);
+        console.log(`    Guided:      ${chalk.cyan(String(summary.guided))}`);
+        console.log(`    Independent: ${chalk.green(String(summary.independent))}`);
+        console.log();
+        console.log(`  Due for review:   ${chalk.bold(String(summary.dueCount))}`);
+        console.log(`  Overdue:          ${chalk.red(String(summary.overdueCount))}`);
+        if (summary.lastSession) {
+          console.log(`  Last session:     ${summary.lastSession}`);
+        }
+        return;
+      }
+
       if (opts.topic) {
         const topicId = opts.topic.toLowerCase().replace(/\s+/g, "-");
         const summary = getTopicSummary(db, topicId);
@@ -1501,32 +1531,60 @@ program
         if (summary.lastSession) {
           console.log(`  Last session:     ${summary.lastSession}`);
         }
-      } else {
-        // Show all topics
-        const topics = listTopics(db);
+        return;
+      }
 
-        if (topics.length === 0) {
-          warn("No topics found. Run `tutor ingest <topic>` to get started.");
-          return;
-        }
+      const goals = listGoals(db);
+      const topics = listTopics(db);
 
-        header("All Topics");
+      if (goals.length === 0 && topics.length === 0) {
+        warn("No goals or topics found. Run `tutor onboard` or `tutor ingest <topic>` to get started.");
+        return;
+      }
+
+      if (goals.length > 0) {
+        header("Goals");
         console.log(
           chalk.bold(
             "  " +
-              "Topic".padEnd(25) +
+              "Goal".padEnd(36) +
+              "Active".padEnd(12) +
+              "Due".padEnd(6) +
+              "Parked".padEnd(9) +
+              "Last Session",
+          ),
+        );
+        console.log("  " + "-".repeat(82));
+        for (const g of goals) {
+          const summary = getGoalSummary(db, g.id);
+          const label = summary.goalName.length > 34 ? `${summary.goalName.slice(0, 33)}…` : summary.goalName;
+          const activeCell = `${summary.activeObjectives}/${summary.totalConfiguredObjectives}`;
+          const parkedCell = summary.parkedSessionId !== null ? `#${summary.parkedSessionId}` : "-";
+          console.log(
+            `  ${label.padEnd(36)}${activeCell.padEnd(12)}${String(summary.dueCount).padEnd(6)}${parkedCell.padEnd(9)}${summary.lastSession ?? "never"}`,
+          );
+        }
+        console.log();
+      }
+
+      if (topics.length > 0) {
+        header("Content Topics");
+        console.log(
+          chalk.bold(
+            "  " +
+              "Topic".padEnd(36) +
               "Concepts".padEnd(10) +
               "Objectives".padEnd(12) +
               "Due".padEnd(6) +
               "Last Session",
           ),
         );
-        console.log("  " + "-".repeat(70));
-
+        console.log("  " + "-".repeat(82));
         for (const t of topics) {
           const summary = getTopicSummary(db, t.id);
+          const label = summary.topic.length > 34 ? `${summary.topic.slice(0, 33)}…` : summary.topic;
           console.log(
-            `  ${summary.topic.padEnd(25)}${String(summary.totalConcepts).padEnd(10)}${String(summary.totalObjectives).padEnd(12)}${String(summary.dueCount).padEnd(6)}${summary.lastSession ?? "never"}`,
+            `  ${label.padEnd(36)}${String(summary.totalConcepts).padEnd(10)}${String(summary.totalObjectives).padEnd(12)}${String(summary.dueCount).padEnd(6)}${summary.lastSession ?? "never"}`,
           );
         }
       }

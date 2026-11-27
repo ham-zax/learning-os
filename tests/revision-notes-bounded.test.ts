@@ -109,7 +109,7 @@ describe("bounded revision note history", () => {
   it("applies session and episode windows before limiting history, retaining timestamp and tie ordering", () => {
     const { db, sessionId } = historyFixture(30);
     try {
-      const other = db.prepare("INSERT INTO sessions (topic_id, mode, started_at) VALUES (?, 'practice', ?)").run(GOAL_ID, "2026-01-02T00:00:00.000Z");
+      const other = db.prepare("INSERT INTO sessions (goal_id, mode, started_at) VALUES (?, 'practice', ?)").run(GOAL_ID, "2026-01-02T00:00:00.000Z");
       db.prepare("UPDATE attempts SET session_id = ? WHERE id > 10").run(Number(other.lastInsertRowid));
       const session = getRevisionNoteContext(db, { scope: { kind: "session", sessionId }, maxInteractions: 2 });
       expect(session.interactions.map((row) => row.attemptId)).toEqual([10, 9]);

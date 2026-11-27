@@ -473,7 +473,7 @@ After an assessed causal failure:
 6. ask the learner to reconstruct the full model;
 7. return to Learning OS for any later retest/variant/transfer decision.
 
-If the error matches an existing registered misconception definition, assessment may record that misconception ID. If it is a newly observed causal error without a registered misconception definition, record a precise `observedErrors` category instead. Do not invent a persistent misconception definition from conversation.
+If the error matches an existing registered misconception definition or is a newly observed causal error, record it via criterion-scoped `claimObservations` (for example `{"claimId": "transaction-implies-serialization", "criterionId": "concurrent-uniqueness", "disposition": "observed"}`), tying the claim to the exact frozen criterion that exercised it. Never send legacy `observedErrors`, and only mark `"disposition": "cleared"` when a linked criterion is met and no other linked criterion failed on that evidence event.
 
 ### Post-answer technical communication refinement
 

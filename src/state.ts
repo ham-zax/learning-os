@@ -1,8 +1,8 @@
 /**
- * Topic/concept state helpers.
+ * Topic/concept and goal state helpers.
  *
- * Concept metadata is descriptive curriculum state; learner progress and due
- * work come from objective evidence/projections and review cards.
+ * Content topics own curriculum concepts; goals own active learning-objective
+ * memberships, bookmarks, and sessions. Both are reported independently.
  */
 
 import { existsSync } from "node:fs";
@@ -16,14 +16,18 @@ import {
   getConceptsByTopic,
   createConcept,
   createTopic,
+  getGoal,
+  getGoalLastSessionAt,
   getTopic,
+  getTopicLastSessionAt,
 } from "./db/database.js";
-import type { Concept, Topic } from "./db/types.js";
+import type { Concept } from "./db/types.js";
 import { getDueObjectives } from "./scheduler/index.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface TopicSummary {
+  topicId: string;
   topic: string;
   totalConcepts: number;
   totalObjectives: number;
@@ -33,6 +37,23 @@ export interface TopicSummary {
   independent: number;
   dueCount: number;
   overdueCount: number;
+  lastSession: string | null;
+}
+
+export interface GoalSummary {
+  goalId: string;
+  goalName: string;
+  purpose: string;
+  activeObjectives: number;
+  totalConfiguredObjectives: number;
+  unknown: number;
+  exposed: number;
+  guided: number;
+  independent: number;
+  dueCount: number;
+  overdueCount: number;
+  parkedSessionId: number | null;
+  bookmarkNote: string | null;
   lastSession: string | null;
 }
 
@@ -50,7 +71,7 @@ export function getConceptState(
   return concept;
 }
 
-/** Build a read-only objective-level summary for a topic. */
+/** Build a read-only objective-level summary for a content topic. */
 export function getTopicSummary(
   db: Database.Database,
   topicId: string,
@@ -89,26 +110,85 @@ export function getTopicSummary(
   const overdueCount = dueObjectives.filter((due) => due.dueAt < now).length;
 
   return {
+    topicId,
     topic: topic.name,
     totalConcepts,
     totalObjectives,
     ...readiness,
     dueCount,
     overdueCount,
-    lastSession: topic.last_session,
+    lastSession: getTopicLastSessionAt(db, topicId),
+  };
+}
+
+/** Build a read-only summary for a goal across all its active objective memberships. */
+export function getGoalSummary(
+  db: Database.Database,
+  goalId: string,
+): GoalSummary {
+  const goal = getGoal(db, goalId);
+  if (!goal) {
+    throw new Error(`Goal not found: ${goalId}`);
+  }
+
+  const membershipCounts = db
+    .prepare(
+      `SELECT COUNT(*) AS total,
+              COALESCE(SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END), 0) AS active
+       FROM goal_objectives
+       WHERE goal_id = ?`,
+    )
+    .get(goalId) as { total: number; active: number };
+
+  const readinessRows = db
+    .prepare(
+      `SELECT projection.readiness, COUNT(*) AS count
+       FROM objective_projections projection
+       JOIN goal_objectives membership ON membership.objective_id = projection.objective_id
+       WHERE membership.goal_id = ? AND membership.is_active = 1
+       GROUP BY projection.readiness`,
+    )
+    .all(goalId) as Array<{
+    readiness: "unknown" | "exposed" | "guided" | "independent";
+    count: number;
+  }>;
+  const readiness = {
+    unknown: 0,
+    exposed: 0,
+    guided: 0,
+    independent: 0,
+  };
+  for (const row of readinessRows) readiness[row.readiness] = row.count;
+
+  const now = new Date().toISOString();
+  const dueRows = db
+    .prepare(
+      `SELECT card.due_at
+       FROM review_cards card
+       JOIN goal_objectives membership ON membership.objective_id = card.objective_id
+       WHERE membership.goal_id = ? AND membership.is_active = 1 AND card.due_at <= ?`,
+    )
+    .all(goalId, now) as Array<{ due_at: string }>;
+  const dueCount = dueRows.length;
+  const overdueCount = dueRows.filter((row) => row.due_at < now).length;
+
+  return {
+    goalId: goal.id,
+    goalName: goal.name,
+    purpose: goal.purpose,
+    activeObjectives: membershipCounts.active,
+    totalConfiguredObjectives: membershipCounts.total,
+    ...readiness,
+    dueCount,
+    overdueCount,
+    parkedSessionId: goal.parked_session_id,
+    bookmarkNote: goal.bookmark_note,
+    lastSession: getGoalLastSessionAt(db, goalId),
   };
 }
 
 /**
  * Bootstrap a topic from a manifest JSON file.
- *
- * The manifest must contain:
- *   - topicId: string
- *   - topicName: string
- *   - concepts: array of { id, title, difficulty?, prerequisites?, tags?, source?, sourceId? }
- *
- * Creates the topic record (skips if already exists) and creates concept
- * records for each manifest entry that does not yet exist in the DB.
  */
 export function initializeTopic(
   db: Database.Database,
@@ -143,19 +223,20 @@ export function initializeTopic(
   db.transaction(() => {
     if (!getTopic(db, topicId)) createTopic(db, { id: topicId, name: manifest.topicName });
     for (const { entry, filePath } of entries) {
-      // Recheck ownership while holding the write transaction: another process
-      // may have inserted this global ID after the read-only preflight.
       const existing = getConcept(db, entry.id);
-      if (existing && existing.topic_id !== topicId) {
+      if (!existing) {
+        createConcept(db, {
+          id: entry.id,
+          topicId,
+          title: entry.title,
+          difficulty: entry.difficulty,
+          prerequisites: entry.prerequisites,
+          tags: entry.tags,
+        });
+        if (filePath) db.prepare("UPDATE concepts SET file_path = ? WHERE id = ?").run(filePath, entry.id);
+      } else if (existing.topic_id !== topicId) {
         throw new Error(`Concept ID ${entry.id} already belongs to topic ${existing.topic_id}`);
       }
-      if (existing) continue;
-      createConcept(db, {
-        id: entry.id, topicId, title: entry.title, difficulty: entry.difficulty,
-        prerequisites: entry.prerequisites, tags: entry.tags,
-        source: entry.source, sourceId: entry.sourceId,
-      });
-      if (filePath) db.prepare("UPDATE concepts SET file_path = ? WHERE id = ?").run(filePath, entry.id);
     }
   })();
 }

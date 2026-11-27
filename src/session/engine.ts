@@ -17,7 +17,7 @@ import {
   getSession,
   updateSession,
   getConceptsByTopic,
-  updateTopic,
+  resolveGoalIdForTopic,
 } from "../db/database.js";
 import {
   createLearningObjective,
@@ -198,13 +198,11 @@ export function startSession(
   // Select concepts before persisting so unsupported contexts cannot create sessions.
   const concepts = selectConcepts(db, topicId, mode, maxConcepts);
 
-  // Create session record
-  const session = createSession(db, { topicId, mode });
+  // Resolve an existing goal explicitly rather than silently creating a duplicate goal.
+  const goalId = resolveGoalIdForTopic(db, topicId);
 
-  // Update topic's last_session timestamp
-  updateTopic(db, topicId, {
-    last_session: session.started_at ?? new Date().toISOString(),
-  });
+  // Create session record
+  const session = createSession(db, { goalId, mode });
 
   return {
     sessionId: session.id,
@@ -411,7 +409,7 @@ export function endSession(
 
   return {
     sessionId,
-    topicId: session.topic_id,
+    topicId: session.goal_id,
     mode: session.mode,
     challengesAttempted: attemptCounts.challenges_attempted,
     submittedAttempts,

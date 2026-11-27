@@ -170,7 +170,7 @@ describe("adaptive feedback through the teacher boundary", () => {
     const mistaken = assess("incorrect");
     const correction = kernel.reviseEvidence(mistaken.id, { action: "invalidate", reason: "The evaluator misread the response.",
       correctedObjectiveResult: { objectiveId: OBJECTIVE_ID, result: "correct", criteriaMet: ["mechanism"], criteriaUnmet: [],
-        misconceptionsObserved: [], misconceptionsCleared: [], observedErrors: [], rationale: "The distinction was present." } });
+        misconceptionsObserved: [], misconceptionsCleared: [], rationale: "The distinction was present." } });
     expect(kernel.getSessionFeedback(sessionId)).toMatchObject({ nextAction: "complete_feedback",
       objectives: [{ evidenceEventId: correction.replacementEvent!.id, rationale: "The distinction was present." }] });
     expect(kernel.getSessionFeedback(sessionId).objectives).toHaveLength(1);

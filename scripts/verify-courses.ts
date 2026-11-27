@@ -1,13 +1,16 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
+import { CURRENT_SCHEMA_VERSION } from "../src/db/schema.js";
 import { loadCodingCourses } from "../src/knowledge/courses.js";
 import { loadConcept, loadManifest } from "../src/knowledge/loader.js";
 import { resolveConceptFile } from "../src/knowledge/resolve-concept-file.js";
 import { resolveContainedPath } from "../src/knowledge/safe-path.js";
 import { getScaffoldMaterial, listScaffoldPacks } from "../src/knowledge/scaffolds.js";
 import { validateManifest } from "../src/knowledge/validator.js";
+import { callLearningOsTool } from "../src/mcp/tools.js";
 import { loadKnowledgeCatalog } from "../src/onboarding/catalog.js";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -25,6 +28,16 @@ function verifyManagedProfilePaths(): number {
 
     const db = new Database(dbPath, { readonly: true });
     try {
+      const schemaVersion = db.pragma("user_version", { simple: true }) as number;
+      if (schemaVersion !== CURRENT_SCHEMA_VERSION) {
+        throw new Error(
+          `Profile ${entry.name} uses schema v${schemaVersion}; expected v${CURRENT_SCHEMA_VERSION}.`,
+        );
+      }
+      const fkErrors = db.pragma("foreign_key_check") as unknown[];
+      if (fkErrors.length > 0) {
+        throw new Error(`Profile ${entry.name} failed PRAGMA foreign_key_check (${fkErrors.length} violation(s)).`);
+      }
       const rows = db
         .prepare("SELECT id, topic_id, file_path FROM concepts WHERE file_path IS NOT NULL")
         .all() as Array<{ id: string; topic_id: string; file_path: string }>;
@@ -43,6 +56,29 @@ function verifyManagedProfilePaths(): number {
             `Profile ${entry.name} concept ${row.id} file_path does not resolve: ${row.file_path}`,
           );
         }
+      }
+      const goals = db
+        .prepare("SELECT id FROM goals ORDER BY id")
+        .all() as Array<{ id: string }>;
+      if (goals.length === 0) {
+        throw new Error(`Profile ${entry.name} has no goals configured.`);
+      }
+      const smokeDir = mkdtempSync(join(tmpdir(), "learning-os-verify-profile-"));
+      try {
+        const smokeDbPath = join(smokeDir, "tutor.db");
+        copyFileSync(dbPath, smokeDbPath);
+        for (const goal of goals) {
+          const next = callLearningOsTool(
+            "study_next",
+            { dbPath: smokeDbPath, goalId: goal.id, oneEpisode: true },
+            { knowledgeRoot },
+          ) as { continuation?: { kind?: string } };
+          if (!next.continuation || !["resume", "recommend", "no_action"].includes(String(next.continuation.kind))) {
+            throw new Error(`Profile ${entry.name} goal ${goal.id} study_next returned unexpected state.`);
+          }
+        }
+      } finally {
+        rmSync(smokeDir, { recursive: true, force: true });
       }
       checked += 1;
     } finally {

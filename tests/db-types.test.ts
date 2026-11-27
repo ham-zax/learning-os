@@ -21,7 +21,6 @@ describe('Database Types (Zod Schemas)', () => {
         goal: null,
         deadline: null,
         created_at: '2026-06-07',
-        last_session: null,
       })
       expect(topic.id).toBe('git-basics')
       expect(topic.name).toBe('Git Basics')
@@ -75,7 +74,7 @@ describe('Database Types (Zod Schemas)', () => {
     it('applies current lifecycle defaults', () => {
       const session = SessionSchema.parse({
         id: 1,
-        topic_id: 'git-basics',
+        goal_id: 'git-basics',
         mode: 'learn',
       })
       expect(session.phase).toBe('idle')

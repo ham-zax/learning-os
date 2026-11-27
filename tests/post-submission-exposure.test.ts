@@ -138,7 +138,6 @@ describe("post-submission exposure causality", () => {
           criteriaUnmet: [],
           misconceptionsObserved: [],
           misconceptionsCleared: [],
-          observedErrors: [],
           rationale: "Corrected grade.",
         },
       });

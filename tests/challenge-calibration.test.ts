@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { createConcept, createDatabase, createTopic, setGoalObjective } from "../src/db/database.js";
+import { createConcept, createDatabase, createGoal, createTopic, setGoalObjective } from "../src/db/database.js";
 import { buildCalibratedAsyncPredictChallenge, loadAsyncPredictCalibration } from "../src/knowledge/challenge-calibration.js";
 import { codingCourseFile } from "../src/knowledge/courses.js";
 import { createTeacherKernel } from "../src/teacher.js";
@@ -33,6 +33,7 @@ describe("calibrated js-async-await prediction examples", () => {
     const db = createDatabase(":memory:");
     try {
       createTopic(db, { id: "goal", name: "Frontend revision" });
+      createGoal(db, { id: "goal", name: "Frontend revision", purpose: "interview" });
       createConcept(db, { id: "js-async-await", topicId: "goal", title: "async/await" });
       const kernel = createTeacherKernel(db);
       kernel.createLearningObjective({ id: "imported-async-predict", conceptId: "js-async-await", capabilityId: "predict" });
@@ -72,7 +73,7 @@ describe("calibrated js-async-await prediction examples", () => {
       const sessionId = kernel.createSession("goal", intent.deliveryContext).id;
       const attemptId = kernel.openAttempt(built.challenge.id, 1, sessionId).attempt.id;
       kernel.submitAttempt(attemptId, { responseText: "inside-start, outside, inside-end; task suspends at await." });
-      const assessment = { evaluatorType: "agent" as const, assessmentBasis: "deterministic_execution" as const,
+      const assessment = { evaluatorType: "agent" as const, assessmentBasis: "mixed" as const,
         objectiveResults: [{ objectiveId: intent.objectiveId, result: "correct" as const,
           criteriaMet: ["output_order", "suspension_boundary"], rationale: "Correct order and suspension boundary." }] };
       expect(() => kernel.recordAssessment(attemptId, assessment)).toThrow(/verification output/);

@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import {
   createConcept,
   createDatabase,
+  createGoal,
   createSession,
   createTopic,
   setGoalObjective,
@@ -26,6 +27,14 @@ export interface KernelFixture {
 export function createKernelFixture(dbPath = ":memory:"): KernelFixture {
   const db = createDatabase(dbPath);
   createTopic(db, { id: GOAL_ID, name: "Goal" });
+  createGoal(db, {
+    id: GOAL_ID,
+    name: "Goal",
+    purpose: "interview",
+    minutesPerDay: 30,
+    daysPerWeek: 5,
+    confirmedAt: "2026-08-30T00:00:00.000Z",
+  });
   createConcept(db, { id: CONCEPT_ID, topicId: GOAL_ID, title: "Concept" });
   createLearningObjective(db, {
     id: OBJECTIVE_ID,
@@ -37,13 +46,6 @@ export function createKernelFixture(dbPath = ":memory:"): KernelFixture {
     objectiveId: OBJECTIVE_ID,
     importance: "core",
     targetReadiness: "guided",
-  });
-  setGoalPreparation(db, {
-    goalId: GOAL_ID,
-    purpose: "interview",
-    minutesPerDay: 30,
-    daysPerWeek: 5,
-    confirmedAt: "2026-08-30T00:00:00.000Z",
   });
   registerChallenge(db, {
     id: CHALLENGE_ID,

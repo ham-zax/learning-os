@@ -12,6 +12,7 @@ import Database from "better-sqlite3";
 import {
   GoalObjectiveSchema,
   GoalPreparationSchema,
+  GoalSchema,
   InteractionInputMode,
   QuestionChunking,
   PracticalWorkPreference,
@@ -20,6 +21,7 @@ import {
 } from "./types.js";
 import type {
   Topic,
+  Goal,
   Concept,
   Session,
   SyncedGap,
@@ -241,15 +243,295 @@ export function listTopics(db: Database.Database): Topic[] {
 export function updateTopic(
   db: Database.Database,
   id: string,
-  updates: Partial<Pick<Topic, "name" | "goal" | "deadline" | "last_session">>,
+  updates: Partial<Pick<Topic, "name" | "goal" | "deadline">>,
 ): void {
-  const allowed = ["name", "goal", "deadline", "last_session"] as const;
+  const allowed = ["name", "goal", "deadline"] as const;
   const entries = Object.entries(updates).filter(([k]) =>
     (allowed as readonly string[]).includes(k),
   );
   if (entries.length === 0) return;
   const sets = entries.map(([k]) => `${k} = @${k}`).join(", ");
   db.prepare(`UPDATE topics SET ${sets} WHERE id = @id`).run({ id, ...Object.fromEntries(entries) });
+}
+
+// ─── CRUD: Goals & Bookmarks ──────────────────────────────────────────────
+
+export interface CreateGoalInput {
+  id: string;
+  name: string;
+  target?: string | null;
+  deadline?: string | null;
+  purpose?: PreparationPurpose;
+  targetRole?: string | null;
+  targetOutcome?: string | null;
+  minutesPerDay?: number | null;
+  daysPerWeek?: number | null;
+  minutesPerWeek?: number | null;
+  confirmedAt?: string;
+}
+
+export interface GoalBookmark {
+  goalId: string;
+  note: string | null;
+  nextMove: string | null;
+  parkedSessionId: number | null;
+  updatedAt: string | null;
+}
+
+export interface SetGoalBookmarkInput {
+  note?: string | null;
+  nextMove?: string | null;
+  parkedSessionId?: number | null;
+}
+
+function validateGoalScheduleFields(input: {
+  minutesPerDay?: number | null;
+  daysPerWeek?: number | null;
+  minutesPerWeek?: number | null;
+}): void {
+  for (const [label, value] of [
+    ["minutesPerDay", input.minutesPerDay],
+    ["minutesPerWeek", input.minutesPerWeek],
+  ] as const) {
+    if (value !== undefined && value !== null && (!Number.isInteger(value) || value <= 0)) {
+      throw new Error(`${label} must be a positive integer when provided`);
+    }
+  }
+  if (
+    input.daysPerWeek !== undefined &&
+    input.daysPerWeek !== null &&
+    (!Number.isInteger(input.daysPerWeek) || input.daysPerWeek < 1 || input.daysPerWeek > 7)
+  ) {
+    throw new Error("daysPerWeek must be an integer from 1 to 7 when provided");
+  }
+}
+
+export function createGoal(
+  db: Database.Database,
+  input: CreateGoalInput,
+): Goal {
+  validateGoalScheduleFields(input);
+  const now = new Date().toISOString();
+  const confirmedAtRaw = input.confirmedAt ?? now;
+  const confirmedAt = new Date(confirmedAtRaw);
+  if (Number.isNaN(confirmedAt.getTime())) {
+    throw new Error(`Invalid goal confirmation time: ${confirmedAtRaw}`);
+  }
+  db.prepare(
+    `INSERT INTO goals (
+       id, name, target, deadline, purpose, target_role, target_outcome,
+       minutes_per_day, days_per_week, minutes_per_week,
+       confirmed_at, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    input.id,
+    input.name,
+    input.target ?? null,
+    input.deadline ?? null,
+    input.purpose ?? "interview",
+    input.targetRole ?? null,
+    input.targetOutcome ?? null,
+    input.minutesPerDay ?? null,
+    input.daysPerWeek ?? null,
+    input.minutesPerWeek ?? null,
+    confirmedAt.toISOString(),
+    now,
+    now,
+  );
+  return getGoal(db, input.id)!;
+}
+
+export function getGoal(
+  db: Database.Database,
+  id: string,
+): Goal | undefined {
+  const row = db.prepare(`SELECT * FROM goals WHERE id = ?`).get(id);
+  return row === undefined ? undefined : GoalSchema.parse(row);
+}
+
+export function listGoals(db: Database.Database): Goal[] {
+  const rows = db.prepare(`SELECT * FROM goals ORDER BY confirmed_at DESC, id`).all();
+  return GoalSchema.array().parse(rows);
+}
+
+export function resolveGoalIdForTopic(
+  db: Database.Database,
+  topicId: string,
+): string {
+  const direct = getGoal(db, topicId);
+  if (direct) return direct.id;
+
+  const matchingGoals = db
+    .prepare(
+      `SELECT DISTINCT membership.goal_id
+       FROM goal_objectives membership
+       JOIN learning_objectives objective ON objective.id = membership.objective_id
+       JOIN concepts concept ON concept.id = objective.concept_id
+       WHERE concept.topic_id = ? AND membership.is_active = 1
+       ORDER BY membership.goal_id`,
+    )
+    .all(topicId) as Array<{ goal_id: string }>;
+  if (matchingGoals.length === 1) return matchingGoals[0]!.goal_id;
+  if (matchingGoals.length > 1) {
+    throw new Error(
+      `Multiple goals cover topic ${topicId} (${matchingGoals.map((g) => g.goal_id).join(", ")}); specify goalId explicitly.`,
+    );
+  }
+
+  const allGoals = listGoals(db);
+  if (allGoals.length === 1) return allGoals[0]!.id;
+  if (allGoals.length > 1) {
+    throw new Error(
+      `Multiple goals exist (${allGoals.map((g) => g.id).join(", ")}); specify goalId explicitly.`,
+    );
+  }
+
+  throw new Error(
+    `No goal found for topic ${topicId}. Create or onboard a goal first before opening a session.`,
+  );
+}
+
+export function getGoalBookmark(
+  db: Database.Database,
+  goalId: string,
+): GoalBookmark {
+  const goal = getGoal(db, goalId);
+  if (!goal) {
+    throw new Error(`Goal not found: ${goalId}`);
+  }
+  return {
+    goalId: goal.id,
+    note: goal.bookmark_note,
+    nextMove: goal.bookmark_next_move,
+    parkedSessionId: goal.parked_session_id,
+    updatedAt: goal.bookmark_updated_at,
+  };
+}
+
+export function setGoalBookmark(
+  db: Database.Database,
+  goalId: string,
+  input: SetGoalBookmarkInput,
+): GoalBookmark {
+  const goal = getGoal(db, goalId);
+  if (!goal) {
+    throw new Error(`Goal not found: ${goalId}`);
+  }
+  const nextParkedSessionId =
+    input.parkedSessionId !== undefined ? input.parkedSessionId : goal.parked_session_id;
+  if (nextParkedSessionId !== null) {
+    const session = getSession(db, nextParkedSessionId);
+    if (!session) {
+      throw new Error(`Parked session not found: ${nextParkedSessionId}`);
+    }
+    if (session.goal_id !== goalId) {
+      throw new Error(`Session ${nextParkedSessionId} does not belong to goal ${goalId}`);
+    }
+    if (session.phase === "complete") {
+      throw new Error(`Cannot park completed session ${nextParkedSessionId}`);
+    }
+    if (session.reconstruction_status === "required") {
+      throw new Error(
+        `Cannot park session ${nextParkedSessionId}: learner reconstruction is required`,
+      );
+    }
+    if (session.phase !== "awaiting_response" || session.pending_action !== "collect_response") {
+      throw new Error(
+        `Cannot park session ${nextParkedSessionId}: only unsubmitted sessions awaiting a response can be parked (current phase=${session.phase}, pending_action=${session.pending_action})`,
+      );
+    }
+    const submittedUnfinished = db
+      .prepare(
+        `SELECT a.id
+         FROM attempts a
+         LEFT JOIN challenge_attempt_dispositions d ON d.attempt_id = a.id
+         WHERE a.session_id = ? AND a.submitted_at IS NOT NULL AND d.attempt_id IS NULL
+         LIMIT 1`,
+      )
+      .get(nextParkedSessionId) as { id: number } | undefined;
+    if (submittedUnfinished) {
+      throw new Error(
+        `Cannot park session ${nextParkedSessionId}: attempt ${submittedUnfinished.id} is already submitted and must finish verification/assessment`,
+      );
+    }
+    if (session.active_attempt_id !== null) {
+      const activeAttempt = db
+        .prepare(`SELECT submitted_at FROM attempts WHERE id = ?`)
+        .get(session.active_attempt_id) as { submitted_at: string | null } | undefined;
+      if (activeAttempt?.submitted_at !== null) {
+        throw new Error(
+          `Cannot park session ${nextParkedSessionId}: active attempt ${session.active_attempt_id} is already submitted`,
+        );
+      }
+    }
+  }
+  const nextNote = input.note !== undefined ? (input.note?.trim() || null) : goal.bookmark_note;
+  const nextMove =
+    input.nextMove !== undefined ? (input.nextMove?.trim() || null) : goal.bookmark_next_move;
+  const now = new Date().toISOString();
+  db.prepare(
+    `UPDATE goals
+     SET bookmark_note = ?,
+         bookmark_next_move = ?,
+         parked_session_id = ?,
+         bookmark_updated_at = ?,
+         updated_at = ?
+     WHERE id = ?`,
+  ).run(nextNote, nextMove, nextParkedSessionId, now, now, goalId);
+  return getGoalBookmark(db, goalId);
+}
+
+export function clearGoalParkedSession(
+  db: Database.Database,
+  goalId: string,
+  sessionId?: number,
+): void {
+  const now = new Date().toISOString();
+  if (sessionId !== undefined) {
+    db.prepare(
+      `UPDATE goals
+       SET parked_session_id = NULL,
+           bookmark_updated_at = ?,
+           updated_at = ?
+       WHERE id = ? AND parked_session_id = ?`,
+    ).run(now, now, goalId, sessionId);
+  } else {
+    db.prepare(
+      `UPDATE goals
+       SET parked_session_id = NULL,
+           bookmark_updated_at = ?,
+           updated_at = ?
+       WHERE id = ? AND parked_session_id IS NOT NULL`,
+    ).run(now, now, goalId);
+  }
+}
+
+export function getGoalLastSessionAt(db: Database.Database, goalId: string): string | null {
+  const row = db
+    .prepare(
+      `SELECT MAX(COALESCE(ended_at, started_at)) AS last_session
+       FROM sessions
+       WHERE goal_id = ?`,
+    )
+    .get(goalId) as { last_session: string | null } | undefined;
+  return row?.last_session ?? null;
+}
+
+export function getTopicLastSessionAt(db: Database.Database, topicId: string): string | null {
+  const row = db
+    .prepare(
+      `SELECT MAX(COALESCE(session.ended_at, session.started_at)) AS last_session
+       FROM sessions session
+       JOIN attempts attempt ON attempt.session_id = session.id
+       JOIN challenge_targets target
+         ON target.challenge_id = attempt.challenge_id
+        AND target.version = attempt.challenge_version
+       JOIN learning_objectives objective ON objective.id = target.objective_id
+       JOIN concepts concept ON concept.id = objective.concept_id
+       WHERE concept.topic_id = ?`,
+    )
+    .get(topicId) as { last_session: string | null } | undefined;
+  return row?.last_session ?? null;
 }
 
 // ─── CRUD: Goal objectives ─────────────────────────────────────────────────
@@ -270,8 +552,8 @@ export function setGoalObjective(
   db: Database.Database,
   input: SetGoalObjectiveInput,
 ): GoalObjective {
-  if (!getTopic(db, input.goalId)) {
-    throw new Error(`Goal topic not found: ${input.goalId}`);
+  if (!getGoal(db, input.goalId)) {
+    throw new Error(`Goal not found: ${input.goalId}`);
   }
 
   const objectiveExists = db
@@ -369,6 +651,9 @@ export function getGoalObjectives(
 
 export interface SetGoalPreparationInput {
   goalId: string;
+  name?: string;
+  target?: string | null;
+  deadline?: string | null;
   purpose: PreparationPurpose;
   targetRole?: string | null;
   targetOutcome?: string | null;
@@ -382,32 +667,32 @@ export function setGoalPreparation(
   db: Database.Database,
   input: SetGoalPreparationInput,
 ): GoalPreparation {
-  if (!getTopic(db, input.goalId)) {
-    throw new Error(`Goal topic not found: ${input.goalId}`);
+  const existingGoal = getGoal(db, input.goalId);
+  const existingTopic = existingGoal ? undefined : getTopic(db, input.goalId);
+  if (!existingGoal && !existingTopic && !input.name) {
+    throw new Error(`Goal not found: ${input.goalId}`);
   }
   const confirmedAt = new Date(input.confirmedAt);
   if (Number.isNaN(confirmedAt.getTime())) {
     throw new Error(`Invalid onboarding confirmation time: ${input.confirmedAt}`);
   }
-  for (const [label, value] of [
-    ["minutesPerDay", input.minutesPerDay],
-    ["minutesPerWeek", input.minutesPerWeek],
-  ] as const) {
-    if (value !== undefined && value !== null && (!Number.isInteger(value) || value <= 0)) {
-      throw new Error(`${label} must be a positive integer when provided`);
-    }
-  }
-  if (
-    input.daysPerWeek !== undefined &&
-    input.daysPerWeek !== null &&
-    (!Number.isInteger(input.daysPerWeek) || input.daysPerWeek < 1 || input.daysPerWeek > 7)
-  ) {
-    throw new Error("daysPerWeek must be an integer from 1 to 7 when provided");
-  }
+  validateGoalScheduleFields(input);
   const now = new Date().toISOString();
+  const name = input.name ?? existingGoal?.name ?? existingTopic?.name ?? input.goalId;
+  const target =
+    input.target !== undefined
+      ? input.target
+      : existingGoal?.target ?? existingTopic?.goal ?? null;
+  const deadline =
+    input.deadline !== undefined
+      ? input.deadline
+      : existingGoal?.deadline ?? existingTopic?.deadline ?? null;
   db.prepare(
-    `INSERT INTO goal_preparation (
-       goal_id,
+    `INSERT INTO goals (
+       id,
+       name,
+       target,
+       deadline,
        purpose,
        target_role,
        target_outcome,
@@ -417,8 +702,11 @@ export function setGoalPreparation(
        confirmed_at,
        created_at,
        updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(goal_id) DO UPDATE SET
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       name = excluded.name,
+       target = excluded.target,
+       deadline = excluded.deadline,
        purpose = excluded.purpose,
        target_role = excluded.target_role,
        target_outcome = excluded.target_outcome,
@@ -429,6 +717,9 @@ export function setGoalPreparation(
        updated_at = excluded.updated_at`,
   ).run(
     input.goalId,
+    name,
+    target,
+    deadline,
     input.purpose,
     input.targetRole ?? null,
     input.targetOutcome ?? null,
@@ -446,8 +737,20 @@ export function getGoalPreparation(
   db: Database.Database,
   goalId: string,
 ): GoalPreparation | undefined {
-  const row = db.prepare(`SELECT * FROM goal_preparation WHERE goal_id = ?`).get(goalId);
-  return row === undefined ? undefined : GoalPreparationSchema.parse(row);
+  const goal = getGoal(db, goalId);
+  if (!goal) return undefined;
+  return GoalPreparationSchema.parse({
+    goal_id: goal.id,
+    purpose: goal.purpose,
+    target_role: goal.target_role,
+    target_outcome: goal.target_outcome,
+    minutes_per_day: goal.minutes_per_day,
+    days_per_week: goal.days_per_week,
+    minutes_per_week: goal.minutes_per_week,
+    confirmed_at: goal.confirmed_at,
+    created_at: goal.created_at,
+    updated_at: goal.updated_at,
+  });
 }
 
 export interface SetGoalStudyFocusInput {
@@ -740,28 +1043,35 @@ export function updateConcept(
 
 export function createSession(
   db: Database.Database,
-  input: { topicId: string; mode: DeliveryContext; practicalWork?: PracticalWorkPreference },
+  input: { goalId?: string; topicId?: string; mode: DeliveryContext; practicalWork?: PracticalWorkPreference },
 ): Session {
+  const resolvedGoalId = input.goalId ?? input.topicId;
+  if (!resolvedGoalId) {
+    throw new Error("createSession requires goalId");
+  }
   // Validate shell/agent inputs before any durable write, including untyped callers.
-  SessionSchema.pick({ topic_id: true, mode: true, practical_work: true }).parse({
-    topic_id: input.topicId,
+  SessionSchema.pick({ goal_id: true, mode: true, practical_work: true }).parse({
+    goal_id: resolvedGoalId,
     mode: input.mode,
     practical_work: input.practicalWork === undefined ? null : input.practicalWork,
   });
+  if (!getGoal(db, resolvedGoalId)) {
+    throw new Error(`Goal not found: ${resolvedGoalId}`);
+  }
   const practicalWork = input.practicalWork === undefined
     ? null : PracticalWorkPreference.parse(input.practicalWork);
   const requiredRepair = db
     .prepare(
       `SELECT id
        FROM sessions
-       WHERE topic_id = ?
+       WHERE goal_id = ?
          AND phase = 'feedback'
          AND pending_action = 'present_feedback'
          AND reconstruction_status = 'required'
        ORDER BY COALESCE(started_at, '') DESC, id DESC
        LIMIT 1`,
     )
-    .get(input.topicId) as { id: number } | undefined;
+    .get(resolvedGoalId) as { id: number } | undefined;
   if (requiredRepair) {
     throw new Error(
       `Session ${requiredRepair.id} requires learner reconstruction or explicit opt-out before another session can start`,
@@ -771,11 +1081,11 @@ export function createSession(
   const now = new Date().toISOString();
   const info = db
     .prepare(
-      `INSERT INTO sessions (topic_id, mode, started_at, practical_work)
-       VALUES (@topic_id, @mode, @started_at, @practical_work)`,
+      `INSERT INTO sessions (goal_id, mode, started_at, practical_work)
+       VALUES (@goal_id, @mode, @started_at, @practical_work)`,
     )
     .run({
-      topic_id: input.topicId,
+      goal_id: resolvedGoalId,
       mode: input.mode,
       started_at: now,
       practical_work: practicalWork,

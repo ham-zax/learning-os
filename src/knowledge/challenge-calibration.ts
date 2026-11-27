@@ -215,6 +215,7 @@ export function buildCalibratedPredictionChallenge(input: BuildCalibratedChallen
     rubric: { id: `${input.challengeId}-rubric`, version: input.version ?? 1,
       criteria: item.criteria.map((criterion) => ({ ...criterion, objectiveId: intent.objectiveId })) },
     verification: { required: true, basis: "deterministic_execution" },
+    gradingBasis: "mixed",
     privateSolutionRef: `knowledge/${config.course}/${config.directory}/calibration.json`,
   });
   return { challenge, calibration: {

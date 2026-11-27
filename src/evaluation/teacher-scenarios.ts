@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createDatabase, createConcept, createTopic, setGoalObjective } from "../db/database.js";
+import { createDatabase, createConcept, createGoal, createTopic, setGoalObjective } from "../db/database.js";
 import { buildCalibratedPredictionChallenge, findCalibratedPredictionCase,
   loadCalibratedPredictionPack } from "../knowledge/challenge-calibration.js";
 import type { CalibratedPredictionPackId } from "../knowledge/challenge-calibration.js";
@@ -429,6 +429,7 @@ function prepareCalibratedScenario(
   const conceptId = pack.objective.conceptId;
   const objectiveId = `${conceptId}:predict`;
   createTopic(db, { id: GOAL_ID, name: "Synthetic calibrated teacher evaluation" });
+  createGoal(db, { id: GOAL_ID, name: "Synthetic calibrated teacher evaluation", purpose: "interview" });
   createConcept(db, { id: conceptId, topicId: GOAL_ID, title: conceptId });
   const kernel = createTeacherKernel(db, { knowledgeRoot: KNOWLEDGE_ROOT });
   kernel.createLearningObjective({ id: objectiveId, conceptId, capabilityId: "predict" });
@@ -494,6 +495,7 @@ export function prepareTeacherScenario(id: TeacherScenarioId, dbPath: string): P
       return prepareCalibratedScenario(db, id);
     }
     createTopic(db, { id: GOAL_ID, name: "Synthetic teacher evaluation" });
+    createGoal(db, { id: GOAL_ID, name: "Synthetic teacher evaluation", purpose: "interview" });
     createConcept(db, { id: "async-prefix", topicId: GOAL_ID, title: "Async call execution" });
     const kernel = createTeacherKernel(db);
     kernel.createLearningObjective({ id: OBJECTIVE_ID, conceptId: "async-prefix", capabilityId: "explain" });

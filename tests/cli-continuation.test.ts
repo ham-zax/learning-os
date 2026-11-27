@@ -80,6 +80,8 @@ describe("continue CLI", () => {
       goalId: GOAL_ID,
       suggestedMinutes: 30,
       practicalWork: { preference: "ask_first", source: "default" },
+      bookmark: null,
+      allowedActions: ["set_budget_or_one_episode"],
     });
   });
 
@@ -106,15 +108,15 @@ describe("continue CLI", () => {
     const result = runContinue("--json");
     const continuation = JSON.parse(result.stdout) as {
       kind: string;
-      session: { session: { id: number }; pendingAction: string };
+      commitment: { sessionId: number; pendingAction: string };
     };
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     expect(continuation).toMatchObject({
       kind: "resume",
-      session: {
-        session: { id: sessionId },
+      commitment: {
+        sessionId,
         pendingAction: "collect_response",
       },
     });

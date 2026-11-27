@@ -3,10 +3,10 @@ import { join } from "node:path";
 import type Database from "better-sqlite3";
 import {
   getActiveGoalStudyFocusEpisode,
+  getGoal,
   getGoalObjectives,
   getGoalPreparation,
   getInteractionPreferences,
-  getTopic,
 } from "../db/database.js";
 import { PracticalWorkPreference } from "../db/types.js";
 import type {
@@ -313,14 +313,17 @@ function deriveAutoRetestWeaknessKeys(
 ): string[] {
   const nowMs = Date.parse(now);
   const eligible: string[] = [];
-  const misconceptionObsStmt = db.prepare(
+  const claimObsStmt = db.prepare(
     `SELECT observation.disposition,
+            evidence.task_id,
+            evidence.task_version,
+            evidence.retrieval_valid,
             evidence.performed_at AS source_performed_at,
             evidence.seq AS source_event_seq
-     FROM misconception_observations observation
+     FROM claim_observations observation
      JOIN evidence_events evidence ON evidence.id = observation.evidence_event_id
      WHERE observation.objective_id = ?
-       AND observation.misconception_id = ?
+       AND observation.claim_id = ?
        AND COALESCE((
          SELECT revision.action
          FROM evidence_revisions revision
@@ -338,66 +341,49 @@ function deriveAutoRetestWeaknessKeys(
     if (resolved.length === 0) continue;
 
     const objectiveId = state.config.objective_id;
-    const events = getEffectiveEvidenceEventsByObjective(db, objectiveId);
     for (const weakness of resolved) {
-      if (weakness.category.startsWith("error:")) {
-        const errorCat = weakness.category.slice("error:".length);
-        let lastOccurrenceIdx = -1;
-        for (let i = events.length - 1; i >= 0; i -= 1) {
-          if (events[i]!.observed_errors_json.includes(errorCat)) {
-            lastOccurrenceIdx = i;
-            break;
-          }
-        }
-        if (lastOccurrenceIdx === -1) continue;
-        const laterCorrect = events
-          .slice(lastOccurrenceIdx + 1)
-          .filter((event) => event.result === "correct");
-        const distinctTasks = new Set(
-          laterCorrect.map((event) => `${event.task_id}@${event.task_version}`),
-        );
-        const lastResolved = laterCorrect.at(-1);
-        if (
-          lastResolved &&
-          (distinctTasks.size <= 1 || !lastResolved.retrieval_valid) &&
-          nowMs - Date.parse(lastResolved.performed_at) >= AUTO_RETEST_DELAY_MS
-        ) {
-          eligible.push(weakness.key);
-        }
+      let claimId: string | null = null;
+      if (weakness.category.startsWith("claim:")) {
+        claimId = weakness.category.slice("claim:".length);
       } else if (weakness.category.startsWith("misconception:")) {
-        const misconceptionId = weakness.category.slice("misconception:".length);
-        const obs = misconceptionObsStmt.all(objectiveId, misconceptionId) as Array<{
-          disposition: "observed" | "cleared";
-          source_performed_at: string;
-          source_event_seq: number;
-        }>;
-        const latest = obs.at(-1);
-        if (!latest || latest.disposition !== "cleared") continue;
-        let lastObserved: { source_performed_at: string; source_event_seq: number } | undefined;
-        for (let i = obs.length - 1; i >= 0; i -= 1) {
-          if (obs[i]!.disposition === "observed") {
-            lastObserved = obs[i];
-            break;
-          }
+        claimId = weakness.category.slice("misconception:".length);
+      }
+      if (!claimId) continue;
+
+      const obs = claimObsStmt.all(objectiveId, claimId) as Array<{
+        disposition: "observed" | "cleared";
+        task_id: string;
+        task_version: number;
+        retrieval_valid: number;
+        source_performed_at: string;
+        source_event_seq: number;
+      }>;
+      const latest = obs.at(-1);
+      if (!latest || latest.disposition !== "cleared") continue;
+
+      let lastObservedIdx = -1;
+      for (let i = obs.length - 1; i >= 0; i -= 1) {
+        if (obs[i]!.disposition === "observed") {
+          lastObservedIdx = i;
+          break;
         }
-        if (!lastObserved) continue;
-        const laterCorrect = events.filter(
-          (event) =>
-            event.result === "correct" &&
-            (event.performed_at > lastObserved!.source_performed_at ||
-              (event.performed_at === lastObserved!.source_performed_at &&
-                event.seq > lastObserved!.source_event_seq)),
-        );
-        const distinctTasks = new Set(
-          laterCorrect.map((event) => `${event.task_id}@${event.task_version}`),
-        );
-        const lastResolved = laterCorrect.at(-1);
-        if (
-          (distinctTasks.size <= 1 || !lastResolved?.retrieval_valid) &&
-          nowMs - Date.parse(latest.source_performed_at) >= AUTO_RETEST_DELAY_MS
-        ) {
-          eligible.push(weakness.key);
-        }
+      }
+      if (lastObservedIdx === -1) continue;
+
+      // Count only claim-linked cleared observations on distinct tasks after the last observation.
+      const clearedAfter = obs
+        .slice(lastObservedIdx + 1)
+        .filter((entry) => entry.disposition === "cleared");
+      const distinctTasks = new Set(
+        clearedAfter.map((entry) => `${entry.task_id}@${entry.task_version}`),
+      );
+      const lastCleared = clearedAfter.at(-1);
+      if (
+        lastCleared &&
+        (distinctTasks.size <= 1 || lastCleared.retrieval_valid !== 1) &&
+        nowMs - Date.parse(lastCleared.source_performed_at) >= AUTO_RETEST_DELAY_MS
+      ) {
+        eligible.push(weakness.key);
       }
     }
   }
@@ -876,8 +862,8 @@ export function resolveRequestedChallenge(
     throw new Error("recentChallengeLimit must be a non-negative integer");
   }
   const now = normalizeInstant(input.now, "requested challenge time");
-  const topic = getTopic(db, input.goalId);
-  if (!topic) throw new Error(`Goal topic not found: ${input.goalId}`);
+  const goal = getGoal(db, input.goalId);
+  if (!goal) throw new Error(`Goal not found: ${input.goalId}`);
   const config = getGoalObjectives(db, input.goalId).find(
     (candidate) => candidate.objective_id === input.objectiveId,
   );
@@ -899,7 +885,7 @@ export function resolveRequestedChallenge(
       [
         candidateFor(
           state,
-          deadlineUrgency(normalizeDeadline(topic.deadline), now),
+          deadlineUrgency(normalizeDeadline(goal.deadline), now),
           eligibleRetestKeys,
         ),
       ],
@@ -944,11 +930,11 @@ export function getTodayMission(
   }
 
   const now = normalizeInstant(input.now, "mission time");
-  const topic = getTopic(db, input.goalId);
-  if (!topic) {
-    throw new Error(`Goal topic not found: ${input.goalId}`);
+  const goal = getGoal(db, input.goalId);
+  if (!goal) {
+    throw new Error(`Goal not found: ${input.goalId}`);
   }
-  const deadlineAt = normalizeDeadline(topic.deadline);
+  const deadlineAt = normalizeDeadline(goal.deadline);
   const allGoalObjectives = getGoalObjectives(db, input.goalId, { includeInactive: true });
   const goalObjectives = allGoalObjectives.filter((config) => config.is_active);
   const loadedStates = goalObjectives.map((config) => loadGoalObjectiveState(db, config));
@@ -1347,7 +1333,7 @@ export function getTodayMission(
 
   const result = {
     goalId: input.goalId,
-    goal: topic.goal,
+    goal: goal.target,
     deadlineAt,
     generatedAt: now,
     items,

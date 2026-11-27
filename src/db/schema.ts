@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 23;
+export const CURRENT_SCHEMA_VERSION = 24;
 
 export const CURRENT_SCHEMA_SQL = String.raw`
 CREATE TABLE topics (
@@ -6,8 +6,27 @@ CREATE TABLE topics (
     name        TEXT NOT NULL,
     goal        TEXT,
     deadline    TEXT,
-    created_at  TEXT,
-    last_session TEXT
+    created_at  TEXT
+  );
+CREATE TABLE goals (
+    id                  TEXT PRIMARY KEY,
+    name                TEXT NOT NULL,
+    target              TEXT,
+    deadline            TEXT,
+    purpose             TEXT NOT NULL DEFAULT 'interview'
+      CHECK (purpose IN ('interview', 'role_readiness', 'long_term_mastery')),
+    target_role         TEXT,
+    target_outcome      TEXT,
+    minutes_per_day     INTEGER CHECK (minutes_per_day IS NULL OR minutes_per_day > 0),
+    days_per_week       INTEGER CHECK (days_per_week IS NULL OR (days_per_week BETWEEN 1 AND 7)),
+    minutes_per_week    INTEGER CHECK (minutes_per_week IS NULL OR minutes_per_week > 0),
+    bookmark_note       TEXT,
+    bookmark_next_move  TEXT,
+    parked_session_id   INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+    bookmark_updated_at TEXT,
+    confirmed_at        TEXT NOT NULL,
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL
   );
 CREATE TABLE concepts (
     id           TEXT PRIMARY KEY,
@@ -23,7 +42,7 @@ CREATE TABLE concepts (
   );
 CREATE TABLE sessions (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    topic_id         TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+    goal_id          TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
     mode             TEXT NOT NULL,
     started_at       TEXT,
     ended_at         TEXT,
@@ -36,16 +55,22 @@ CREATE TABLE sessions (
               'awaiting_assessment',
               'feedback',
               'complete'
-            )), pending_action TEXT NOT NULL DEFAULT 'none'
+            )),
+    pending_action TEXT NOT NULL DEFAULT 'none'
             CHECK (pending_action IN (
               'none',
               'collect_response',
               'run_verification',
               'assess_response',
               'present_feedback'
-            )), active_challenge_id TEXT, active_challenge_version INTEGER, active_attempt_id INTEGER REFERENCES attempts(id) ON DELETE SET NULL, reconstruction_status TEXT NOT NULL DEFAULT 'not_required'
+            )),
+    active_challenge_id TEXT,
+    active_challenge_version INTEGER,
+    active_attempt_id INTEGER REFERENCES attempts(id) ON DELETE SET NULL,
+    reconstruction_status TEXT NOT NULL DEFAULT 'not_required'
             CHECK (reconstruction_status IN ('not_required', 'required', 'completed', 'opted_out')),
-    practical_work TEXT CHECK (practical_work IN ('ask_first', 'conversation_only')));
+    practical_work TEXT CHECK (practical_work IN ('ask_first', 'conversation_only'))
+  );
 CREATE TABLE synced_gaps (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     job_id    TEXT NOT NULL,
@@ -78,6 +103,35 @@ CREATE TABLE problems (
     concept_id   TEXT REFERENCES concepts(id) ON DELETE SET NULL,
     source       TEXT,
     external_id  TEXT
+  );
+CREATE TABLE question_bank_items (
+    id                       TEXT PRIMARY KEY,
+    topic_id                 TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+    concept_id               TEXT NOT NULL,
+    concept_title            TEXT NOT NULL,
+    concept_difficulty       INTEGER NOT NULL DEFAULT 1,
+    concept_prerequisites    TEXT NOT NULL DEFAULT '[]',
+    concept_tags             TEXT NOT NULL DEFAULT '[]',
+    capability_id            TEXT NOT NULL REFERENCES capabilities(id) ON DELETE RESTRICT,
+    task_form                TEXT NOT NULL
+      CHECK (task_form IN ('explanation', 'runtime_trace', 'implementation', 'debugging', 'design')),
+    delivery_context         TEXT NOT NULL DEFAULT 'practice'
+      CHECK (delivery_context IN ('learn', 'practice', 'review', 'interview', 'mock')),
+    prompt                   TEXT NOT NULL,
+    criterion                TEXT NOT NULL,
+    acceptable_variants_json TEXT NOT NULL DEFAULT '[]',
+    difficulty               INTEGER NOT NULL DEFAULT 1,
+    tags_json                TEXT NOT NULL DEFAULT '[]',
+    time_budget_minutes      INTEGER CHECK (time_budget_minutes IS NULL OR time_budget_minutes > 0),
+    verification_required    INTEGER NOT NULL DEFAULT 0 CHECK (verification_required IN (0, 1)),
+    verification_basis       TEXT NOT NULL DEFAULT 'frozen_rubric'
+      CHECK (verification_basis IN ('deterministic_execution', 'frozen_rubric', 'human', 'mixed')),
+    grading_basis            TEXT NOT NULL DEFAULT 'frozen_rubric'
+      CHECK (grading_basis IN ('deterministic_execution', 'frozen_rubric', 'human', 'mixed')),
+    private_solution_ref     TEXT,
+    source                   TEXT NOT NULL,
+    external_id              TEXT NOT NULL,
+    created_at               TEXT NOT NULL
   );
 CREATE TABLE capabilities (
             id          TEXT PRIMARY KEY,
@@ -113,28 +167,31 @@ CREATE TABLE objective_projections (
             recent_failure                INTEGER NOT NULL DEFAULT 0 CHECK (recent_failure IN (0, 1)),
             last_qualifying_evidence_at   TEXT,
             last_event_seq                INTEGER NOT NULL DEFAULT 0 CHECK (last_event_seq >= 0),
-            projector_version             TEXT NOT NULL DEFAULT 'v1',
+            projector_version             TEXT NOT NULL DEFAULT 'v2',
             rebuilt_at                    TEXT NOT NULL
           );
 CREATE TABLE challenge_versions (
-            challenge_id          TEXT NOT NULL,
-            version               INTEGER NOT NULL CHECK (version > 0),
-            source_problem_id     TEXT,
-            public_prompt         TEXT NOT NULL,
-            task_form             TEXT NOT NULL
+            challenge_id            TEXT NOT NULL,
+            version                 INTEGER NOT NULL CHECK (version > 0),
+            source_problem_id       TEXT,
+            public_prompt           TEXT NOT NULL,
+            task_form               TEXT NOT NULL
               CHECK (task_form IN ('explanation', 'runtime_trace', 'implementation', 'debugging', 'design')),
-            delivery_context      TEXT NOT NULL
+            delivery_context        TEXT NOT NULL
               CHECK (delivery_context IN ('learn', 'practice', 'review', 'interview', 'mock')),
-            time_budget_minutes   INTEGER CHECK (time_budget_minutes IS NULL OR time_budget_minutes > 0),
-            rubric_id             TEXT NOT NULL,
-            rubric_version        INTEGER NOT NULL CHECK (rubric_version > 0),
-            hint_ladder_json      TEXT NOT NULL,
-            verification_required INTEGER NOT NULL CHECK (verification_required IN (0, 1)),
-            verification_basis    TEXT NOT NULL
+            time_budget_minutes     INTEGER CHECK (time_budget_minutes IS NULL OR time_budget_minutes > 0),
+            rubric_id               TEXT NOT NULL,
+            rubric_version          INTEGER NOT NULL CHECK (rubric_version > 0),
+            hint_ladder_json        TEXT NOT NULL,
+            verification_required   INTEGER NOT NULL CHECK (verification_required IN (0, 1)),
+            verification_basis      TEXT NOT NULL
               CHECK (verification_basis IN ('deterministic_execution', 'frozen_rubric', 'human', 'mixed')),
-            private_solution_ref  TEXT,
-            is_frozen             INTEGER NOT NULL DEFAULT 0 CHECK (is_frozen IN (0, 1)),
-            created_at            TEXT NOT NULL,
+            grading_basis           TEXT NOT NULL DEFAULT 'frozen_rubric'
+              CHECK (grading_basis IN ('deterministic_execution', 'frozen_rubric', 'human', 'mixed')),
+            authoring_contract_json TEXT,
+            private_solution_ref    TEXT,
+            is_frozen               INTEGER NOT NULL DEFAULT 0 CHECK (is_frozen IN (0, 1)),
+            created_at              TEXT NOT NULL,
             PRIMARY KEY(challenge_id, version)
           );
 CREATE TABLE challenge_targets (
@@ -142,7 +199,6 @@ CREATE TABLE challenge_targets (
             version            INTEGER NOT NULL,
             objective_id       TEXT NOT NULL REFERENCES learning_objectives(id) ON DELETE RESTRICT,
             novelty            TEXT NOT NULL CHECK (novelty IN ('same', 'variant', 'transfer')),
-            criterion_ids_json TEXT NOT NULL,
             position           INTEGER NOT NULL CHECK (position >= 0),
             PRIMARY KEY(challenge_id, version, objective_id),
             UNIQUE(challenge_id, version, position),
@@ -157,6 +213,7 @@ CREATE TABLE challenge_criteria (
             required                 INTEGER NOT NULL CHECK (required IN (0, 1)),
             description              TEXT NOT NULL,
             acceptable_variants_json TEXT NOT NULL DEFAULT '[]',
+            claim_ids_json           TEXT NOT NULL DEFAULT '[]',
             position                 INTEGER NOT NULL CHECK (position >= 0),
             PRIMARY KEY(challenge_id, version, criterion_id),
             UNIQUE(challenge_id, version, position),
@@ -166,16 +223,18 @@ CREATE TABLE challenge_criteria (
               REFERENCES challenge_targets(challenge_id, version, objective_id) ON DELETE RESTRICT
           );
 CREATE TABLE "attempts" (
-            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-            challenge_id        TEXT,
-            challenge_version   INTEGER,
-            session_id          INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
-            response_text       TEXT,
-            artifact_ref_json   TEXT,
-            time_spent_seconds  INTEGER,
-            started_at          TEXT NOT NULL,
-            submitted_at        TEXT,
-            created_at          TEXT NOT NULL, verification_output_json TEXT, reconstruction_response_text TEXT,
+            id                           INTEGER PRIMARY KEY AUTOINCREMENT,
+            challenge_id                 TEXT,
+            challenge_version            INTEGER,
+            session_id                   INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+            response_text                TEXT,
+            artifact_ref_json            TEXT,
+            time_spent_seconds           INTEGER,
+            started_at                   TEXT NOT NULL,
+            submitted_at                 TEXT,
+            created_at                   TEXT NOT NULL,
+            verification_output_json     TEXT,
+            reconstruction_response_text TEXT,
             CHECK (
               (challenge_id IS NULL AND challenge_version IS NULL) OR
               (challenge_id IS NOT NULL AND challenge_version IS NOT NULL)
@@ -198,13 +257,13 @@ CREATE TABLE hint_observations (
             )
           );
 CREATE TABLE exposure_events (
-            seq               INTEGER PRIMARY KEY AUTOINCREMENT,
-            objective_id      TEXT NOT NULL REFERENCES learning_objectives(id) ON DELETE RESTRICT,
-            session_id        INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
-            challenge_id      TEXT,
-            challenge_version INTEGER,
-            attempt_id        INTEGER REFERENCES attempts(id) ON DELETE SET NULL,
-            exposure_type     TEXT NOT NULL CHECK (
+            seq                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            objective_id         TEXT NOT NULL REFERENCES learning_objectives(id) ON DELETE RESTRICT,
+            session_id           INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+            challenge_id         TEXT,
+            challenge_version    INTEGER,
+            attempt_id           INTEGER REFERENCES attempts(id) ON DELETE SET NULL,
+            exposure_type        TEXT NOT NULL CHECK (
               exposure_type IN (
                 'explanation_shown',
                 'answer_revealed',
@@ -213,9 +272,9 @@ CREATE TABLE exposure_events (
                 'solution_walkthrough'
               )
             ),
-            source_ref        TEXT,
-            occurred_at       TEXT NOT NULL, teaching_artifact_id TEXT
-            REFERENCES teaching_artifacts(id) ON DELETE RESTRICT,
+            source_ref           TEXT,
+            occurred_at          TEXT NOT NULL,
+            teaching_artifact_id TEXT REFERENCES teaching_artifacts(id) ON DELETE RESTRICT,
             CHECK (
               (challenge_id IS NULL AND challenge_version IS NULL) OR
               (challenge_id IS NOT NULL AND challenge_version IS NOT NULL)
@@ -251,7 +310,6 @@ CREATE TABLE evidence_events (
             evaluator_type        TEXT NOT NULL
               CHECK (evaluator_type IN ('kernel', 'agent', 'llm', 'human')),
             criteria_json         TEXT NOT NULL,
-            observed_errors_json TEXT NOT NULL DEFAULT '[]',
             rationale             TEXT NOT NULL,
             performed_at          TEXT NOT NULL,
             created_at            TEXT NOT NULL
@@ -263,19 +321,22 @@ CREATE TABLE evidence_revisions (
             reason            TEXT NOT NULL,
             created_at        TEXT NOT NULL
           );
-CREATE TABLE misconceptions (
+CREATE TABLE claims (
             id                  TEXT PRIMARY KEY,
             concept_id          TEXT NOT NULL REFERENCES concepts(id) ON DELETE CASCADE,
+            kind                TEXT NOT NULL DEFAULT 'error_claim'
+              CHECK (kind IN ('misconception', 'error_claim')),
             description         TEXT NOT NULL,
             correction_strategy TEXT,
-            is_blocking         INTEGER NOT NULL CHECK (is_blocking IN (0, 1)),
+            is_blocking         INTEGER NOT NULL DEFAULT 0 CHECK (is_blocking IN (0, 1)),
             created_at          TEXT NOT NULL
           );
-CREATE TABLE misconception_observations (
+CREATE TABLE claim_observations (
             seq               INTEGER PRIMARY KEY AUTOINCREMENT,
-            misconception_id  TEXT NOT NULL REFERENCES misconceptions(id) ON DELETE RESTRICT,
+            claim_id          TEXT NOT NULL REFERENCES claims(id) ON DELETE RESTRICT,
             objective_id      TEXT NOT NULL REFERENCES learning_objectives(id) ON DELETE RESTRICT,
             evidence_event_id TEXT NOT NULL REFERENCES evidence_events(id) ON DELETE RESTRICT,
+            criterion_id      TEXT NOT NULL,
             disposition       TEXT NOT NULL CHECK (disposition IN ('observed', 'cleared')),
             created_at        TEXT NOT NULL
           );
@@ -310,30 +371,20 @@ CREATE TABLE review_cards (
             updated_at        TEXT NOT NULL
           );
 CREATE TABLE goal_objectives (
-            goal_id            TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
-            objective_id       TEXT NOT NULL REFERENCES learning_objectives(id) ON DELETE CASCADE,
-            is_active          INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
-            importance         TEXT NOT NULL CHECK (importance IN ('core', 'important', 'supporting')),
-            target_readiness   TEXT NOT NULL CHECK (target_readiness IN ('guided', 'independent')),
-            require_transfer   INTEGER NOT NULL DEFAULT 0 CHECK (require_transfer IN (0, 1)),
-            require_durability INTEGER NOT NULL DEFAULT 0 CHECK (require_durability IN (0, 1)),
-            created_at         TEXT NOT NULL,
-            updated_at         TEXT NOT NULL, preparation_strategy TEXT
-            CHECK (preparation_strategy IS NULL OR preparation_strategy IN ('learn', 'refresh', 'diagnose_first', 'transfer_practice')), initial_diagnostic_kind TEXT
-            CHECK (initial_diagnostic_kind IS NULL OR initial_diagnostic_kind IN ('baseline', 'refresh_check', 'strength_check', 'prerequisite_check', 'transfer_check')),
+            goal_id                 TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+            objective_id            TEXT NOT NULL REFERENCES learning_objectives(id) ON DELETE CASCADE,
+            is_active               INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+            importance              TEXT NOT NULL CHECK (importance IN ('core', 'important', 'supporting')),
+            target_readiness        TEXT NOT NULL CHECK (target_readiness IN ('guided', 'independent')),
+            require_transfer        INTEGER NOT NULL DEFAULT 0 CHECK (require_transfer IN (0, 1)),
+            require_durability      INTEGER NOT NULL DEFAULT 0 CHECK (require_durability IN (0, 1)),
+            created_at              TEXT NOT NULL,
+            updated_at              TEXT NOT NULL,
+            preparation_strategy    TEXT
+              CHECK (preparation_strategy IS NULL OR preparation_strategy IN ('learn', 'refresh', 'diagnose_first', 'transfer_practice')),
+            initial_diagnostic_kind TEXT
+              CHECK (initial_diagnostic_kind IS NULL OR initial_diagnostic_kind IN ('baseline', 'refresh_check', 'strength_check', 'prerequisite_check', 'transfer_check')),
             PRIMARY KEY(goal_id, objective_id)
-          );
-CREATE TABLE goal_preparation (
-            goal_id           TEXT PRIMARY KEY REFERENCES topics(id) ON DELETE CASCADE,
-            purpose           TEXT NOT NULL CHECK (purpose IN ('interview', 'role_readiness', 'long_term_mastery')),
-            target_role       TEXT,
-            target_outcome    TEXT,
-            minutes_per_day   INTEGER CHECK (minutes_per_day IS NULL OR minutes_per_day > 0),
-            days_per_week     INTEGER CHECK (days_per_week IS NULL OR (days_per_week BETWEEN 1 AND 7)),
-            minutes_per_week  INTEGER CHECK (minutes_per_week IS NULL OR minutes_per_week > 0),
-            confirmed_at      TEXT NOT NULL,
-            created_at        TEXT NOT NULL,
-            updated_at        TEXT NOT NULL
           );
 CREATE TABLE teaching_artifacts (
             id             TEXT PRIMARY KEY,
@@ -343,7 +394,7 @@ CREATE TABLE teaching_artifacts (
           );
 CREATE TABLE study_focus_episodes (
             id                     TEXT PRIMARY KEY,
-            goal_id                TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+            goal_id                TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
             label                  TEXT,
             target_objective_ids   TEXT NOT NULL,
             resolved_objective_ids TEXT NOT NULL,
@@ -373,7 +424,7 @@ CREATE TABLE interaction_preferences (
               CHECK (question_chunking IN ('default', 'atomic')),
             source             TEXT NOT NULL CHECK (source = 'learner_explicit'),
             updated_at         TEXT NOT NULL,
-            practical_work TEXT NOT NULL DEFAULT 'ask_first'
+            practical_work     TEXT NOT NULL DEFAULT 'ask_first'
               CHECK (practical_work IN ('ask_first', 'conversation_only'))
           );
 CREATE TABLE challenge_attempt_dispositions (
@@ -393,16 +444,6 @@ CREATE TABLE challenge_attempt_dispositions (
             ),
             detail           TEXT NOT NULL,
             created_at       TEXT NOT NULL
-          );
-CREATE TABLE challenge_authoring_contracts (
-            challenge_id      TEXT NOT NULL,
-            version           INTEGER NOT NULL CHECK (version > 0),
-            contract_version  INTEGER NOT NULL CHECK (contract_version = 2),
-            intent_json       TEXT NOT NULL,
-            created_at        TEXT NOT NULL,
-            PRIMARY KEY(challenge_id, version),
-            FOREIGN KEY(challenge_id, version)
-              REFERENCES challenge_versions(challenge_id, version) ON DELETE RESTRICT
           );
 CREATE TABLE "attempt_subquestions" (
             seq                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -429,8 +470,9 @@ CREATE TABLE "attempt_subquestions" (
             )
           );
 CREATE INDEX idx_concepts_topic_id   ON concepts(topic_id);
-CREATE INDEX idx_sessions_topic_id    ON sessions(topic_id);
+CREATE INDEX idx_sessions_goal_id    ON sessions(goal_id);
 CREATE INDEX idx_synced_gaps_job_id   ON synced_gaps(job_id);
+CREATE INDEX idx_question_bank_topic ON question_bank_items(topic_id, concept_id);
 CREATE INDEX idx_learning_objectives_concept
             ON learning_objectives(concept_id);
 CREATE INDEX idx_learning_objectives_capability
@@ -455,10 +497,14 @@ CREATE INDEX idx_evidence_retrieval_objective
             ON evidence_events(retrieval_valid, objective_id);
 CREATE INDEX idx_evidence_revisions_event
             ON evidence_revisions(evidence_event_id, seq);
-CREATE INDEX idx_misconception_observations_objective
-            ON misconception_observations(objective_id, seq);
-CREATE INDEX idx_misconception_observations_evidence
-            ON misconception_observations(evidence_event_id, seq);
+CREATE INDEX idx_claims_concept
+            ON claims(concept_id);
+CREATE INDEX idx_claim_observations_objective
+            ON claim_observations(objective_id, seq);
+CREATE INDEX idx_claim_observations_evidence
+            ON claim_observations(evidence_event_id, seq);
+CREATE INDEX idx_claim_observations_claim
+            ON claim_observations(claim_id, objective_id, seq);
 CREATE INDEX idx_weakness_projections_objective
             ON weakness_projections(objective_id);
 CREATE INDEX idx_review_events_objective_time
@@ -708,26 +754,34 @@ CREATE TRIGGER evidence_revisions_restore_conflict
           BEGIN
             SELECT RAISE(ABORT, 'restoring evidence would create conflicting effective evidence');
           END;
-CREATE TRIGGER misconception_observations_no_update
-          BEFORE UPDATE ON misconception_observations
+CREATE TRIGGER claim_observations_no_update
+          BEFORE UPDATE ON claim_observations
           BEGIN
-            SELECT RAISE(ABORT, 'misconception observations are append-only');
+            SELECT RAISE(ABORT, 'claim observations are append-only');
           END;
-CREATE TRIGGER misconception_observations_no_delete
-          BEFORE DELETE ON misconception_observations
+CREATE TRIGGER claim_observations_no_delete
+          BEFORE DELETE ON claim_observations
           BEGIN
-            SELECT RAISE(ABORT, 'misconception observations are append-only');
+            SELECT RAISE(ABORT, 'claim observations are append-only');
           END;
-CREATE TRIGGER misconception_observations_match_evidence_objective
-          BEFORE INSERT ON misconception_observations
+CREATE TRIGGER claim_observations_match_evidence_and_criterion
+          BEFORE INSERT ON claim_observations
           WHEN NOT EXISTS (
             SELECT 1
             FROM evidence_events evidence
+            JOIN learning_objectives objective ON objective.id = evidence.objective_id
+            JOIN claims claim ON claim.id = NEW.claim_id
+            JOIN challenge_criteria criterion
+              ON criterion.challenge_id = evidence.task_id
+             AND criterion.version = evidence.task_version
+             AND criterion.objective_id = evidence.objective_id
+             AND criterion.criterion_id = NEW.criterion_id
             WHERE evidence.id = NEW.evidence_event_id
               AND evidence.objective_id = NEW.objective_id
+              AND claim.concept_id = objective.concept_id
           )
           BEGIN
-            SELECT RAISE(ABORT, 'misconception observation objective must match source evidence');
+            SELECT RAISE(ABORT, 'claim observation must match source evidence objective, concept, and frozen criterion');
           END;
 CREATE TRIGGER attempts_verification_requires_submission
           BEFORE UPDATE OF verification_output_json ON attempts
@@ -794,25 +848,6 @@ CREATE TRIGGER challenge_attempt_dispositions_no_delete
           BEFORE DELETE ON challenge_attempt_dispositions
           BEGIN
             SELECT RAISE(ABORT, 'challenge attempt dispositions are immutable');
-          END;
-CREATE TRIGGER challenge_authoring_contracts_no_insert_after_freeze
-          BEFORE INSERT ON challenge_authoring_contracts
-          WHEN (
-            SELECT is_frozen FROM challenge_versions
-            WHERE challenge_id = NEW.challenge_id AND version = NEW.version
-          ) = 1
-          BEGIN
-            SELECT RAISE(ABORT, 'frozen challenge authoring contracts are immutable');
-          END;
-CREATE TRIGGER challenge_authoring_contracts_no_update
-          BEFORE UPDATE ON challenge_authoring_contracts
-          BEGIN
-            SELECT RAISE(ABORT, 'challenge authoring contracts are immutable');
-          END;
-CREATE TRIGGER challenge_authoring_contracts_no_delete
-          BEFORE DELETE ON challenge_authoring_contracts
-          BEGIN
-            SELECT RAISE(ABORT, 'challenge authoring contracts are immutable');
           END;
 CREATE TRIGGER attempts_reconstruction_response_requires_submission
           BEFORE UPDATE OF reconstruction_response_text ON attempts

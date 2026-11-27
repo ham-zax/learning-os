@@ -1,6 +1,6 @@
 import type { Database } from "better-sqlite3";
 import type { ChallengeSpec, Novelty, PracticalWorkPreference, TaskForm } from "../db/types.js";
-import { createSession } from "../db/database.js";
+import { createSession, resolveGoalIdForTopic } from "../db/database.js";
 import {
   createLearningObjective,
   getChallenge,
@@ -30,7 +30,8 @@ export function createInterviewSessionForConcept(
   if (!concept) {
     throw new Error(`Interview concept not found: ${conceptId}`);
   }
-  return createSession(db, { topicId: concept.topic_id, mode: "interview", practicalWork }).id;
+  const goalId = resolveGoalIdForTopic(db, concept.topic_id);
+  return createSession(db, { goalId, mode: "interview", practicalWork }).id;
 }
 
 function sameStrings(left: string[], right: string[]): boolean {

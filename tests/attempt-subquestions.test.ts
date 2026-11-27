@@ -56,7 +56,7 @@ describe("durable attempt subquestions", () => {
     });
     expect(continuation.kind).toBe("resume");
     if (continuation.kind !== "resume") throw new Error("Expected resumed work");
-    const resumed = continuation.session.activeAttemptState!;
+    const resumed = kernel.resumeSession(continuation.commitment.sessionId).activeAttemptState!;
     expect(resumed.subquestions).toMatchObject([
       { seq: first.seq, prompt_text: promptText, response_text: responseText },
       { seq: second.seq, response_text: null, answered_at: null },
@@ -271,7 +271,7 @@ describe("durable attempt subquestions", () => {
     db.close();
 
     expect(() => createDatabase(dbPath)).toThrow(
-      "Unsupported learner database schema v21. Learning OS now requires schema v23",
+      "Unsupported learner database schema v21. Learning OS now requires schema v24",
     );
   });
 });

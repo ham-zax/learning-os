@@ -5,17 +5,30 @@ import type { ScaffoldStage } from "./knowledge/scaffolds.js";
 import { getSessionScaffoldPresentations, prepareScaffoldPresentation } from "./kernel/scaffolds.js";
 import type { ScaffoldPresentationInput } from "./kernel/scaffolds.js";
 import {
+  clearGoalParkedSession,
   clearGoalStudyFocus,
+  createGoal,
   createSession,
+  getGoal,
+  getGoalBookmark,
   getGoalObjectives,
   getInteractionPreferences,
   getPracticalWorkPolicy,
   getStudyFocusEpisode,
   listGoalStudyFocusEpisodes,
+  listGoals,
+  setGoalBookmark,
   setInteractionPreferences,
   setSessionPracticalWork,
   setGoalObjective,
   setGoalStudyFocus,
+} from "./db/database.js";
+import type {
+  CreateGoalInput,
+  SetGoalBookmarkInput,
+  SetGoalObjectiveInput,
+  SetGoalStudyFocusInput,
+  SetInteractionPreferencesInput,
 } from "./db/database.js";
 import type {
   ChallengeSpecInput,
@@ -35,6 +48,7 @@ import {
   openAttempt,
   recordExposure,
   recordHintUse,
+  recordTeachingRequest,
   registerChallenge,
   resolveSessionReconstruction,
   resumeSession,
@@ -45,31 +59,29 @@ import type {
   LearningObjectiveInput,
   RecordExposureInput,
   RecordHintUseInput,
+  RecordTeachingRequestInput,
   ResolveSessionReconstructionInput,
   SubmitAttemptInput,
 } from "./kernel/foundation.js";
 import { submitAndAssess } from "./kernel/composite.js";
 import type { SubmitAndAssessInput } from "./kernel/composite.js";
 import {
+  createClaim,
+  createMisconception,
+  getClaim,
   getEffectiveEvidenceEventsByObjective,
+  getMisconception,
   recordAssessment,
   reviseEvidence,
 } from "./kernel/evidence.js";
+import type { CreateClaimInput, CreateMisconceptionInput, ReviseEvidenceInput } from "./kernel/evidence.js";
 import { getObjectiveEvidenceReceipt } from "./kernel/evidence-receipt.js";
 import { getSessionFeedback } from "./kernel/feedback.js";
-import type { ReviseEvidenceInput } from "./kernel/evidence.js";
 import type { AssessmentResultInput } from "./db/types.js";
 import { getTodayMission, resolveRequestedChallenge } from "./plan/today.js";
 import type { RequestedChallengeInput, TodayMissionInput } from "./plan/today.js";
-import type {
-  SetGoalObjectiveInput,
-  SetGoalStudyFocusInput,
-  SetInteractionPreferencesInput,
-} from "./db/database.js";
 import type { ChallengeIntent } from "./selection/types.js";
-import {
-  rejectActiveChallengeAttempt,
-} from "./kernel/challenge-rejection.js";
+import { rejectActiveChallengeAttempt } from "./kernel/challenge-rejection.js";
 import type { RejectActiveChallengeAttemptInput } from "./kernel/challenge-rejection.js";
 import {
   getDurablePreparationContext,
@@ -104,9 +116,8 @@ import type {
 /**
  * Bind the provider-neutral Learning OS kernel to one database handle.
  *
- * ChatGPT is the preferred V1 teacher client, but nothing in this contract
- * depends on provider conversation IDs, transcripts, or tool state. A fresh
- * compatible teacher can continue from getStudyContinuation().
+ * Nothing in this contract depends on provider conversation IDs, transcripts,
+ * or tool state. A fresh compatible teacher can continue from getStudyContinuation().
  */
 export function createTeacherKernel(db: Database.Database, options: { knowledgeRoot?: string } = {}) {
   const knowledgeRoot = resolve(options.knowledgeRoot ?? "knowledge");
@@ -128,10 +139,16 @@ export function createTeacherKernel(db: Database.Database, options: { knowledgeR
     getTodayMission: (input: TodayMissionInput) => getTodayMission(db, { knowledgeRoot, ...input }),
     resolveRequestedChallenge: (input: RequestedChallengeInput) =>
       resolveRequestedChallenge(db, { knowledgeRoot, ...input }),
+    createGoal: (input: CreateGoalInput) => createGoal(db, input),
+    getGoal: (goalId: string) => getGoal(db, goalId),
+    listGoals: () => listGoals(db),
+    getGoalBookmark: (goalId: string) => getGoalBookmark(db, goalId),
+    setGoalBookmark: (goalId: string, input: SetGoalBookmarkInput) =>
+      setGoalBookmark(db, goalId, input),
+    clearGoalParkedSession: (goalId: string, sessionId?: number) =>
+      clearGoalParkedSession(db, goalId, sessionId),
     listPreparationContexts: () => listDurablePreparationContexts(db),
     getPreparationContext: (goalId: string) => getDurablePreparationContext(db, goalId),
-    // Tiny, pure execution directive for an already-selected intent.
-    // It prevents cross-teacher drift without modeling the teaching process.
     getPedagogyRecommendation: (
       intent: ChallengeIntent,
       options?: { learnerConfidence?: LearnerConfidence },
@@ -170,6 +187,10 @@ export function createTeacherKernel(db: Database.Database, options: { knowledgeR
     createLearningObjective: (input: LearningObjectiveInput) =>
       createLearningObjective(db, input),
     getLearningObjective: (objectiveId: string) => getLearningObjective(db, objectiveId),
+    createClaim: (input: CreateClaimInput) => createClaim(db, input),
+    getClaim: (claimId: string) => getClaim(db, claimId),
+    createMisconception: (input: CreateMisconceptionInput) => createMisconception(db, input),
+    getMisconception: (misconceptionId: string) => getMisconception(db, misconceptionId),
     getObjectiveEvidenceReceipt: (objectiveId: string) =>
       getObjectiveEvidenceReceipt(db, objectiveId),
     getRevisionNoteContext: (input: RevisionNoteContextInput) =>
@@ -177,8 +198,8 @@ export function createTeacherKernel(db: Database.Database, options: { knowledgeR
     saveRevisionNote: (input: SaveRevisionNoteInput) => saveRevisionNote(db, input),
     getRevisionNote: (noteId: string) => getRevisionNote(db, noteId),
     listRevisionNotes: () => listRevisionNotes(db),
-    createSession: (topicId: string, mode: DeliveryContext, practicalWork?: PracticalWorkPreference) =>
-      createSession(db, { topicId, mode, practicalWork }),
+    createSession: (goalId: string, mode: DeliveryContext, practicalWork?: PracticalWorkPreference) =>
+      createSession(db, { goalId, mode, practicalWork }),
     getChallenge: (challengeId: string, version: number) =>
       getChallenge(db, challengeId, version),
     getChallengeAuthoringContract: (challengeId: string, version: number) =>
@@ -195,6 +216,8 @@ export function createTeacherKernel(db: Database.Database, options: { knowledgeR
       recordHintUse(db, attemptId, input),
     recordExposure: (sessionId: number | null, input: RecordExposureInput) =>
       recordExposure(db, sessionId, input),
+    recordTeachingRequest: (sessionId: number, input: RecordTeachingRequestInput) =>
+      recordTeachingRequest(db, sessionId, input),
     submitAttempt: (attemptId: number, input: SubmitAttemptInput) =>
       submitAttempt(db, attemptId, input),
     submitAndAssess: (attemptId: number, input: SubmitAndAssessInput) =>
@@ -203,7 +226,7 @@ export function createTeacherKernel(db: Database.Database, options: { knowledgeR
       recordAssessment(db, attemptId, assessment),
     reviseEvidence: (evidenceEventId: string, input: ReviseEvidenceInput) =>
       reviseEvidence(db, evidenceEventId, input),
-    listResumableSessions: (topicId?: string) => listResumableSessions(db, topicId),
+    listResumableSessions: (goalId?: string) => listResumableSessions(db, goalId),
     resumeSession: (sessionId: number) => resumeSession(db, sessionId),
     abandonUnsubmittedSession: (sessionId: number) => abandonUnsubmittedSession(db, sessionId),
     rejectActiveChallengeAttempt: (sessionId: number, input: RejectActiveChallengeAttemptInput) =>

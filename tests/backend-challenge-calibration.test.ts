@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { createConcept, createDatabase, createTopic, setGoalObjective } from "../src/db/database.js";
+import { createConcept, createDatabase, createGoal, createTopic, setGoalObjective } from "../src/db/database.js";
 import { buildCalibratedPredictionChallenge, findCalibratedPredictionCase, loadCalibratedPredictionPack } from "../src/knowledge/challenge-calibration.js";
 import type { CalibratedPredictionPackId } from "../src/knowledge/challenge-calibration.js";
 import { codingCourseFile } from "../src/knowledge/courses.js";
@@ -22,6 +22,7 @@ describe("backend calibrated prediction examples", () => {
     const db = createDatabase(":memory:");
     try {
       createTopic(db, { id: "goal", name: "Backend systems" });
+      createGoal(db, { id: "goal", name: "Backend systems", purpose: "interview" });
       createConcept(db, { id: config.conceptId, topicId: "goal", title: config.conceptId });
       const kernel = createTeacherKernel(db);
       const objectiveId = `imported-${config.id}`;
@@ -77,6 +78,7 @@ describe("backend calibrated prediction examples", () => {
     const db = createDatabase(":memory:");
     try {
       createTopic(db, { id: "goal", name: "Backend systems" });
+      createGoal(db, { id: "goal", name: "Backend systems", purpose: "interview" });
       createConcept(db, { id: config.conceptId, topicId: "goal", title: config.conceptId });
       const kernel = createTeacherKernel(db);
       const objectiveId = `imported-${config.id}`;

@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createSession, createTopic, setGoalObjective } from "../src/db/database.js";
+import { createGoal, createSession, setGoalObjective } from "../src/db/database.js";
 import { recordAssessment } from "../src/kernel/evidence.js";
 import {
   completeSessionFeedback,
@@ -57,7 +57,7 @@ describe("study continuation", () => {
       const { sessionId } = fixture.openPracticeAttempt();
       const input = { goalId: GOAL_ID, now: "2026-09-14T00:00:00.000Z", oneEpisode: true };
       expect(getStudyContinuation(fixture.db, input)).toMatchObject({
-        kind: "resume", session: { session: { id: sessionId } },
+        kind: "resume", commitment: { sessionId },
       });
       expect(() => getStudyContinuation(fixture.db, { ...input, availableMinutes: 30 }))
         .toThrow("Choose oneEpisode or availableMinutes");
@@ -79,8 +79,8 @@ describe("study continuation", () => {
         }),
       ).toMatchObject({
         kind: "resume",
-        session: {
-          session: { id: sessionId },
+        commitment: {
+          sessionId,
           pendingAction: "collect_response",
         },
         additionalResumableSessionIds: [],
@@ -103,7 +103,7 @@ describe("study continuation", () => {
         }),
       ).toMatchObject({
         kind: "resume",
-        session: { session: { id: newer.sessionId } },
+        commitment: { sessionId: newer.sessionId },
         additionalResumableSessionIds: [older.sessionId],
       });
     } finally {
@@ -124,6 +124,8 @@ describe("study continuation", () => {
         goalId: GOAL_ID,
         suggestedMinutes: 30,
         practicalWork: { preference: "ask_first", source: "default" },
+        bookmark: null,
+        allowedActions: ["set_budget_or_one_episode"],
       });
     } finally {
       fixture.db.close();
@@ -182,7 +184,7 @@ describe("study continuation", () => {
           goalId: "missing",
           now: "2026-08-30T02:00:00.000Z",
         }),
-      ).toThrow("Goal topic not found: missing");
+      ).toThrow("Goal not found: missing");
     } finally {
       fixture.db.close();
     }
@@ -196,6 +198,8 @@ describe("study continuation", () => {
         goalId: GOAL_ID,
         suggestedMinutes: 30,
         practicalWork: { preference: "ask_first", source: "default" },
+        bookmark: null,
+        allowedActions: ["set_budget_or_one_episode"],
       });
 
       const recommendation = getStudyContinuation(fixture.db, { oneEpisode: true });
@@ -208,12 +212,12 @@ describe("study continuation", () => {
   it("rejects omitted goalId with available IDs when multiple goals exist", () => {
     const fixture = createKernelFixture();
     try {
-      createTopic(fixture.db, { id: "goal-two", name: "Second Goal" });
-      const now = "2026-09-01T00:00:00.000Z";
-      fixture.db.prepare(
-        `INSERT INTO goal_preparation (goal_id, purpose, confirmed_at, created_at, updated_at)
-         VALUES (?, 'interview', ?, ?, ?)`,
-      ).run("goal-two", now, now, now);
+      createGoal(fixture.db, {
+        id: "goal-two",
+        name: "Second Goal",
+        purpose: "interview",
+        confirmedAt: "2026-09-01T00:00:00.000Z",
+      });
 
       expect(() => getStudyContinuation(fixture.db)).toThrow(/Multiple goals found.*goal-two/);
     } finally {
@@ -242,7 +246,11 @@ describe("study continuation", () => {
           result: "incorrect",
           criteriaMet: [],
           criteriaUnmet: ["mechanism"],
-          observedErrors: ["stale_read_assumption"],
+          claimObservations: [{
+            claimId: "stale_read_assumption",
+            criterionId: "mechanism",
+            disposition: "observed",
+          }],
           rationale: "Missed interleaving.",
         }],
       });
@@ -262,6 +270,11 @@ describe("study continuation", () => {
           result: "correct",
           criteriaMet: ["mechanism"],
           criteriaUnmet: [],
+          claimObservations: [{
+            claimId: "stale_read_assumption",
+            criterionId: "mechanism",
+            disposition: "cleared",
+          }],
           rationale: "Explained interleaving once.",
         }],
       });
@@ -323,6 +336,11 @@ describe("study continuation", () => {
           result: "correct",
           criteriaMet: ["mechanism"],
           criteriaUnmet: [],
+          claimObservations: [{
+            claimId: "stale_read_assumption",
+            criterionId: "mechanism",
+            disposition: "cleared",
+          }],
           rationale: "Confirmed across second surface.",
         }],
       });

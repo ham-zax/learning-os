@@ -35,7 +35,7 @@ export function summarizeDogfoodMetrics(
   input: DogfoodMetricsInput,
 ): DogfoodMetrics {
   const goalId = input.goalId.trim();
-  if (!goalId || !db.prepare("SELECT 1 FROM topics WHERE id = ?").get(goalId)) {
+  if (!goalId || !db.prepare("SELECT 1 FROM goals WHERE id = ?").get(goalId)) {
     throw new Error(`Goal not found: ${input.goalId}`);
   }
   const delayedDays = input.delayedDays ?? 7;
@@ -50,7 +50,7 @@ export function summarizeDogfoodMetrics(
        AS latest_revision_action
     FROM evidence_events evidence
     JOIN sessions session ON session.id = evidence.session_id
-    WHERE session.topic_id = ?
+    WHERE session.goal_id = ?
   `).all(goalId) as EvidenceMetricRow[];
   const effective = evidence.filter((event) => event.latest_revision_action !== "invalidate");
   const delayed = effective.filter((event) => event.retrieval_valid === 1 &&
@@ -73,10 +73,10 @@ export function summarizeDogfoodMetrics(
       event.retrieval_valid === 1 && event.result === "correct").length,
     evidenceRevisions: count(`SELECT COUNT(*) AS count FROM evidence_revisions revision
       JOIN evidence_events evidence ON evidence.id = revision.evidence_event_id
-      JOIN sessions session ON session.id = evidence.session_id WHERE session.topic_id = ?`),
+      JOIN sessions session ON session.id = evidence.session_id WHERE session.goal_id = ?`),
     repairExposures: count(`SELECT COUNT(*) AS count FROM exposure_events exposure
       JOIN sessions session ON session.id = exposure.session_id
-      WHERE session.topic_id = ? AND exposure.attempt_id IS NOT NULL
+      WHERE session.goal_id = ? AND exposure.attempt_id IS NOT NULL
       AND EXISTS (SELECT 1 FROM evidence_events evidence
         WHERE evidence.attempt_id = exposure.attempt_id
           AND evidence.objective_id = exposure.objective_id
@@ -84,11 +84,11 @@ export function summarizeDogfoodMetrics(
     reconstructionAnswers: count(`SELECT COUNT(*) AS count FROM attempt_subquestions question
       JOIN attempts attempt ON attempt.id = question.attempt_id
       JOIN sessions session ON session.id = attempt.session_id
-      WHERE session.topic_id = ? AND question.purpose = 'reconstruction'
+      WHERE session.goal_id = ? AND question.purpose = 'reconstruction'
         AND question.response_text IS NOT NULL AND question.superseded_at IS NULL`),
     abandonedEpisodes: count(`SELECT COUNT(DISTINCT session.id) AS count FROM sessions session
       JOIN attempts attempt ON attempt.session_id = session.id
-      WHERE session.topic_id = ? AND session.phase = 'complete'
+      WHERE session.goal_id = ? AND session.phase = 'complete'
         AND attempt.submitted_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM challenge_attempt_dispositions disposition
           WHERE disposition.attempt_id = attempt.id)`),

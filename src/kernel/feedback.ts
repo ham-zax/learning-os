@@ -1,6 +1,8 @@
 import type Database from "better-sqlite3";
 import { EvidenceEventSchema } from "../db/types.js";
 import type { ChallengeCriterion, EvidenceEvent } from "../db/types.js";
+import { getClaimObservationsForEvidence } from "./evidence.js";
+import type { EvidenceClaimObservationSummary } from "./evidence.js";
 import { resumeSession } from "./foundation.js";
 
 export interface FeedbackObjective {
@@ -9,6 +11,7 @@ export interface FeedbackObjective {
   result: EvidenceEvent["result"];
   criteria: Array<ChallengeCriterion & { status: "met" | "unmet" | "unassessed" }>;
   rationale: string;
+  claimObservations: EvidenceClaimObservationSummary[];
   observedErrors: string[];
   retrievalValid: boolean;
   hintLevel: number;
@@ -46,23 +49,29 @@ export function getSessionFeedback(db: Database.Database, sessionId: number): Se
   if (!state) throw new Error(`Session ${sessionId} feedback has no active attempt`);
   const getEvidence = db.prepare(`SELECT * FROM evidence_events WHERE id = ?`);
   const events = state.effectiveEvidenceIds.map((id) => EvidenceEventSchema.parse(getEvidence.get(id)));
-  const objectives: FeedbackObjective[] = events.map((event) => ({
-    objectiveId: event.objective_id,
-    evidenceEventId: event.id,
-    result: event.result,
-    criteria: state.challenge.rubric.criteria
-      .filter((criterion) => criterion.objectiveId === event.objective_id)
-      .map((criterion) => ({
-        ...criterion,
-        status: event.criteria_json.met.includes(criterion.id) ? "met"
-          : event.criteria_json.unmet.includes(criterion.id) ? "unmet" : "unassessed",
-      })),
-    rationale: event.rationale,
-    observedErrors: event.observed_errors_json,
-    retrievalValid: event.retrieval_valid,
-    hintLevel: event.hint_level,
-    novelty: event.novelty,
-  }));
+  const objectives: FeedbackObjective[] = events.map((event) => {
+    const claimObservations = getClaimObservationsForEvidence(db, event.id);
+    return {
+      objectiveId: event.objective_id,
+      evidenceEventId: event.id,
+      result: event.result,
+      criteria: state.challenge.rubric.criteria
+        .filter((criterion) => criterion.objectiveId === event.objective_id)
+        .map((criterion) => ({
+          ...criterion,
+          status: event.criteria_json.met.includes(criterion.id) ? "met"
+            : event.criteria_json.unmet.includes(criterion.id) ? "unmet" : "unassessed",
+        })),
+      rationale: event.rationale,
+      claimObservations,
+      observedErrors: claimObservations
+        .filter((obs) => obs.disposition === "observed")
+        .map((obs) => obs.claimId),
+      retrievalValid: event.retrieval_valid,
+      hintLevel: event.hint_level,
+      novelty: event.novelty,
+    };
+  });
   const assessed = { attemptId: state.attempt.id, objectives };
   if (resumed.reconstructionRequired) {
     return { ...assessed, nextAction: "reconstruct", reason:

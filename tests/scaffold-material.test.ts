@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { createConcept, createDatabase, createTopic, getSession, setGoalObjective } from "../src/db/database.js";
+import { createConcept, createDatabase, createGoal, createTopic, getSession, setGoalObjective } from "../src/db/database.js";
 import { buildCalibratedAsyncPredictChallenge } from "../src/knowledge/challenge-calibration.js";
 import { getScaffoldMaterial, listScaffoldPacks } from "../src/knowledge/scaffolds.js";
 import { createTeacherKernel } from "../src/teacher.js";
@@ -24,6 +24,7 @@ function debugFixture(options: {
   const db = createDatabase(options.path ?? ":memory:");
   const kernel = createTeacherKernel(db, { knowledgeRoot: options.knowledgeRoot ?? knowledgeRoot });
   createTopic(db, { id: "debug-goal", name: "Synthetic debug goal" });
+  createGoal(db, { id: "debug-goal", name: "Synthetic debug goal", purpose: "interview" });
   createConcept(db, { id: debugConceptId, topicId: "debug-goal", title: "Transactions" });
   if (options.mismatch === "concept") {
     createConcept(db, { id: "other-concurrency", topicId: "debug-goal", title: "Other concurrency" });
@@ -60,6 +61,7 @@ function fixture(path = ":memory:", deliveryContext: "learn" | "interview" | "mo
   const db = createDatabase(path);
   const kernel = createTeacherKernel(db, { knowledgeRoot });
   createTopic(db, { id: "goal", name: "Goal" });
+  createGoal(db, { id: "goal", name: "Goal", purpose: "interview" });
   createConcept(db, { id: "js-async-await", topicId: "goal", title: "Async" });
   kernel.createLearningObjective({ id: objectiveId, conceptId: "js-async-await", capabilityId: "predict" });
   setGoalObjective(db, { goalId: "goal", objectiveId, importance: "core", targetReadiness: "guided" });
@@ -74,8 +76,8 @@ function fixture(path = ":memory:", deliveryContext: "learn" | "interview" | "mo
     kernel.submitAttempt(attemptId, { responseText: "My committed trace and suspension explanation." });
     const output = runFile(join(knowledgeRoot, "frontend-revision/challenges/js-async-await-predict/baseline.mjs"));
     return kernel.recordAssessment(attemptId, {
-      evaluatorType: "agent", assessmentBasis: "deterministic_execution",
-      verificationOutput: { outcome: "passed", basis: "Node ESM", summary: output.join(", ") },
+      evaluatorType: "agent", assessmentBasis: "mixed",
+      verificationOutput: { outcome: "passed", basis: "Node ESM", summary: output.join(", "), details: { stdout: output } },
       objectiveResults: [{ objectiveId, result,
         criteriaMet: result === "correct" ? ["output_order", "suspension_boundary"] : [],
         criteriaUnmet: result === "incorrect" ? ["output_order", "suspension_boundary"] : [],

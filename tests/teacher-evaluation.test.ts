@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { createConcept, createDatabase, createTopic, setGoalObjective } from "../src/db/database.js";
+import { createConcept, createDatabase, createGoal, createTopic, setGoalObjective } from "../src/db/database.js";
 import { createTeacherKernel } from "../src/teacher.js";
 import { assessorCases, publicAssessorCases, scoreAssessorSubmission } from "../src/evaluation/assessment-calibration.js";
 import { adhocTeacherScenarios, getAdhocTeacherScenario, inspectAdhocTeacherReply } from "../src/evaluation/adhoc-teacher.js";
@@ -73,6 +73,7 @@ describe("teacher evaluation scenarios", () => {
     const firstDb = createDatabase(path);
     try {
       createTopic(firstDb, { id: goalId, name: "Synthetic full episode" });
+      createGoal(firstDb, { id: goalId, name: "Synthetic full episode", purpose: "interview" });
       createConcept(firstDb, { id: conceptId, topicId: goalId, title: conceptId });
       const kernel = createTeacherKernel(firstDb);
       kernel.createLearningObjective({ id: objectiveId, conceptId, capabilityId: "predict" });
@@ -113,7 +114,7 @@ describe("teacher evaluation scenarios", () => {
       kernel.submitAttempt(attemptId, { questionSeq, responseText });
       const source = codingCourseFile(backendCourse, "challenges/database-transactions-predict/baseline.mjs");
       const output = runFile(source);
-      kernel.recordAssessment(attemptId, { evaluatorType: "agent", assessmentBasis: "deterministic_execution",
+      kernel.recordAssessment(attemptId, { evaluatorType: "agent", assessmentBasis: "mixed",
         verificationOutput: { outcome: "passed", basis: "Node ESM execution after response",
           summary: output.join(", "), details: { stdout: output } },
         objectiveResults: [{ objectiveId, result: "correct",
@@ -182,7 +183,7 @@ describe("teacher evaluation scenarios", () => {
       });
       expect(continuation.kind).toBe("resume");
       if (continuation.kind !== "resume") throw new Error("Expected resumed calibrated attempt");
-      const active = continuation.session.activeAttemptState;
+      const active = createTeacherKernel(db).resumeSession(continuation.commitment.sessionId).activeAttemptState;
       expect(active?.authoringContract).toMatchObject({
         conceptId, capabilityId: "predict", taskForm: "runtime_trace", novelty: "same",
       });
@@ -205,7 +206,7 @@ describe("teacher evaluation scenarios", () => {
       const resumed = kernel.getStudyContinuation({ goalId: prepared.goalId,
         now: new Date().toISOString(), oneEpisode: true });
       if (resumed.kind !== "resume") throw new Error("Expected saved question");
-      expect(resumed.session.activeAttemptState?.authoringContract?.objectiveId).toBe(prepared.objectiveId);
+      expect(kernel.resumeSession(resumed.commitment.sessionId).activeAttemptState?.authoringContract?.objectiveId).toBe(prepared.objectiveId);
       kernel.submitAttempt(prepared.attemptId, {
         questionSeq: prepared.initialQuestionSeq!, responseText: response,
       });
@@ -213,7 +214,7 @@ describe("teacher evaluation scenarios", () => {
       const output = runFile(source);
       expect(output).toEqual(["A:accepted", "B:accepted", "decisions:[true,true]", "seats:-1"]);
       kernel.recordAssessment(prepared.attemptId, { evaluatorType: "agent",
-        assessmentBasis: "deterministic_execution",
+        assessmentBasis: "mixed",
         verificationOutput: { outcome: "passed", basis: "Node ESM execution after response",
           summary: output.join(", "), details: { stdout: output.join("\n") } },
         objectiveResults: [{ objectiveId: prepared.objectiveId, result: "correct",
@@ -312,7 +313,7 @@ describe("teacher evaluation scenarios", () => {
       const output = runFile(source);
       expect(output).toEqual(["retry:10", "total:10"]);
       kernel.recordAssessment(prepared.attemptId, { evaluatorType: "agent",
-        assessmentBasis: "deterministic_execution",
+        assessmentBasis: "mixed",
         verificationOutput: { outcome: "passed", basis: "Node ESM execution after response",
           summary: output.join(", "), details: { stdout: output } },
         objectiveResults: [{ objectiveId: prepared.objectiveId, result: "incorrect",
@@ -340,7 +341,7 @@ describe("teacher evaluation scenarios", () => {
       const source = codingCourseFile(backendCourse, "challenges/database-transactions-predict/baseline.mjs");
       const output = runFile(source);
       kernel.recordAssessment(prepared.attemptId, { evaluatorType: "agent",
-        assessmentBasis: "deterministic_execution",
+        assessmentBasis: "mixed",
         verificationOutput: { outcome: "passed", basis: "Node ESM execution after response",
           summary: output.join(", "), details: { stdout: output } },
         objectiveResults: [{ objectiveId: prepared.objectiveId, result: "incorrect",
@@ -511,7 +512,7 @@ describe("scaffold revision-friction and fresh-session continuity", () => {
       const source = codingCourseFile(backendCourse, "challenges/database-transactions-predict/baseline.mjs");
       const output = runFile(source);
       kernel.recordAssessment(prepared.attemptId, { evaluatorType: "agent",
-        assessmentBasis: "deterministic_execution",
+        assessmentBasis: "mixed",
         verificationOutput: { outcome: "passed", basis: "Node ESM execution after response",
           summary: output.join(", "), details: { stdout: output } },
         objectiveResults: [{ objectiveId: prepared.objectiveId, result: "correct",

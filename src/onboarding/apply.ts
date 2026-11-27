@@ -2,9 +2,11 @@ import { isDeepStrictEqual } from "node:util";
 import type Database from "better-sqlite3";
 import {
   createConcept,
+  createGoal,
   createTopic,
   getActiveGoalStudyFocusEpisode,
   getConcept,
+  getGoal,
   getGoalObjectives,
   getGoalPreparation,
   getInteractionPreferences,
@@ -660,10 +662,9 @@ export function getDurablePreparationContext(
   db: Database.Database,
   goalId: string,
 ): DurablePreparationContext | null {
-  const preparation = getGoalPreparation(db, goalId);
-  if (!preparation) return null;
-  const goal = getTopic(db, goalId);
-  if (!goal) throw new Error(`Goal topic not found for preparation context: ${goalId}`);
+  const goal = getGoal(db, goalId);
+  if (!goal) return null;
+  const preparation = getGoalPreparation(db, goalId)!;
   const configs = getGoalObjectives(db, goalId, { includeInactive: true });
   const objectives = configs.map((config) => {
     const objective = getLearningObjective(db, config.objective_id);
@@ -702,7 +703,7 @@ export function getDurablePreparationContext(
   return {
     goalId,
     goalName: goal.name,
-    target: goal.goal,
+    target: goal.target,
     deadlineAt: goal.deadline,
     purpose: preparation.purpose,
     targetRole: preparation.target_role,
@@ -736,9 +737,9 @@ export function listDurablePreparationContexts(
   db: Database.Database,
 ): DurablePreparationContext[] {
   const rows = db
-    .prepare(`SELECT goal_id FROM goal_preparation ORDER BY confirmed_at DESC, goal_id`)
-    .all() as Array<{ goal_id: string }>;
-  return rows.map((row) => getDurablePreparationContext(db, row.goal_id)!).filter(Boolean);
+    .prepare(`SELECT id FROM goals ORDER BY confirmed_at DESC, id`)
+    .all() as Array<{ id: string }>;
+  return rows.map((row) => getDurablePreparationContext(db, row.id)!).filter(Boolean);
 }
 
 export function applyConfirmedOnboarding(
@@ -773,14 +774,11 @@ export function applyConfirmedOnboarding(
     db = openProfileDatabase(profile.id, input.profileStore);
 
     db.transaction(() => {
-      createTopic(db!, {
+      createGoal(db!, {
         id: goalId,
         name: `Preparation: ${goalTargetText}`,
-        goal: goalTargetText,
-        deadline: proposal.timeBudget.deadlineAt ?? undefined,
-      });
-      setGoalPreparation(db!, {
-        goalId,
+        target: goalTargetText,
+        deadline: proposal.timeBudget.deadlineAt ?? null,
         purpose: proposal.purpose!,
         targetRole: proposal.interpretedTarget.role,
         targetOutcome: proposal.interpretedTarget.outcome,

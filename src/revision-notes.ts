@@ -4,11 +4,11 @@ import type Database from "better-sqlite3";
 import {
   getActiveGoalStudyFocusEpisode,
   getConcept,
+  getGoal,
   getGoalObjectives,
   getGoalPreparation,
   getSession,
   getStudyFocusEpisode,
-  getTopic,
 } from "./db/database.js";
 import {
   AttemptSchema,
@@ -30,7 +30,7 @@ import {
   getLearningObjective,
   getObjectiveProjection,
 } from "./kernel/foundation.js";
-import { getWeaknessProjections } from "./kernel/evidence.js";
+import { getClaimObservationsForEvidence, getWeaknessProjections } from "./kernel/evidence.js";
 import { portableKnowledgeRef } from "./knowledge/resolve-concept-file.js";
 
 export type RevisionNoteScope =
@@ -227,7 +227,7 @@ function focusEpisodeActualObjectiveIds(
          JOIN challenge_targets target
            ON target.challenge_id = attempt.challenge_id
           AND target.version = attempt.challenge_version
-         WHERE session.topic_id = ?
+         WHERE session.goal_id = ?
 
          UNION ALL
 
@@ -235,7 +235,7 @@ function focusEpisodeActualObjectiveIds(
                 exposure.occurred_at AS contact_at
          FROM exposure_events exposure
          JOIN sessions session ON session.id = exposure.session_id
-         WHERE session.topic_id = ?
+         WHERE session.goal_id = ?
        ) scoped
        WHERE contact_at >= ?${endClause}
        ORDER BY objective_id`,
@@ -254,14 +254,14 @@ function resolvedFocusEpisode(
 ): ResolvedRevisionNoteScope {
   const episode = getStudyFocusEpisode(db, episodeId);
   if (!episode) throw new Error(`Study focus episode not found: ${episodeId}`);
-  const topic = getTopic(db, episode.goal_id);
+  const goal = getGoal(db, episode.goal_id);
   return {
     scope: { kind: "focus_episode", focusEpisodeId: episode.id },
     objectiveIds: unique([
       ...episode.resolved_objective_ids,
       ...focusEpisodeActualObjectiveIds(db, episode),
     ]),
-    title: episode.label?.trim() || `${topic?.name ?? episode.goal_id} study focus`,
+    title: episode.label?.trim() || `${goal?.name ?? episode.goal_id} study focus`,
     preparationUpdatedAt: null,
     focusEpisodeClosedAt: episode.closed_at,
     focusWindow: { openedAt: episode.opened_at, closedAt: episode.closed_at },
@@ -286,13 +286,13 @@ function scopeObjectiveIds(
   }
 
   if (scope.kind === "goal") {
-    const topic = getTopic(db, scope.goalId);
-    if (!topic) throw new Error(`Goal topic not found: ${scope.goalId}`);
+    const goal = getGoal(db, scope.goalId);
+    if (!goal) throw new Error(`Goal not found: ${scope.goalId}`);
     const preparation = getGoalPreparation(db, scope.goalId);
     return {
       scope,
       objectiveIds: getGoalObjectives(db, scope.goalId).map((objective) => objective.objective_id),
-      title: topic.goal?.trim() || topic.name,
+      title: goal.target?.trim() || goal.name,
       preparationUpdatedAt: preparation?.updated_at ?? null,
       focusEpisodeClosedAt: null,
       focusWindow: null,
@@ -649,7 +649,9 @@ export function getRevisionNoteContext(
         result: evidence.result,
         criteriaMet: [...evidence.criteria_json.met],
         criteriaUnmet: [...evidence.criteria_json.unmet],
-        observedErrors: [...evidence.observed_errors_json],
+        observedErrors: getClaimObservationsForEvidence(db, evidence.id)
+          .filter((obs) => obs.disposition === "observed")
+          .map((obs) => obs.claimId),
         rationale: evidence.rationale,
         performedAt: evidence.performed_at,
       })),
