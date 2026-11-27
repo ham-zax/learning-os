@@ -17,6 +17,7 @@ Learning OS is easiest to use through an AI agent that can access the repository
 - [Durable question presentation](question-presentation-design.md) — persisted task context/question delivery across response collection, reconstruction, and fresh-session handoff.
 - [Retrieval-first study design](retrieval-first-study-design.md) — formalizes generate-before-instruction, gap-focused repair, orientation/exposure boundaries, and the decision to reuse existing kernel state before adding new runtime machinery.
 - [Archived design docs](archive/) — rationale for implemented waves; history, not current instructions.
+- [Future architectural plans](future-architectural-plans.md) — deferred system-level bets, simplification triggers, and gating conditions.
 
 ## Understand the learning model
 
