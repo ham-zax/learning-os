@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, existsSync, openSync, readSync, closeSync } from "node:fs";
 import { adhocTeacherScenarios, getAdhocTeacherScenario, inspectAdhocTeacherReply } from "./adhoc-teacher.js";
-import { compareTeacherHarnesses } from "./harness-comparison.js";
+import { compareTeacherHarnesses, summarizeHarnessTrace } from "./harness-comparison.js";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,7 +19,7 @@ import {
 } from "./teacher-scenarios.js";
 
 function usage(): never {
-  throw new Error("Usage: npm run eval:teacher -- <list | prepare CASE_ID [DIRECTORY] | inspect DIRECTORY [REPLY_FILE] | adhoc-cases | adhoc-inspect CASE_ID REPLY_FILE | compare-harness FILE | assessor-cases | grade-assessments FILE | metrics DATABASE GOAL_ID | outcomes MANIFEST [AS_OF] | review-reply FILE | review-session FILE>");
+  throw new Error("Usage: npm run eval:teacher -- <list | prepare CASE_ID [DIRECTORY] | inspect DIRECTORY [REPLY_FILE] [--trace TRACE_FILE] | adhoc-cases | adhoc-inspect CASE_ID REPLY_FILE | compare-harness FILE | assessor-cases | grade-assessments FILE | metrics DATABASE GOAL_ID | outcomes MANIFEST [AS_OF] | review-reply FILE | review-session FILE>");
 }
 
 async function main(args: string[]): Promise<void> {
@@ -72,15 +72,34 @@ async function main(args: string[]): Promise<void> {
   }
   if (command === "inspect" && value) {
     const dir = resolve(value);
+    const tail = args.slice(2);
+    let replyPath: string | undefined;
+    let tracePath: string | undefined;
+    for (let i = 0; i < tail.length; i += 1) {
+      const token = tail[i]!;
+      if (token === "--trace") {
+        const next = tail[++i];
+        if (!next) throw new Error("--trace requires a file path");
+        tracePath = next;
+      } else if (!replyPath) {
+        replyPath = token;
+      } else {
+        usage();
+      }
+    }
     const manifest = JSON.parse(readFileSync(join(dir, "scenario.json"), "utf8")) as { prepared: PreparedTeacherScenario };
     const scenario = teacherScenarios.find((item) => item.id === manifest.prepared.id);
     if (!scenario) throw new Error(`Unknown teacher scenario in manifest: ${manifest.prepared.id}`);
     const checks = inspectTeacherScenario(join(dir, "tutor.db"), manifest.prepared);
+    const traceSummary = summarizeHarnessTrace(
+      tracePath ? JSON.parse(readFileSync(resolve(tracePath), "utf8")) : undefined,
+    );
     console.log(JSON.stringify({ caseId: scenario.id, automatedChecks: checks,
       passed: checks.filter((item) => item.passed).length, total: checks.length,
       reviewerChecks: scenario.review,
-      ...(extra ? { replyAdvisories: { advisory: true, note: "Lexical heuristics on the saved reply; they never change the exit code and cannot replace human review.",
-        flags: adviseOnReply(join(dir, "tutor.db"), manifest.prepared, readFileSync(resolve(extra), "utf8")) } } : {}),
+      traceEvidence: traceSummary,
+      ...(replyPath ? { replyAdvisories: { advisory: true, note: "Lexical heuristics on the saved reply; they never change the exit code and cannot replace human review.",
+        flags: adviseOnReply(join(dir, "tutor.db"), manifest.prepared, readFileSync(resolve(replyPath), "utf8")) } } : {}),
       limitation: "Database checks cannot establish whether the teacher's question was neutral, feedback was accurate, or exposure was shown immediately after recording." }, null, 2));
     if (checks.some((item) => !item.passed)) process.exitCode = 1;
     return;
